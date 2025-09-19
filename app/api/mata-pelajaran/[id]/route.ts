@@ -1,0 +1,79 @@
+import { type NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const id = Number.parseInt(params.id)
+    const body = await request.json()
+
+    // Validate required fields
+    if (!body.nama_mapel || !body.jenis) {
+      return NextResponse.json({ success: false, error: "Nama mata pelajaran dan jenis wajib diisi" }, { status: 400 })
+    }
+
+    // Check if kode_mapel already exists (excluding current record)
+    if (body.kode_mapel) {
+      const existingMapel = await prisma.mataPelajaran.findFirst({
+        where: {
+          kode_mapel: body.kode_mapel,
+          NOT: { id },
+        },
+      })
+
+      if (existingMapel) {
+        return NextResponse.json({ success: false, error: "Kode mata pelajaran sudah digunakan" }, { status: 400 })
+      }
+    }
+
+    const mataPelajaran = await prisma.mataPelajaran.update({
+      where: { id },
+      data: body,
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: mataPelajaran,
+      message: "Mata pelajaran berhasil diperbarui",
+    })
+  } catch (error) {
+    console.error("Error updating mata pelajaran:", error)
+    return NextResponse.json({ success: false, error: "Gagal memperbarui mata pelajaran" }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const id = Number.parseInt(params.id)
+
+    // Check if mata pelajaran is being used
+    const nilaiUjianCount = await prisma.nilaiUjian.count({
+      where: { mata_pelajaran_id: id },
+    })
+
+    const nilaiHafalanCount = await prisma.nilaiHafalan.count({
+      where: { mata_pelajaran_id: id },
+    })
+
+    if (nilaiUjianCount > 0 || nilaiHafalanCount > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Mata pelajaran tidak dapat dihapus karena masih digunakan dalam penilaian",
+        },
+        { status: 400 },
+      )
+    }
+
+    await prisma.mataPelajaran.delete({
+      where: { id },
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: "Mata pelajaran berhasil dihapus",
+    })
+  } catch (error) {
+    console.error("Error deleting mata pelajaran:", error)
+    return NextResponse.json({ success: false, error: "Gagal menghapus mata pelajaran" }, { status: 500 })
+  }
+}

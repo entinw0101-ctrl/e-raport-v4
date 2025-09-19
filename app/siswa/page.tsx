@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { DataTable, type Column } from "@/src/components/DataTable"
 import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
+import { FilterBar } from "@/src/components/FilterBar"
 import { siswaService, type Siswa } from "@/src/services/siswaService"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
@@ -28,11 +29,14 @@ export default function SiswaPage() {
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedTingkatan, setSelectedTingkatan] = useState("")
+  const [selectedKelas, setSelectedKelas] = useState("")
 
   // Options for form selects
   const [kelasOptions, setKelasOptions] = useState<{ value: number; label: string }[]>([])
   const [kamarOptions, setKamarOptions] = useState<{ value: number; label: string }[]>([])
   const [tahunAjaranOptions, setTahunAjaranOptions] = useState<{ value: number; label: string }[]>([])
+  const [tingkatanOptions, setTingkatanOptions] = useState<{ value: string; label: string }[]>([])
 
   const columns: Column<Siswa>[] = [
     {
@@ -187,13 +191,15 @@ export default function SiswaPage() {
     },
   ]
 
-  const fetchData = async (page = 1, search = "") => {
+  const fetchData = async (page = 1, search = "", tingkatan = "", kelas = "") => {
     setLoading(true)
     try {
       const response = await siswaService.getAll({
         page,
         per_page: pagination.per_page,
         search,
+        tingkatan_id: tingkatan || undefined,
+        kelas_id: kelas || undefined,
       })
 
       if (response.success && response.data) {
@@ -219,6 +225,17 @@ export default function SiswaPage() {
 
   const fetchOptions = async () => {
     try {
+      const tingkatanResponse = await fetch("/api/tingkatan")
+      if (tingkatanResponse.ok) {
+        const tingkatanData = await tingkatanResponse.json()
+        setTingkatanOptions(
+          tingkatanData.data.map((tingkatan: any) => ({
+            value: tingkatan.id.toString(),
+            label: tingkatan.nama_tingkatan,
+          })),
+        )
+      }
+
       // Fetch kelas options
       const kelasResponse = await fetch("/api/kelas")
       if (kelasResponse.ok) {
@@ -265,12 +282,12 @@ export default function SiswaPage() {
   }, [])
 
   const handlePageChange = (page: number) => {
-    fetchData(page, searchTerm)
+    fetchData(page, searchTerm, selectedTingkatan, selectedKelas)
   }
 
   const handleSearch = (search: string) => {
     setSearchTerm(search)
-    fetchData(1, search)
+    fetchData(1, search, selectedTingkatan, selectedKelas)
   }
 
   const handleAdd = () => {
@@ -303,7 +320,7 @@ export default function SiswaPage() {
           title: "Berhasil",
           description: response.message || `Siswa berhasil ${selectedSiswa ? "diperbarui" : "ditambahkan"}`,
         })
-        fetchData(pagination.page, searchTerm)
+        fetchData(pagination.page, searchTerm, selectedTingkatan, selectedKelas)
         setShowFormModal(false)
       } else {
         toast({
@@ -333,7 +350,7 @@ export default function SiswaPage() {
           title: "Berhasil",
           description: "Siswa berhasil dihapus",
         })
-        fetchData(pagination.page, searchTerm)
+        fetchData(pagination.page, searchTerm, selectedTingkatan, selectedKelas)
       } else {
         toast({
           title: "Error",
@@ -348,6 +365,22 @@ export default function SiswaPage() {
         variant: "destructive",
       })
     }
+  }
+
+  const handleTingkatanChange = (tingkatan: string) => {
+    setSelectedTingkatan(tingkatan)
+    fetchData(1, searchTerm, tingkatan, selectedKelas)
+  }
+
+  const handleKelasChange = (kelas: string) => {
+    setSelectedKelas(kelas)
+    fetchData(1, searchTerm, selectedTingkatan, kelas)
+  }
+
+  const handleFilterReset = () => {
+    setSelectedTingkatan("")
+    setSelectedKelas("")
+    fetchData(1, searchTerm, "", "")
   }
 
   const getInitialFormData = () => {
@@ -366,6 +399,18 @@ export default function SiswaPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <div className="mb-6">
+        <FilterBar
+          tingkatanOptions={tingkatanOptions}
+          kelasOptions={kelasOptions.map((k) => ({ value: k.value.toString(), label: k.label }))}
+          selectedTingkatan={selectedTingkatan}
+          selectedKelas={selectedKelas}
+          onTingkatanChange={handleTingkatanChange}
+          onKelasChange={handleKelasChange}
+          onReset={handleFilterReset}
+        />
+      </div>
+
       <DataTable
         title="Data Siswa"
         columns={columns}

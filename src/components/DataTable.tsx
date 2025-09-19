@@ -2,12 +2,13 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronLeft, ChevronRight, Search, Plus, Edit, Trash2 } from "lucide-react"
+import { useDebounce } from "@/src/hooks/useDebounce"
 
 export interface Column<T> {
   key: keyof T | string
@@ -56,10 +57,16 @@ export function DataTable<T extends { id: number | string }>({
   actions = true,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState("")
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
+
+  useEffect(() => {
+    if (onSearch) {
+      onSearch(debouncedSearchTerm)
+    }
+  }, [debouncedSearchTerm, onSearch])
 
   const handleSearch = (value: string) => {
     setSearchTerm(value)
-    onSearch?.(value)
   }
 
   const getValue = (row: T, key: string): any => {

@@ -5,29 +5,12 @@ import { DataTable, type Column } from "@/src/components/DataTable"
 import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Upload } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
-
-interface Guru {
-  id: number
-  nama: string | null
-  nip: string | null
-  jenis_kelamin: "LAKI_LAKI" | "PEREMPUAN" | null
-  tempat_lahir: string | null
-  tanggal_lahir: Date | null
-  telepon: string | null
-  alamat: string | null
-  status: "aktif" | "nonaktif" | null
-  tanda_tangan: string | null
-  kelas_wali: Array<{
-    id: number
-    nama_kelas: string
-    tingkatan?: {
-      nama_tingkatan: string
-    }
-  }>
-}
+import { guruService, type Guru } from "@/src/services/guruService"
 
 export default function GuruPage() {
   const [data, setData] = useState<Guru[]>([])
@@ -100,6 +83,18 @@ export default function GuruPage() {
       ),
     },
     {
+      key: "tanda_tangan",
+      label: "Tanda Tangan",
+      render: (value, row) => (
+        <div className="flex items-center gap-2">
+          {value ? <Badge variant="default">Ada</Badge> : <Badge variant="secondary">Belum</Badge>}
+          <Button size="sm" variant="outline" onClick={() => handleUploadSignature(row)}>
+            <Upload className="h-3 w-3" />
+          </Button>
+        </div>
+      ),
+    },
+    {
       key: "tanggal_lahir",
       label: "Tanggal Lahir",
       render: (value) => (value ? format(new Date(value), "dd MMM yyyy", { locale: id }) : "-"),
@@ -169,14 +164,11 @@ export default function GuruPage() {
   const fetchData = async (page = 1, search = "") => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        per_page: pagination.per_page.toString(),
-        ...(search && { search }),
+      const result = await guruService.getAll({
+        page,
+        per_page: pagination.per_page,
+        search: search || undefined,
       })
-
-      const response = await fetch(`/api/guru?${params}`)
-      const result = await response.json()
 
       if (result.success) {
         setData(result.data)
@@ -227,21 +219,46 @@ export default function GuruPage() {
     setShowDeleteDialog(true)
   }
 
+  const handleUploadSignature = (guru: Guru) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = "image/*"
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      try {
+        const result = await guruService.uploadSignature(guru.id, file)
+        if (result.success) {
+          toast({
+            title: "Berhasil",
+            description: "Tanda tangan berhasil diupload",
+          })
+          fetchData(pagination.page, searchTerm)
+        } else {
+          toast({
+            title: "Error",
+            description: result.error || "Gagal upload tanda tangan",
+            variant: "destructive",
+          })
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Terjadi kesalahan saat upload",
+          variant: "destructive",
+        })
+      }
+    }
+    input.click()
+  }
+
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
-      const url = selectedGuru ? `/api/guru/${selectedGuru.id}` : "/api/guru"
-      const method = selectedGuru ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      })
-
-      const result = await response.json()
+      const result = selectedGuru
+        ? await guruService.update(selectedGuru.id, formData)
+        : await guruService.create(formData)
 
       if (result.success) {
         toast({
@@ -272,11 +289,7 @@ export default function GuruPage() {
     if (!selectedGuru) return
 
     try {
-      const response = await fetch(`/api/guru/${selectedGuru.id}`, {
-        method: "DELETE",
-      })
-
-      const result = await response.json()
+      const result = await guruService.delete(selectedGuru.id)
 
       if (result.success) {
         toast({

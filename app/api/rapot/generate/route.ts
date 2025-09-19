@@ -8,12 +8,35 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient(cookieStore)
     const { siswaId, periodeAjaranId, semester } = await request.json()
 
+    const { data: existingRapot } = await supabase
+      .from("ringkasan_rapot")
+      .select("*")
+      .eq("siswa_id", siswaId)
+      .eq("periode_ajaran_id", periodeAjaranId)
+      .eq("semester", semester)
+      .single()
+
+    if (existingRapot) {
+      const lastUpdated = new Date(existingRapot.updated_at)
+      const now = new Date()
+      const hoursDiff = (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60)
+
+      if (hoursDiff < 24) {
+        // Cache for 24 hours
+        return NextResponse.json({
+          rapot: existingRapot.data_rapot,
+          cached: true,
+          lastUpdated: existingRapot.updated_at,
+        })
+      }
+    }
+
     // Get student data
     const { data: siswa } = await supabase
       .from("siswa")
       .select(`
         *,
-        kelas:kelas_id(nama, tingkatan:tingkatan_id(nama))
+        kelas:kelas_id(nama_kelas, tingkatan:tingkatan_id(nama_tingkatan))
       `)
       .eq("id", siswaId)
       .single()
@@ -22,43 +45,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Siswa not found" }, { status: 404 })
     }
 
-    // Get exam scores
-    const { data: nilaiUjian } = await supabase
-      .from("nilai_ujian")
-      .select(`
-        *,
-        mata_pelajaran:mata_pelajaran_id(nama, kode)
-      `)
-      .eq("siswa_id", siswaId)
-      .eq("periode_ajaran_id", periodeAjaranId)
-      .eq("semester", semester)
+    const [{ data: nilaiUjian }, { data: nilaiHafalan }, { data: kehadiran }, { data: penilaianSikap }] =
+      await Promise.all([
+        supabase
+          .from("nilai_ujian")
+          .select(`
+          *,
+          mata_pelajaran:mata_pelajaran_id(nama, kode)
+        `)
+          .eq("siswa_id", siswaId)
+          .eq("periode_ajaran_id", periodeAjaranId)
+          .eq("semester", semester),
 
-    // Get memorization scores
-    const { data: nilaiHafalan } = await supabase
-      .from("nilai_hafalan")
-      .select(`
-        *,
-        mata_pelajaran:mata_pelajaran_id(nama, kode)
-      `)
-      .eq("siswa_id", siswaId)
-      .eq("periode_ajaran_id", periodeAjaranId)
-      .eq("semester", semester)
+        supabase
+          .from("nilai_hafalan")
+          .select(`
+          *,
+          mata_pelajaran:mata_pelajaran_id(nama, kode)
+        `)
+          .eq("siswa_id", siswaId)
+          .eq("periode_ajaran_id", periodeAjaranId)
+          .eq("semester", semester),
 
-    // Get attendance
-    const { data: kehadiran } = await supabase
-      .from("kehadiran")
-      .select("*")
-      .eq("siswa_id", siswaId)
-      .eq("periode_ajaran_id", periodeAjaranId)
-      .eq("semester", semester)
+        supabase
+          .from("kehadiran")
+          .select("*")
+          .eq("siswa_id", siswaId)
+          .eq("periode_ajaran_id", periodeAjaranId)
+          .eq("semester", semester),
 
-    // Get behavior assessment
-    const { data: penilaianSikap } = await supabase
-      .from("penilaian_sikap")
-      .select("*")
-      .eq("siswa_id", siswaId)
-      .eq("periode_ajaran_id", periodeAjaranId)
-      .eq("semester", semester)
+        supabase
+          .from("penilaian_sikap")
+          .select("*")
+          .eq("siswa_id", siswaId)
+          .eq("periode_ajaran_id", periodeAjaranId)
+          .eq("semester", semester),
+      ])
 
     // Calculate totals
     const totalHadir = kehadiran?.filter((k) => k.status === "HADIR").length || 0
@@ -81,7 +103,19 @@ export async function POST(request: NextRequest) {
       periodeAjaran: periodeAjaranId,
     }
 
-    return NextResponse.json({ rapot: rapotData })
+    const { error: upsertError } = await supabase.from("ringkasan_rapot").upsert({
+      siswa_id: siswaId,
+      periode_ajaran_id: periodeAjaranId,
+      semester: semester,
+      data_rapot: rapotData,
+      updated_at: new Date().toISOString(),
+    })
+
+    if (upsertError) {
+      console.error("Error caching rapot:", upsertError)
+    }
+
+    return NextResponse.json({ rapot: rapotData, cached: false })
   } catch (error) {
     console.error("Generate rapot error:", error)
     return NextResponse.json({ error: "Failed to generate rapot" }, { status: 500 })

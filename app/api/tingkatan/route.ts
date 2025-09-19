@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
 export async function GET() {
@@ -14,5 +14,43 @@ export async function GET() {
   } catch (error) {
     console.error("Error fetching tingkatan:", error)
     return NextResponse.json({ success: false, error: "Gagal mengambil data tingkatan" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+
+    // Validate required fields
+    if (!body.nama_tingkatan || !body.urutan) {
+      return NextResponse.json({ success: false, error: "Nama tingkatan dan urutan wajib diisi" }, { status: 400 })
+    }
+
+    // Check if urutan already exists
+    const existingTingkatan = await prisma.tingkatan.findFirst({
+      where: { urutan: Number.parseInt(body.urutan) },
+    })
+
+    if (existingTingkatan) {
+      return NextResponse.json({ success: false, error: "Urutan sudah digunakan" }, { status: 400 })
+    }
+
+    const data = {
+      ...body,
+      urutan: Number.parseInt(body.urutan),
+    }
+
+    const tingkatan = await prisma.tingkatan.create({
+      data,
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: tingkatan,
+      message: "Tingkatan berhasil ditambahkan",
+    })
+  } catch (error) {
+    console.error("Error creating tingkatan:", error)
+    return NextResponse.json({ success: false, error: "Gagal menambahkan tingkatan" }, { status: 500 })
   }
 }
