@@ -237,4 +237,4 @@ Copyright © 2024 Pesantren Nuurush Sholaah. All rights reserved.
 **Dibuat dengan ❤️ untuk Pesantren Nuurush Sholaah**
 \`\`\`
 
-```json file="" isHidden
+\`\`\`json file="" isHidden
