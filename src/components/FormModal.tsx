@@ -33,7 +33,7 @@ export interface FormField {
 
 export interface FormModalProps {
   title: string
-  fields: FormField[]
+  fields: FormField[] | ((formData: Record<string, any>) => FormField[])
   initialData?: Record<string, any>
   open: boolean
   onClose: () => void
@@ -71,10 +71,12 @@ export function FormModal({
     }
   }
 
+  const currentFields = typeof fields === "function" ? fields(formData) : fields
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
 
-    fields.forEach((field) => {
+    currentFields.forEach((field) => {
       if (field.required && !formData[field.name]) {
         newErrors[field.name] = `${field.label} wajib diisi`
       }
@@ -220,7 +222,7 @@ export function FormModal({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {fields.map((field) => (
+            {currentFields.map((field) => (
               <div key={field.name} className={field.type === "textarea" ? "md:col-span-2" : ""}>
                 <Label htmlFor={field.name}>
                   {field.label}

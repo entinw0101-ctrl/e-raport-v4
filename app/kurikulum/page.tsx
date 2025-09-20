@@ -86,7 +86,11 @@ export default function KurikulumPage() {
     },
   ]
 
-  const getFormFields = useCallback((): FormField[] => {
+  const getFormFields = useCallback((formData: Record<string, any>): FormField[] => {
+    const selectedMapelId = formData.mapel_id || selectedKurikulum?.mata_pelajaran?.id.toString()
+    const selectedMapel = mapelOptions.find(m => m.id.toString() === selectedMapelId)
+    const isUjian = selectedMapel?.jenis === "Ujian"
+
     return [
       {
         name: "tingkatan_id",
@@ -118,16 +122,15 @@ export default function KurikulumPage() {
           label: k.nama_kitab,
         })),
       },
-      {
+      ...(selectedMapel?.jenis === "Hafalan" ? [{
         name: "batas_hafalan",
         label: "Batas Hafalan",
-        type: "text",
-        required: false, // Will validate in submit
-        placeholder: "Diisi jika mata pelajaran jenis Hafalan",
-        disabled: false, // Will be handled in submit
-      },
+        type: "text" as const,
+        required: true,
+        placeholder: "Contoh: Juz 1-5, Surah Al-Baqarah ayat 1-50",
+      }] : []),
     ]
-  }, [tingkatanOptions, mapelOptions, kitabOptions])
+  }, [tingkatanOptions, mapelOptions, kitabOptions, selectedKurikulum])
 
   const fetchData = useCallback(async (page = 1, search = "") => {
     setLoading(true)
@@ -349,7 +352,7 @@ export default function KurikulumPage() {
 
       <FormModal
         title={selectedKurikulum ? "Edit Kurikulum" : "Tambah Kurikulum"}
-        fields={getFormFields()}
+        fields={(formData) => getFormFields(formData)}
         initialData={getInitialFormData()}
         open={showFormModal}
         onClose={() => setShowFormModal(false)}

@@ -193,16 +193,29 @@ export default function SiswaPage() {
   const fetchData = useCallback(async (page = 1, search = "") => {
     setLoading(true)
     try {
+      const perPage = pagination?.per_page || 10
       const response = await siswaService.getAll({
         page,
-        per_page: pagination.per_page,
+        per_page: perPage,
         search: search || undefined,
       })
 
       if (response.success && response.data) {
-        setData(response.data.data)
-        setPagination(response.data.pagination)
+        setData(response.data.data || [])
+        setPagination(response.data.pagination || {
+          page: 1,
+          per_page: 10,
+          total: 0,
+          total_pages: 0,
+        })
       } else {
+        setData([])
+        setPagination({
+          page: 1,
+          per_page: 10,
+          total: 0,
+          total_pages: 0,
+        })
         toast({
           title: "Error",
           description: response.error || "Gagal mengambil data siswa",
@@ -218,7 +231,7 @@ export default function SiswaPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.per_page])
+  }, [pagination?.per_page])
 
   const fetchOptions = async () => {
     try {
