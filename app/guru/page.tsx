@@ -234,7 +234,7 @@ export default function GuruPage() {
             title: "Berhasil",
             description: "Tanda tangan berhasil diupload",
           })
-          fetchData(pagination.page, searchTerm)
+          fetchData(1, searchTerm)
         } else {
           toast({
             title: "Error",
@@ -258,7 +258,7 @@ export default function GuruPage() {
     try {
       const result = selectedGuru
         ? await guruService.update(selectedGuru.id, formData)
-        : await guruService.create(formData)
+        : await guruService.create(formData as any)
 
       if (result.success) {
         toast({

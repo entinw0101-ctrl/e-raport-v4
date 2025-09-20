@@ -57,7 +57,7 @@ class HttpService {
 
       return {
         success: true,
-        data: data.data || data,
+        data: data.pagination ? data : (data.data || data),
         message: data.message,
       }
     } catch (error) {
