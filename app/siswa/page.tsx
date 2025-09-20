@@ -1,10 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DataTable, type Column } from "@/src/components/DataTable"
 import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
-import { FilterBar } from "@/src/components/FilterBar"
 import { siswaService, type Siswa } from "@/src/services/siswaService"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
@@ -27,10 +26,10 @@ export default function SiswaPage() {
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null)
   const [formLoading, setFormLoading] = useState(false)
 
-  // Filter states
+  // Filter states (removed for now to fix infinite loops)
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedTingkatan, setSelectedTingkatan] = useState("")
-  const [selectedKelas, setSelectedKelas] = useState("")
+  // const [selectedTingkatan, setSelectedTingkatan] = useState("")
+  // const [selectedKelas, setSelectedKelas] = useState("")
 
   // Options for form selects
   const [kelasOptions, setKelasOptions] = useState<{ value: number; label: string }[]>([])
@@ -92,7 +91,7 @@ export default function SiswaPage() {
     },
   ]
 
-  const formFields: FormField[] = [
+  const getFormFields = (): FormField[] => [
     {
       name: "nama",
       label: "Nama Lengkap",
@@ -191,15 +190,13 @@ export default function SiswaPage() {
     },
   ]
 
-  const fetchData = async (page = 1, search = "", tingkatan = "", kelas = "") => {
+  const fetchData = useCallback(async (page = 1, search = "") => {
     setLoading(true)
     try {
       const response = await siswaService.getAll({
         page,
         per_page: pagination.per_page,
-        search,
-        tingkatan_id: tingkatan || undefined,
-        kelas_id: kelas || undefined,
+        search: search || undefined,
       })
 
       if (response.success && response.data) {
@@ -221,7 +218,7 @@ export default function SiswaPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [pagination.per_page])
 
   const fetchOptions = async () => {
     try {
@@ -281,14 +278,14 @@ export default function SiswaPage() {
     fetchOptions()
   }, [])
 
-  const handlePageChange = (page: number) => {
-    fetchData(page, searchTerm, selectedTingkatan, selectedKelas)
-  }
+  const handlePageChange = useCallback((page: number) => {
+    fetchData(page, searchTerm)
+  }, [fetchData, searchTerm])
 
-  const handleSearch = (search: string) => {
+  const handleSearch = useCallback((search: string) => {
     setSearchTerm(search)
-    fetchData(1, search, selectedTingkatan, selectedKelas)
-  }
+    fetchData(1, search)
+  }, [fetchData])
 
   const handleAdd = () => {
     setSelectedSiswa(null)
@@ -308,11 +305,19 @@ export default function SiswaPage() {
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
+      // Convert form data to proper types
+      const processedData = {
+        ...formData,
+        kelas_id: formData.kelas_id ? Number(formData.kelas_id) : undefined,
+        kamar_id: formData.kamar_id ? Number(formData.kamar_id) : undefined,
+        master_tahun_ajaran_id: formData.master_tahun_ajaran_id ? Number(formData.master_tahun_ajaran_id) : undefined,
+      }
+
       let response
       if (selectedSiswa) {
-        response = await siswaService.update(selectedSiswa.id, formData)
+        response = await siswaService.update(selectedSiswa.id, processedData)
       } else {
-        response = await siswaService.create(formData)
+        response = await siswaService.create(processedData as any)
       }
 
       if (response.success) {
@@ -320,7 +325,7 @@ export default function SiswaPage() {
           title: "Berhasil",
           description: response.message || `Siswa berhasil ${selectedSiswa ? "diperbarui" : "ditambahkan"}`,
         })
-        fetchData(pagination.page, searchTerm, selectedTingkatan, selectedKelas)
+        fetchData(pagination.page, searchTerm)
         setShowFormModal(false)
       } else {
         toast({
@@ -350,7 +355,7 @@ export default function SiswaPage() {
           title: "Berhasil",
           description: "Siswa berhasil dihapus",
         })
-        fetchData(pagination.page, searchTerm, selectedTingkatan, selectedKelas)
+        fetchData(pagination.page, searchTerm)
       } else {
         toast({
           title: "Error",
@@ -367,21 +372,22 @@ export default function SiswaPage() {
     }
   }
 
-  const handleTingkatanChange = (tingkatan: string) => {
-    setSelectedTingkatan(tingkatan)
-    fetchData(1, searchTerm, tingkatan, selectedKelas)
-  }
+  // Filter functions removed to prevent infinite loops
+  // const handleTingkatanChange = (tingkatan: string) => {
+  //   setSelectedTingkatan(tingkatan)
+  //   fetchData(1, searchTerm, tingkatan, selectedKelas)
+  // }
 
-  const handleKelasChange = (kelas: string) => {
-    setSelectedKelas(kelas)
-    fetchData(1, searchTerm, selectedTingkatan, kelas)
-  }
+  // const handleKelasChange = (kelas: string) => {
+  //   setSelectedKelas(kelas)
+  //   fetchData(1, searchTerm, selectedTingkatan, kelas)
+  // }
 
-  const handleFilterReset = () => {
-    setSelectedTingkatan("")
-    setSelectedKelas("")
-    fetchData(1, searchTerm, "", "")
-  }
+  // const handleFilterReset = () => {
+  //   setSelectedTingkatan("")
+  //   setSelectedKelas("")
+  //   fetchData(1, searchTerm, "", "")
+  // }
 
   const getInitialFormData = () => {
     if (!selectedSiswa) return { status: "Aktif" }
@@ -399,18 +405,6 @@ export default function SiswaPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <FilterBar
-          tingkatanOptions={tingkatanOptions}
-          kelasOptions={kelasOptions.map((k) => ({ value: k.value.toString(), label: k.label }))}
-          selectedTingkatan={selectedTingkatan}
-          selectedKelas={selectedKelas}
-          onTingkatanChange={handleTingkatanChange}
-          onKelasChange={handleKelasChange}
-          onReset={handleFilterReset}
-        />
-      </div>
-
       <DataTable
         title="Data Siswa"
         columns={columns}
@@ -429,7 +423,7 @@ export default function SiswaPage() {
 
       <FormModal
         title={selectedSiswa ? "Edit Siswa" : "Tambah Siswa"}
-        fields={formFields}
+        fields={getFormFields()}
         initialData={getInitialFormData()}
         open={showFormModal}
         onClose={() => setShowFormModal(false)}

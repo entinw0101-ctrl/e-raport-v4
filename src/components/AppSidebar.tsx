@@ -48,6 +48,16 @@ const data = {
       title: "Master Data",
       items: [
         {
+          title: "Master Tahun Ajaran",
+          url: "/master-tahun-ajaran",
+          icon: School,
+        },
+        {
+          title: "Periode Ajaran",
+          url: "/periode-ajaran",
+          icon: School,
+        },
+        {
           title: "Tingkatan",
           url: "/tingkatan",
           icon: School,
@@ -55,6 +65,11 @@ const data = {
         {
           title: "Kelas",
           url: "/kelas",
+          icon: Building,
+        },
+        {
+          title: "Kamar",
+          url: "/kamar",
           icon: Building,
         },
         {
@@ -86,6 +101,11 @@ const data = {
           title: "Data Guru",
           url: "/guru",
           icon: GraduationCap,
+        },
+        {
+          title: "Riwayat Kelas Siswa",
+          url: "/riwayat-kelas-siswa",
+          icon: Users,
         },
       ],
     },
@@ -122,6 +142,16 @@ const data = {
           url: "/rapot",
           icon: BarChart3,
         },
+        {
+          title: "Ringkasan Rapot",
+          url: "/ringkasan-rapot",
+          icon: BarChart3,
+        },
+        {
+          title: "Penanggung Jawab Rapot",
+          url: "/penanggung-jawab-rapot",
+          icon: BarChart3,
+        },
       ],
     },
     {
@@ -130,6 +160,21 @@ const data = {
         {
           title: "Promosi Kelas",
           url: "/promosi-kelas",
+          icon: ClipboardList,
+        },
+        {
+          title: "Kelas Periode",
+          url: "/kelas-periode",
+          icon: ClipboardList,
+        },
+        {
+          title: "Log Promosi",
+          url: "/log-promosi",
+          icon: ClipboardList,
+        },
+        {
+          title: "Surat Keluar",
+          url: "/surat-keluar",
           icon: ClipboardList,
         },
         {

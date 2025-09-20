@@ -7,40 +7,30 @@ import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 
-interface Kelas {
+interface SuratKeluar {
   id: number
-  nama_kelas: string
-  tingkatan_id: number
-  wali_kelas_id: number | null
-  tahun_ajaran: string
-  status: "aktif" | "nonaktif"
-  tingkatan: {
+  nomor_surat: string
+  tanggal_surat: string | null
+  perihal: string | null
+  isi_surat: string | null
+  dibuat_pada: string
+  diperbarui_pada: string
+  siswa: {
     id: number
-    nama_tingkatan: string
-  }
-  wali_kelas: {
-    id: number
-    nama: string
+    nama: string | null
+    nis: string
   } | null
-  _count: {
-    siswa: number
-  }
 }
 
-interface Tingkatan {
+interface Siswa {
   id: number
-  nama_tingkatan: string
+  nama: string | null
+  nis: string
 }
 
-interface Guru {
-  id: number
-  nama: string
-}
-
-export default function KelasPage() {
-  const [data, setData] = useState<Kelas[]>([])
-  const [tingkatanOptions, setTingkatanOptions] = useState<Tingkatan[]>([])
-  const [guruOptions, setGuruOptions] = useState<Guru[]>([])
+export default function SuratKeluarPage() {
+  const [data, setData] = useState<SuratKeluar[]>([])
+  const [siswaOptions, setSiswaOptions] = useState<Siswa[]>([])
   const [loading, setLoading] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -52,93 +42,77 @@ export default function KelasPage() {
   // Modal states
   const [showFormModal, setShowFormModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [selectedKelas, setSelectedKelas] = useState<Kelas | null>(null)
+  const [selectedSuratKeluar, setSelectedSuratKeluar] = useState<SuratKeluar | null>(null)
   const [formLoading, setFormLoading] = useState(false)
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("")
 
-  const columns: Column<Kelas>[] = [
+  const columns: Column<SuratKeluar>[] = [
     {
-      key: "nama_kelas",
-      label: "Nama Kelas",
+      key: "nomor_surat",
+      label: "Nomor Surat",
       className: "font-medium",
     },
     {
-      key: "tingkatan",
-      label: "Tingkatan",
-      render: (value) => <Badge variant="outline">{value.nama_tingkatan}</Badge>,
+      key: "siswa",
+      label: "Siswa",
+      render: (value) => value ? `${value.nama} (${value.nis})` : "-",
     },
     {
-      key: "wali_kelas",
-      label: "Wali Kelas",
-      render: (value) => (value ? value.nama : "-"),
+      key: "perihal",
+      label: "Perihal",
+      render: (value) => value || "-",
     },
     {
-      key: "_count",
-      label: "Jumlah Siswa",
-      render: (value) => `${value.siswa} siswa`,
+      key: "tanggal_surat",
+      label: "Tanggal Surat",
+      render: (value) => value ? new Date(value).toLocaleDateString("id-ID") : "-",
     },
     {
-      key: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      className: "font-mono",
-    },
-    {
-      key: "status",
-      label: "Status",
-      render: (value) => (
-        <Badge variant={value === "aktif" ? "default" : "secondary"}>{value === "aktif" ? "Aktif" : "Non-aktif"}</Badge>
-      ),
+      key: "dibuat_pada",
+      label: "Dibuat Pada",
+      render: (value) => new Date(value).toLocaleDateString("id-ID"),
     },
   ]
 
   const getFormFields = (): FormField[] => [
     {
-      name: "nama_kelas",
-      label: "Nama Kelas",
+      name: "nomor_surat",
+      label: "Nomor Surat",
       type: "text",
       required: true,
-      placeholder: "Contoh: 1A, 2B, 3C",
+      placeholder: "Contoh: 001/SK/SMK-NS/2024",
     },
     {
-      name: "tingkatan_id",
-      label: "Tingkatan",
-      type: "select",
-      required: true,
-      options: tingkatanOptions.map((t) => ({
-        value: t.id.toString(),
-        label: t.nama_tingkatan,
-      })),
-    },
-    {
-      name: "wali_kelas_id",
-      label: "Wali Kelas",
+      name: "siswa_id",
+      label: "Siswa",
       type: "select",
       options: [
-        { value: "", label: "Pilih Wali Kelas (Opsional)" },
-        ...guruOptions.map((g) => ({
-          value: g.id.toString(),
-          label: g.nama,
+        { value: "", label: "Pilih Siswa (Opsional)" },
+        ...siswaOptions.map((siswa) => ({
+          value: siswa.id.toString(),
+          label: `${siswa.nama} (${siswa.nis})`,
         })),
       ],
     },
     {
-      name: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      type: "text",
-      required: true,
-      placeholder: "Contoh: 2024/2025",
+      name: "tanggal_surat",
+      label: "Tanggal Surat",
+      type: "date",
+      placeholder: "Pilih tanggal surat",
     },
     {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "aktif", label: "Aktif" },
-        { value: "nonaktif", label: "Non-aktif" },
-      ],
+      name: "perihal",
+      label: "Perihal",
+      type: "text",
+      placeholder: "Perihal surat",
+    },
+    {
+      name: "isi_surat",
+      label: "Isi Surat",
+      type: "textarea",
+      placeholder: "Isi lengkap surat",
     },
   ]
 
@@ -151,7 +125,7 @@ export default function KelasPage() {
         ...(search && { search }),
       })
 
-      const response = await fetch(`/api/kelas?${params}`)
+      const response = await fetch(`/api/surat-keluar?${params}`)
       const result = await response.json()
 
       if (result.success) {
@@ -160,7 +134,7 @@ export default function KelasPage() {
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal mengambil data kelas",
+          description: result.error || "Gagal mengambil data surat keluar",
           variant: "destructive",
         })
       }
@@ -177,18 +151,11 @@ export default function KelasPage() {
 
   const fetchOptions = async () => {
     try {
-      // Fetch tingkatan options
-      const tingkatanResponse = await fetch("/api/tingkatan")
-      const tingkatanResult = await tingkatanResponse.json()
-      if (tingkatanResult.success) {
-        setTingkatanOptions(tingkatanResult.data)
-      }
-
-      // Fetch guru options (only active teachers)
-      const guruResponse = await fetch("/api/guru?status=aktif&per_page=100")
-      const guruResult = await guruResponse.json()
-      if (guruResult.success) {
-        setGuruOptions(guruResult.data)
+      // Fetch siswa options
+      const siswaResponse = await fetch("/api/siswa?per_page=1000")
+      const siswaResult = await siswaResponse.json()
+      if (siswaResult.success) {
+        setSiswaOptions(siswaResult.data)
       }
     } catch (error) {
       console.error("Error fetching options:", error)
@@ -198,7 +165,7 @@ export default function KelasPage() {
   useEffect(() => {
     fetchData()
     fetchOptions()
-  }, [])
+  }, [fetchData])
 
   const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm)
@@ -210,31 +177,29 @@ export default function KelasPage() {
   }, [fetchData])
 
   const handleAdd = () => {
-    setSelectedKelas(null)
+    setSelectedSuratKeluar(null)
     setShowFormModal(true)
   }
 
-  const handleEdit = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleEdit = (suratKeluar: SuratKeluar) => {
+    setSelectedSuratKeluar(suratKeluar)
     setShowFormModal(true)
   }
 
-  const handleDelete = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleDelete = (suratKeluar: SuratKeluar) => {
+    setSelectedSuratKeluar(suratKeluar)
     setShowDeleteDialog(true)
   }
 
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
-      const url = selectedKelas ? `/api/kelas/${selectedKelas.id}` : "/api/kelas"
-      const method = selectedKelas ? "PUT" : "POST"
+      const url = selectedSuratKeluar ? `/api/surat-keluar/${selectedSuratKeluar.id}` : "/api/surat-keluar"
+      const method = selectedSuratKeluar ? "PUT" : "POST"
 
-      // Convert string IDs to numbers
       const processedData = {
         ...formData,
-        tingkatan_id: Number.parseInt(formData.tingkatan_id),
-        wali_kelas_id: formData.wali_kelas_id ? Number.parseInt(formData.wali_kelas_id) : null,
+        siswa_id: formData.siswa_id ? Number.parseInt(formData.siswa_id) : null,
       }
 
       const response = await fetch(url, {
@@ -250,7 +215,7 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: result.message || `Kelas berhasil ${selectedKelas ? "diperbarui" : "ditambahkan"}`,
+          description: result.message || `Surat keluar berhasil ${selectedSuratKeluar ? "diperbarui" : "ditambahkan"}`,
         })
         fetchData(pagination.page, searchTerm)
         setShowFormModal(false)
@@ -273,10 +238,10 @@ export default function KelasPage() {
   }
 
   const handleDeleteConfirm = async () => {
-    if (!selectedKelas) return
+    if (!selectedSuratKeluar) return
 
     try {
-      const response = await fetch(`/api/kelas/${selectedKelas.id}`, {
+      const response = await fetch(`/api/surat-keluar/${selectedSuratKeluar.id}`, {
         method: "DELETE",
       })
 
@@ -285,13 +250,13 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: "Kelas berhasil dihapus",
+          description: "Surat keluar berhasil dihapus",
         })
         fetchData(pagination.page, searchTerm)
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal menghapus kelas",
+          description: result.error || "Gagal menghapus surat keluar",
           variant: "destructive",
         })
       }
@@ -305,19 +270,20 @@ export default function KelasPage() {
   }
 
   const getInitialFormData = () => {
-    if (!selectedKelas) return { status: "aktif" }
-
+    if (!selectedSuratKeluar) return {}
     return {
-      ...selectedKelas,
-      tingkatan_id: selectedKelas.tingkatan_id.toString(),
-      wali_kelas_id: selectedKelas.wali_kelas_id?.toString() || "",
+      nomor_surat: selectedSuratKeluar.nomor_surat,
+      siswa_id: selectedSuratKeluar.siswa?.id.toString() || "",
+      tanggal_surat: selectedSuratKeluar.tanggal_surat ? selectedSuratKeluar.tanggal_surat.split('T')[0] : "",
+      perihal: selectedSuratKeluar.perihal || "",
+      isi_surat: selectedSuratKeluar.isi_surat || "",
     }
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <DataTable
-        title="Data Kelas"
+        title="Surat Keluar"
         columns={columns}
         data={data}
         loading={loading}
@@ -327,13 +293,13 @@ export default function KelasPage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Cari nama kelas..."
-        addButtonText="Tambah Kelas"
-        emptyMessage="Belum ada data kelas"
+        searchPlaceholder="Cari nomor surat, perihal, atau nama siswa..."
+        addButtonText="Tambah Surat Keluar"
+        emptyMessage="Belum ada data surat keluar"
       />
 
       <FormModal
-        title={selectedKelas ? "Edit Kelas" : "Tambah Kelas"}
+        title={selectedSuratKeluar ? "Edit Surat Keluar" : "Tambah Surat Keluar"}
         fields={getFormFields()}
         initialData={getInitialFormData()}
         open={showFormModal}
@@ -346,8 +312,8 @@ export default function KelasPage() {
         open={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
-        title="Hapus Kelas"
-        description={`Apakah Anda yakin ingin menghapus kelas "${selectedKelas?.nama_kelas}"? Tindakan ini tidak dapat dibatalkan.`}
+        title="Hapus Surat Keluar"
+        description={`Apakah Anda yakin ingin menghapus surat keluar "${selectedSuratKeluar?.nomor_surat}"? Tindakan ini tidak dapat dibatalkan.`}
         confirmText="Hapus"
         variant="destructive"
       />

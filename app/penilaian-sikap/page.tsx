@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DataTable, type Column } from "@/src/components/DataTable"
 import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
@@ -108,7 +108,7 @@ export default function PenilaianSikapPage() {
     },
   ]
 
-  const formFields: FormField[] = [
+  const getFormFields = (): FormField[] => [
     {
       name: "siswa_id",
       label: "Siswa",
@@ -161,7 +161,7 @@ export default function PenilaianSikapPage() {
     },
   ]
 
-  const fetchData = async (page = 1, search = "") => {
+  const fetchData = useCallback(async (page = 1, search = "") => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -192,7 +192,7 @@ export default function PenilaianSikapPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [pagination.per_page])
 
   const fetchOptions = async () => {
     try {
@@ -241,14 +241,14 @@ export default function PenilaianSikapPage() {
     fetchOptions()
   }, [])
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm)
-  }
+  }, [fetchData, searchTerm])
 
-  const handleSearch = (search: string) => {
+  const handleSearch = useCallback((search: string) => {
     setSearchTerm(search)
     fetchData(1, search)
-  }
+  }, [fetchData])
 
   const handleAdd = () => {
     setSelectedPenilaian(null)
@@ -363,7 +363,7 @@ export default function PenilaianSikapPage() {
 
       <FormModal
         title={selectedPenilaian ? "Edit Penilaian Sikap" : "Tambah Penilaian Sikap"}
-        fields={formFields}
+        fields={getFormFields()}
         initialData={getInitialFormData()}
         open={showFormModal}
         onClose={() => setShowFormModal(false)}

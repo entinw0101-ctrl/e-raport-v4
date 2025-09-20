@@ -59,14 +59,15 @@ export function DataTable<T extends { id: number | string }>({
   const [searchTerm, setSearchTerm] = useState("")
   const debouncedSearchTerm = useDebounce(searchTerm, 300)
 
-  useEffect(() => {
-    if (onSearch) {
-      onSearch(debouncedSearchTerm)
-    }
-  }, [debouncedSearchTerm, onSearch])
+  // ✅ FIXED: Remove useEffect that causes infinite loop
+  // The parent component should handle search logic directly
 
   const handleSearch = (value: string) => {
     setSearchTerm(value)
+    // ✅ FIXED: Call onSearch immediately when user types
+    if (onSearch) {
+      onSearch(value)
+    }
   }
 
   const getValue = (row: T, key: string): any => {

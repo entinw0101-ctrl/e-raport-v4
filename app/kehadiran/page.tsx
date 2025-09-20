@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DataTable, type Column } from "@/src/components/DataTable"
 import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
@@ -109,7 +109,7 @@ export default function KehadiranPage() {
     },
   ]
 
-  const formFields: FormField[] = [
+  const getFormFields = (): FormField[] => [
     {
       name: "siswa_id",
       label: "Siswa",
@@ -161,7 +161,7 @@ export default function KehadiranPage() {
     },
   ]
 
-  const fetchData = async (page = 1, search = "", kelas = "", periode = "", semester = "") => {
+  const fetchData = useCallback(async (page = 1, search = "", kelas = "", periode = "", semester = "") => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -195,7 +195,7 @@ export default function KehadiranPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [pagination.per_page])
 
   const fetchOptions = async () => {
     try {
@@ -244,14 +244,14 @@ export default function KehadiranPage() {
     fetchOptions()
   }, [])
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm, selectedKelas, selectedPeriode, selectedSemester)
-  }
+  }, [fetchData, searchTerm, selectedKelas, selectedPeriode, selectedSemester])
 
-  const handleSearch = (search: string) => {
+  const handleSearch = useCallback((search: string) => {
     setSearchTerm(search)
     fetchData(1, search, selectedKelas, selectedPeriode, selectedSemester)
-  }
+  }, [fetchData, selectedKelas, selectedPeriode, selectedSemester])
 
   const handleAdd = () => {
     setSelectedKehadiran(null)
@@ -370,7 +370,7 @@ export default function KehadiranPage() {
 
       <FormModal
         title={selectedKehadiran ? "Edit Kehadiran" : "Tambah Kehadiran"}
-        fields={formFields}
+        fields={getFormFields()}
         initialData={getInitialFormData()}
         open={showFormModal}
         onClose={() => setShowFormModal(false)}

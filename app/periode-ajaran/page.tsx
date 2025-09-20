@@ -7,40 +7,36 @@ import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 
-interface Kelas {
+interface PeriodeAjaran {
   id: number
-  nama_kelas: string
-  tingkatan_id: number
-  wali_kelas_id: number | null
-  tahun_ajaran: string
-  status: "aktif" | "nonaktif"
-  tingkatan: {
+  nama_ajaran: string
+  semester: "SATU" | "DUA"
+  master_tahun_ajaran_id: number | null
+  dibuat_pada: string
+  diperbarui_pada: string
+  master_tahun_ajaran: {
     id: number
-    nama_tingkatan: string
-  }
-  wali_kelas: {
-    id: number
-    nama: string
+    nama_ajaran: string
+    status: string
   } | null
   _count: {
-    siswa: number
+    nilai_ujian: number
+    nilai_hafalan: number
+    kehadiran: number
+    penilaian_sikap: number
+    ringkasan_rapot: number
+    kelas_periode: number
   }
 }
 
-interface Tingkatan {
+interface MasterTahunAjaran {
   id: number
-  nama_tingkatan: string
+  nama_ajaran: string
 }
 
-interface Guru {
-  id: number
-  nama: string
-}
-
-export default function KelasPage() {
-  const [data, setData] = useState<Kelas[]>([])
-  const [tingkatanOptions, setTingkatanOptions] = useState<Tingkatan[]>([])
-  const [guruOptions, setGuruOptions] = useState<Guru[]>([])
+export default function PeriodeAjaranPage() {
+  const [data, setData] = useState<PeriodeAjaran[]>([])
+  const [masterTahunAjaranOptions, setMasterTahunAjaranOptions] = useState<MasterTahunAjaran[]>([])
   const [loading, setLoading] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -52,92 +48,79 @@ export default function KelasPage() {
   // Modal states
   const [showFormModal, setShowFormModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [selectedKelas, setSelectedKelas] = useState<Kelas | null>(null)
+  const [selectedPeriodeAjaran, setSelectedPeriodeAjaran] = useState<PeriodeAjaran | null>(null)
   const [formLoading, setFormLoading] = useState(false)
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("")
 
-  const columns: Column<Kelas>[] = [
+  const columns: Column<PeriodeAjaran>[] = [
     {
-      key: "nama_kelas",
-      label: "Nama Kelas",
+      key: "nama_ajaran",
+      label: "Nama Ajaran",
       className: "font-medium",
     },
     {
-      key: "tingkatan",
-      label: "Tingkatan",
-      render: (value) => <Badge variant="outline">{value.nama_tingkatan}</Badge>,
+      key: "semester",
+      label: "Semester",
+      render: (value) => (
+        <Badge variant="outline">
+          Semester {value === "SATU" ? "1" : "2"}
+        </Badge>
+      ),
     },
     {
-      key: "wali_kelas",
-      label: "Wali Kelas",
-      render: (value) => (value ? value.nama : "-"),
+      key: "master_tahun_ajaran",
+      label: "Master Tahun Ajaran",
+      render: (value) => value ? value.nama_ajaran : "-",
     },
     {
       key: "_count",
-      label: "Jumlah Siswa",
-      render: (value) => `${value.siswa} siswa`,
-    },
-    {
-      key: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      className: "font-mono",
-    },
-    {
-      key: "status",
-      label: "Status",
+      label: "Data Terkait",
       render: (value) => (
-        <Badge variant={value === "aktif" ? "default" : "secondary"}>{value === "aktif" ? "Aktif" : "Non-aktif"}</Badge>
+        <div className="text-sm">
+          <div>{value.nilai_ujian} nilai ujian</div>
+          <div>{value.nilai_hafalan} nilai hafalan</div>
+          <div>{value.kehadiran} kehadiran</div>
+          <div>{value.penilaian_sikap} penilaian sikap</div>
+        </div>
       ),
+    },
+    {
+      key: "dibuat_pada",
+      label: "Dibuat Pada",
+      render: (value) => new Date(value).toLocaleDateString("id-ID"),
     },
   ]
 
   const getFormFields = (): FormField[] => [
     {
-      name: "nama_kelas",
-      label: "Nama Kelas",
+      name: "nama_ajaran",
+      label: "Nama Ajaran",
       type: "text",
       required: true,
-      placeholder: "Contoh: 1A, 2B, 3C",
+      placeholder: "Contoh: 2024/2025 Ganjil, 2024/2025 Genap",
     },
     {
-      name: "tingkatan_id",
-      label: "Tingkatan",
+      name: "semester",
+      label: "Semester",
       type: "select",
       required: true,
-      options: tingkatanOptions.map((t) => ({
-        value: t.id.toString(),
-        label: t.nama_tingkatan,
-      })),
-    },
-    {
-      name: "wali_kelas_id",
-      label: "Wali Kelas",
-      type: "select",
       options: [
-        { value: "", label: "Pilih Wali Kelas (Opsional)" },
-        ...guruOptions.map((g) => ({
-          value: g.id.toString(),
-          label: g.nama,
-        })),
+        { value: "SATU", label: "Semester 1" },
+        { value: "DUA", label: "Semester 2" },
       ],
     },
     {
-      name: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      type: "text",
-      required: true,
-      placeholder: "Contoh: 2024/2025",
-    },
-    {
-      name: "status",
-      label: "Status",
+      name: "master_tahun_ajaran_id",
+      label: "Master Tahun Ajaran",
       type: "select",
-      required: true,
       options: [
-        { value: "aktif", label: "Aktif" },
-        { value: "nonaktif", label: "Non-aktif" },
+        { value: "", label: "Pilih Master Tahun Ajaran (Opsional)" },
+        ...masterTahunAjaranOptions.map((mta) => ({
+          value: mta.id.toString(),
+          label: mta.nama_ajaran,
+        })),
       ],
     },
   ]
@@ -151,7 +134,7 @@ export default function KelasPage() {
         ...(search && { search }),
       })
 
-      const response = await fetch(`/api/kelas?${params}`)
+      const response = await fetch(`/api/periode-ajaran?${params}`)
       const result = await response.json()
 
       if (result.success) {
@@ -160,7 +143,7 @@ export default function KelasPage() {
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal mengambil data kelas",
+          description: result.error || "Gagal mengambil data periode ajaran",
           variant: "destructive",
         })
       }
@@ -177,28 +160,20 @@ export default function KelasPage() {
 
   const fetchOptions = async () => {
     try {
-      // Fetch tingkatan options
-      const tingkatanResponse = await fetch("/api/tingkatan")
-      const tingkatanResult = await tingkatanResponse.json()
-      if (tingkatanResult.success) {
-        setTingkatanOptions(tingkatanResult.data)
-      }
-
-      // Fetch guru options (only active teachers)
-      const guruResponse = await fetch("/api/guru?status=aktif&per_page=100")
-      const guruResult = await guruResponse.json()
-      if (guruResult.success) {
-        setGuruOptions(guruResult.data)
+      const response = await fetch("/api/master-tahun-ajaran?per_page=100")
+      const result = await response.json()
+      if (result.success) {
+        setMasterTahunAjaranOptions(result.data)
       }
     } catch (error) {
-      console.error("Error fetching options:", error)
+      console.error("Error fetching master tahun ajaran options:", error)
     }
   }
 
   useEffect(() => {
     fetchData()
     fetchOptions()
-  }, [])
+  }, [fetchData])
 
   const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm)
@@ -210,31 +185,29 @@ export default function KelasPage() {
   }, [fetchData])
 
   const handleAdd = () => {
-    setSelectedKelas(null)
+    setSelectedPeriodeAjaran(null)
     setShowFormModal(true)
   }
 
-  const handleEdit = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleEdit = (periodeAjaran: PeriodeAjaran) => {
+    setSelectedPeriodeAjaran(periodeAjaran)
     setShowFormModal(true)
   }
 
-  const handleDelete = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleDelete = (periodeAjaran: PeriodeAjaran) => {
+    setSelectedPeriodeAjaran(periodeAjaran)
     setShowDeleteDialog(true)
   }
 
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
-      const url = selectedKelas ? `/api/kelas/${selectedKelas.id}` : "/api/kelas"
-      const method = selectedKelas ? "PUT" : "POST"
+      const url = selectedPeriodeAjaran ? `/api/periode-ajaran/${selectedPeriodeAjaran.id}` : "/api/periode-ajaran"
+      const method = selectedPeriodeAjaran ? "PUT" : "POST"
 
-      // Convert string IDs to numbers
       const processedData = {
         ...formData,
-        tingkatan_id: Number.parseInt(formData.tingkatan_id),
-        wali_kelas_id: formData.wali_kelas_id ? Number.parseInt(formData.wali_kelas_id) : null,
+        master_tahun_ajaran_id: formData.master_tahun_ajaran_id ? Number.parseInt(formData.master_tahun_ajaran_id) : null,
       }
 
       const response = await fetch(url, {
@@ -250,7 +223,7 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: result.message || `Kelas berhasil ${selectedKelas ? "diperbarui" : "ditambahkan"}`,
+          description: result.message || `Periode ajaran berhasil ${selectedPeriodeAjaran ? "diperbarui" : "ditambahkan"}`,
         })
         fetchData(pagination.page, searchTerm)
         setShowFormModal(false)
@@ -273,10 +246,10 @@ export default function KelasPage() {
   }
 
   const handleDeleteConfirm = async () => {
-    if (!selectedKelas) return
+    if (!selectedPeriodeAjaran) return
 
     try {
-      const response = await fetch(`/api/kelas/${selectedKelas.id}`, {
+      const response = await fetch(`/api/periode-ajaran/${selectedPeriodeAjaran.id}`, {
         method: "DELETE",
       })
 
@@ -285,13 +258,13 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: "Kelas berhasil dihapus",
+          description: "Periode ajaran berhasil dihapus",
         })
         fetchData(pagination.page, searchTerm)
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal menghapus kelas",
+          description: result.error || "Gagal menghapus periode ajaran",
           variant: "destructive",
         })
       }
@@ -305,19 +278,18 @@ export default function KelasPage() {
   }
 
   const getInitialFormData = () => {
-    if (!selectedKelas) return { status: "aktif" }
-
+    if (!selectedPeriodeAjaran) return {}
     return {
-      ...selectedKelas,
-      tingkatan_id: selectedKelas.tingkatan_id.toString(),
-      wali_kelas_id: selectedKelas.wali_kelas_id?.toString() || "",
+      nama_ajaran: selectedPeriodeAjaran.nama_ajaran,
+      semester: selectedPeriodeAjaran.semester,
+      master_tahun_ajaran_id: selectedPeriodeAjaran.master_tahun_ajaran_id?.toString() || "",
     }
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <DataTable
-        title="Data Kelas"
+        title="Periode Ajaran"
         columns={columns}
         data={data}
         loading={loading}
@@ -327,13 +299,13 @@ export default function KelasPage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Cari nama kelas..."
-        addButtonText="Tambah Kelas"
-        emptyMessage="Belum ada data kelas"
+        searchPlaceholder="Cari nama ajaran..."
+        addButtonText="Tambah Periode Ajaran"
+        emptyMessage="Belum ada data periode ajaran"
       />
 
       <FormModal
-        title={selectedKelas ? "Edit Kelas" : "Tambah Kelas"}
+        title={selectedPeriodeAjaran ? "Edit Periode Ajaran" : "Tambah Periode Ajaran"}
         fields={getFormFields()}
         initialData={getInitialFormData()}
         open={showFormModal}
@@ -346,8 +318,8 @@ export default function KelasPage() {
         open={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
-        title="Hapus Kelas"
-        description={`Apakah Anda yakin ingin menghapus kelas "${selectedKelas?.nama_kelas}"? Tindakan ini tidak dapat dibatalkan.`}
+        title="Hapus Periode Ajaran"
+        description={`Apakah Anda yakin ingin menghapus periode ajaran "${selectedPeriodeAjaran?.nama_ajaran}"? Tindakan ini tidak dapat dibatalkan.`}
         confirmText="Hapus"
         variant="destructive"
       />

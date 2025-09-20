@@ -7,40 +7,20 @@ import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 
-interface Kelas {
+interface PenanggungJawabRapot {
   id: number
-  nama_kelas: string
-  tingkatan_id: number
-  wali_kelas_id: number | null
-  tahun_ajaran: string
+  jabatan: string
+  nama_pejabat: string
+  nip: string | null
+  tanda_tangan: string | null
+  jenis_kelamin_target: "LAKI_LAKI" | "PEREMPUAN" | "Semua"
   status: "aktif" | "nonaktif"
-  tingkatan: {
-    id: number
-    nama_tingkatan: string
-  }
-  wali_kelas: {
-    id: number
-    nama: string
-  } | null
-  _count: {
-    siswa: number
-  }
+  dibuat_pada: string
+  diperbarui_pada: string
 }
 
-interface Tingkatan {
-  id: number
-  nama_tingkatan: string
-}
-
-interface Guru {
-  id: number
-  nama: string
-}
-
-export default function KelasPage() {
-  const [data, setData] = useState<Kelas[]>([])
-  const [tingkatanOptions, setTingkatanOptions] = useState<Tingkatan[]>([])
-  const [guruOptions, setGuruOptions] = useState<Guru[]>([])
+export default function PenanggungJawabRapotPage() {
+  const [data, setData] = useState<PenanggungJawabRapot[]>([])
   const [loading, setLoading] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -52,83 +32,97 @@ export default function KelasPage() {
   // Modal states
   const [showFormModal, setShowFormModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [selectedKelas, setSelectedKelas] = useState<Kelas | null>(null)
+  const [selectedPenanggungJawabRapot, setSelectedPenanggungJawabRapot] = useState<PenanggungJawabRapot | null>(null)
   const [formLoading, setFormLoading] = useState(false)
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("")
 
-  const columns: Column<Kelas>[] = [
+  const columns: Column<PenanggungJawabRapot>[] = [
     {
-      key: "nama_kelas",
-      label: "Nama Kelas",
+      key: "jabatan",
+      label: "Jabatan",
       className: "font-medium",
     },
     {
-      key: "tingkatan",
-      label: "Tingkatan",
-      render: (value) => <Badge variant="outline">{value.nama_tingkatan}</Badge>,
+      key: "nama_pejabat",
+      label: "Nama Pejabat",
+      className: "font-medium",
     },
     {
-      key: "wali_kelas",
-      label: "Wali Kelas",
-      render: (value) => (value ? value.nama : "-"),
+      key: "nip",
+      label: "NIP",
+      render: (value) => value || "-",
     },
     {
-      key: "_count",
-      label: "Jumlah Siswa",
-      render: (value) => `${value.siswa} siswa`,
-    },
-    {
-      key: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      className: "font-mono",
+      key: "jenis_kelamin_target",
+      label: "Target Gender",
+      render: (value) => {
+        const labels = {
+          LAKI_LAKI: "Laki-laki",
+          PEREMPUAN: "Perempuan",
+          Semua: "Semua",
+        }
+        return (
+          <Badge variant="outline">
+            {labels[value as keyof typeof labels]}
+          </Badge>
+        )
+      },
     },
     {
       key: "status",
       label: "Status",
       render: (value) => (
-        <Badge variant={value === "aktif" ? "default" : "secondary"}>{value === "aktif" ? "Aktif" : "Non-aktif"}</Badge>
+        <Badge variant={value === "aktif" ? "default" : "secondary"}>
+          {value === "aktif" ? "Aktif" : "Non-aktif"}
+        </Badge>
       ),
+    },
+    {
+      key: "dibuat_pada",
+      label: "Dibuat Pada",
+      render: (value) => new Date(value).toLocaleDateString("id-ID"),
     },
   ]
 
   const getFormFields = (): FormField[] => [
     {
-      name: "nama_kelas",
-      label: "Nama Kelas",
+      name: "jabatan",
+      label: "Jabatan",
       type: "text",
       required: true,
-      placeholder: "Contoh: 1A, 2B, 3C",
+      placeholder: "Contoh: Kepala Sekolah, Wali Kelas",
     },
     {
-      name: "tingkatan_id",
-      label: "Tingkatan",
+      name: "nama_pejabat",
+      label: "Nama Pejabat",
+      type: "text",
+      required: true,
+      placeholder: "Nama lengkap pejabat",
+    },
+    {
+      name: "nip",
+      label: "NIP",
+      type: "text",
+      placeholder: "Nomor Induk Pegawai (opsional)",
+    },
+    {
+      name: "tanda_tangan",
+      label: "Path Tanda Tangan",
+      type: "text",
+      placeholder: "Path ke file tanda tangan (opsional)",
+    },
+    {
+      name: "jenis_kelamin_target",
+      label: "Target Jenis Kelamin",
       type: "select",
       required: true,
-      options: tingkatanOptions.map((t) => ({
-        value: t.id.toString(),
-        label: t.nama_tingkatan,
-      })),
-    },
-    {
-      name: "wali_kelas_id",
-      label: "Wali Kelas",
-      type: "select",
       options: [
-        { value: "", label: "Pilih Wali Kelas (Opsional)" },
-        ...guruOptions.map((g) => ({
-          value: g.id.toString(),
-          label: g.nama,
-        })),
+        { value: "LAKI_LAKI", label: "Laki-laki" },
+        { value: "PEREMPUAN", label: "Perempuan" },
+        { value: "Semua", label: "Semua" },
       ],
-    },
-    {
-      name: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      type: "text",
-      required: true,
-      placeholder: "Contoh: 2024/2025",
     },
     {
       name: "status",
@@ -151,7 +145,7 @@ export default function KelasPage() {
         ...(search && { search }),
       })
 
-      const response = await fetch(`/api/kelas?${params}`)
+      const response = await fetch(`/api/penanggung-jawab-rapot?${params}`)
       const result = await response.json()
 
       if (result.success) {
@@ -160,7 +154,7 @@ export default function KelasPage() {
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal mengambil data kelas",
+          description: result.error || "Gagal mengambil data penanggung jawab rapot",
           variant: "destructive",
         })
       }
@@ -175,30 +169,9 @@ export default function KelasPage() {
     }
   }, [pagination.per_page])
 
-  const fetchOptions = async () => {
-    try {
-      // Fetch tingkatan options
-      const tingkatanResponse = await fetch("/api/tingkatan")
-      const tingkatanResult = await tingkatanResponse.json()
-      if (tingkatanResult.success) {
-        setTingkatanOptions(tingkatanResult.data)
-      }
-
-      // Fetch guru options (only active teachers)
-      const guruResponse = await fetch("/api/guru?status=aktif&per_page=100")
-      const guruResult = await guruResponse.json()
-      if (guruResult.success) {
-        setGuruOptions(guruResult.data)
-      }
-    } catch (error) {
-      console.error("Error fetching options:", error)
-    }
-  }
-
   useEffect(() => {
     fetchData()
-    fetchOptions()
-  }, [])
+  }, [fetchData])
 
   const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm)
@@ -210,39 +183,32 @@ export default function KelasPage() {
   }, [fetchData])
 
   const handleAdd = () => {
-    setSelectedKelas(null)
+    setSelectedPenanggungJawabRapot(null)
     setShowFormModal(true)
   }
 
-  const handleEdit = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleEdit = (penanggungJawabRapot: PenanggungJawabRapot) => {
+    setSelectedPenanggungJawabRapot(penanggungJawabRapot)
     setShowFormModal(true)
   }
 
-  const handleDelete = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleDelete = (penanggungJawabRapot: PenanggungJawabRapot) => {
+    setSelectedPenanggungJawabRapot(penanggungJawabRapot)
     setShowDeleteDialog(true)
   }
 
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
-      const url = selectedKelas ? `/api/kelas/${selectedKelas.id}` : "/api/kelas"
-      const method = selectedKelas ? "PUT" : "POST"
-
-      // Convert string IDs to numbers
-      const processedData = {
-        ...formData,
-        tingkatan_id: Number.parseInt(formData.tingkatan_id),
-        wali_kelas_id: formData.wali_kelas_id ? Number.parseInt(formData.wali_kelas_id) : null,
-      }
+      const url = selectedPenanggungJawabRapot ? `/api/penanggung-jawab-rapot/${selectedPenanggungJawabRapot.id}` : "/api/penanggung-jawab-rapot"
+      const method = selectedPenanggungJawabRapot ? "PUT" : "POST"
 
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(processedData),
+        body: JSON.stringify(formData),
       })
 
       const result = await response.json()
@@ -250,7 +216,7 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: result.message || `Kelas berhasil ${selectedKelas ? "diperbarui" : "ditambahkan"}`,
+          description: result.message || `Penanggung jawab rapot berhasil ${selectedPenanggungJawabRapot ? "diperbarui" : "ditambahkan"}`,
         })
         fetchData(pagination.page, searchTerm)
         setShowFormModal(false)
@@ -273,10 +239,10 @@ export default function KelasPage() {
   }
 
   const handleDeleteConfirm = async () => {
-    if (!selectedKelas) return
+    if (!selectedPenanggungJawabRapot) return
 
     try {
-      const response = await fetch(`/api/kelas/${selectedKelas.id}`, {
+      const response = await fetch(`/api/penanggung-jawab-rapot/${selectedPenanggungJawabRapot.id}`, {
         method: "DELETE",
       })
 
@@ -285,13 +251,13 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: "Kelas berhasil dihapus",
+          description: "Penanggung jawab rapot berhasil dihapus",
         })
         fetchData(pagination.page, searchTerm)
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal menghapus kelas",
+          description: result.error || "Gagal menghapus penanggung jawab rapot",
           variant: "destructive",
         })
       }
@@ -305,19 +271,21 @@ export default function KelasPage() {
   }
 
   const getInitialFormData = () => {
-    if (!selectedKelas) return { status: "aktif" }
-
+    if (!selectedPenanggungJawabRapot) return { status: "aktif", jenis_kelamin_target: "Semua" }
     return {
-      ...selectedKelas,
-      tingkatan_id: selectedKelas.tingkatan_id.toString(),
-      wali_kelas_id: selectedKelas.wali_kelas_id?.toString() || "",
+      jabatan: selectedPenanggungJawabRapot.jabatan,
+      nama_pejabat: selectedPenanggungJawabRapot.nama_pejabat,
+      nip: selectedPenanggungJawabRapot.nip || "",
+      tanda_tangan: selectedPenanggungJawabRapot.tanda_tangan || "",
+      jenis_kelamin_target: selectedPenanggungJawabRapot.jenis_kelamin_target,
+      status: selectedPenanggungJawabRapot.status,
     }
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <DataTable
-        title="Data Kelas"
+        title="Penanggung Jawab Rapot"
         columns={columns}
         data={data}
         loading={loading}
@@ -327,13 +295,13 @@ export default function KelasPage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Cari nama kelas..."
-        addButtonText="Tambah Kelas"
-        emptyMessage="Belum ada data kelas"
+        searchPlaceholder="Cari jabatan, nama pejabat, atau NIP..."
+        addButtonText="Tambah Penanggung Jawab"
+        emptyMessage="Belum ada data penanggung jawab rapot"
       />
 
       <FormModal
-        title={selectedKelas ? "Edit Kelas" : "Tambah Kelas"}
+        title={selectedPenanggungJawabRapot ? "Edit Penanggung Jawab Rapot" : "Tambah Penanggung Jawab Rapot"}
         fields={getFormFields()}
         initialData={getInitialFormData()}
         open={showFormModal}
@@ -346,8 +314,8 @@ export default function KelasPage() {
         open={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
-        title="Hapus Kelas"
-        description={`Apakah Anda yakin ingin menghapus kelas "${selectedKelas?.nama_kelas}"? Tindakan ini tidak dapat dibatalkan.`}
+        title="Hapus Penanggung Jawab Rapot"
+        description={`Apakah Anda yakin ingin menghapus penanggung jawab rapot "${selectedPenanggungJawabRapot?.nama_pejabat}"? Tindakan ini tidak dapat dibatalkan.`}
         confirmText="Hapus"
         variant="destructive"
       />

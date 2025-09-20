@@ -7,40 +7,51 @@ import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 
+interface RiwayatKelasSiswa {
+  id: number
+  dibuat_pada: string
+  siswa: {
+    id: number
+    nama: string | null
+    nis: string
+  } | null
+  kelas: {
+    id: number
+    nama_kelas: string | null
+    tingkatan: {
+      nama_tingkatan: string
+    } | null
+  } | null
+  master_tahun_ajaran: {
+    id: number
+    nama_ajaran: string
+  } | null
+}
+
+interface Siswa {
+  id: number
+  nama: string | null
+  nis: string
+}
+
 interface Kelas {
   id: number
-  nama_kelas: string
-  tingkatan_id: number
-  wali_kelas_id: number | null
-  tahun_ajaran: string
-  status: "aktif" | "nonaktif"
+  nama_kelas: string | null
   tingkatan: {
-    id: number
     nama_tingkatan: string
-  }
-  wali_kelas: {
-    id: number
-    nama: string
   } | null
-  _count: {
-    siswa: number
-  }
 }
 
-interface Tingkatan {
+interface MasterTahunAjaran {
   id: number
-  nama_tingkatan: string
+  nama_ajaran: string
 }
 
-interface Guru {
-  id: number
-  nama: string
-}
-
-export default function KelasPage() {
-  const [data, setData] = useState<Kelas[]>([])
-  const [tingkatanOptions, setTingkatanOptions] = useState<Tingkatan[]>([])
-  const [guruOptions, setGuruOptions] = useState<Guru[]>([])
+export default function RiwayatKelasSiswaPage() {
+  const [data, setData] = useState<RiwayatKelasSiswa[]>([])
+  const [siswaOptions, setSiswaOptions] = useState<Siswa[]>([])
+  const [kelasOptions, setKelasOptions] = useState<Kelas[]>([])
+  const [masterTahunAjaranOptions, setMasterTahunAjaranOptions] = useState<MasterTahunAjaran[]>([])
   const [loading, setLoading] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -52,92 +63,66 @@ export default function KelasPage() {
   // Modal states
   const [showFormModal, setShowFormModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [selectedKelas, setSelectedKelas] = useState<Kelas | null>(null)
+  const [selectedRiwayatKelasSiswa, setSelectedRiwayatKelasSiswa] = useState<RiwayatKelasSiswa | null>(null)
   const [formLoading, setFormLoading] = useState(false)
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("")
 
-  const columns: Column<Kelas>[] = [
+  const columns: Column<RiwayatKelasSiswa>[] = [
     {
-      key: "nama_kelas",
-      label: "Nama Kelas",
-      className: "font-medium",
+      key: "siswa",
+      label: "Siswa",
+      render: (value) => value ? `${value.nama} (${value.nis})` : "-",
     },
     {
-      key: "tingkatan",
-      label: "Tingkatan",
-      render: (value) => <Badge variant="outline">{value.nama_tingkatan}</Badge>,
+      key: "kelas",
+      label: "Kelas",
+      render: (value) => value ? `${value.nama_kelas} - ${value.tingkatan?.nama_tingkatan}` : "-",
     },
     {
-      key: "wali_kelas",
-      label: "Wali Kelas",
-      render: (value) => (value ? value.nama : "-"),
-    },
-    {
-      key: "_count",
-      label: "Jumlah Siswa",
-      render: (value) => `${value.siswa} siswa`,
-    },
-    {
-      key: "tahun_ajaran",
+      key: "master_tahun_ajaran",
       label: "Tahun Ajaran",
-      className: "font-mono",
+      render: (value) => value ? value.nama_ajaran : "-",
     },
     {
-      key: "status",
-      label: "Status",
-      render: (value) => (
-        <Badge variant={value === "aktif" ? "default" : "secondary"}>{value === "aktif" ? "Aktif" : "Non-aktif"}</Badge>
-      ),
+      key: "dibuat_pada",
+      label: "Dibuat Pada",
+      render: (value) => new Date(value).toLocaleDateString("id-ID"),
     },
   ]
 
   const getFormFields = (): FormField[] => [
     {
-      name: "nama_kelas",
-      label: "Nama Kelas",
-      type: "text",
-      required: true,
-      placeholder: "Contoh: 1A, 2B, 3C",
-    },
-    {
-      name: "tingkatan_id",
-      label: "Tingkatan",
+      name: "siswa_id",
+      label: "Siswa",
       type: "select",
       required: true,
-      options: tingkatanOptions.map((t) => ({
-        value: t.id.toString(),
-        label: t.nama_tingkatan,
+      options: siswaOptions.map((siswa) => ({
+        value: siswa.id.toString(),
+        label: `${siswa.nama} (${siswa.nis})`,
       })),
     },
     {
-      name: "wali_kelas_id",
-      label: "Wali Kelas",
+      name: "kelas_id",
+      label: "Kelas",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Wali Kelas (Opsional)" },
-        ...guruOptions.map((g) => ({
-          value: g.id.toString(),
-          label: g.nama,
-        })),
-      ],
+      required: true,
+      options: kelasOptions.map((kelas) => ({
+        value: kelas.id.toString(),
+        label: `${kelas.nama_kelas} - ${kelas.tingkatan?.nama_tingkatan}`,
+      })),
     },
     {
-      name: "tahun_ajaran",
+      name: "master_tahun_ajaran_id",
       label: "Tahun Ajaran",
-      type: "text",
-      required: true,
-      placeholder: "Contoh: 2024/2025",
-    },
-    {
-      name: "status",
-      label: "Status",
       type: "select",
-      required: true,
       options: [
-        { value: "aktif", label: "Aktif" },
-        { value: "nonaktif", label: "Non-aktif" },
+        { value: "", label: "Pilih Tahun Ajaran (Opsional)" },
+        ...masterTahunAjaranOptions.map((mta) => ({
+          value: mta.id.toString(),
+          label: mta.nama_ajaran,
+        })),
       ],
     },
   ]
@@ -151,7 +136,7 @@ export default function KelasPage() {
         ...(search && { search }),
       })
 
-      const response = await fetch(`/api/kelas?${params}`)
+      const response = await fetch(`/api/riwayat-kelas-siswa?${params}`)
       const result = await response.json()
 
       if (result.success) {
@@ -160,7 +145,7 @@ export default function KelasPage() {
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal mengambil data kelas",
+          description: result.error || "Gagal mengambil data riwayat kelas siswa",
           variant: "destructive",
         })
       }
@@ -177,18 +162,25 @@ export default function KelasPage() {
 
   const fetchOptions = async () => {
     try {
-      // Fetch tingkatan options
-      const tingkatanResponse = await fetch("/api/tingkatan")
-      const tingkatanResult = await tingkatanResponse.json()
-      if (tingkatanResult.success) {
-        setTingkatanOptions(tingkatanResult.data)
+      // Fetch siswa options
+      const siswaResponse = await fetch("/api/siswa?per_page=1000")
+      const siswaResult = await siswaResponse.json()
+      if (siswaResult.success) {
+        setSiswaOptions(siswaResult.data)
       }
 
-      // Fetch guru options (only active teachers)
-      const guruResponse = await fetch("/api/guru?status=aktif&per_page=100")
-      const guruResult = await guruResponse.json()
-      if (guruResult.success) {
-        setGuruOptions(guruResult.data)
+      // Fetch kelas options
+      const kelasResponse = await fetch("/api/kelas?per_page=1000")
+      const kelasResult = await kelasResponse.json()
+      if (kelasResult.success) {
+        setKelasOptions(kelasResult.data)
+      }
+
+      // Fetch master tahun ajaran options
+      const mtaResponse = await fetch("/api/master-tahun-ajaran?per_page=1000")
+      const mtaResult = await mtaResponse.json()
+      if (mtaResult.success) {
+        setMasterTahunAjaranOptions(mtaResult.data)
       }
     } catch (error) {
       console.error("Error fetching options:", error)
@@ -198,7 +190,7 @@ export default function KelasPage() {
   useEffect(() => {
     fetchData()
     fetchOptions()
-  }, [])
+  }, [fetchData])
 
   const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm)
@@ -210,39 +202,32 @@ export default function KelasPage() {
   }, [fetchData])
 
   const handleAdd = () => {
-    setSelectedKelas(null)
+    setSelectedRiwayatKelasSiswa(null)
     setShowFormModal(true)
   }
 
-  const handleEdit = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleEdit = (riwayatKelasSiswa: RiwayatKelasSiswa) => {
+    setSelectedRiwayatKelasSiswa(riwayatKelasSiswa)
     setShowFormModal(true)
   }
 
-  const handleDelete = (kelas: Kelas) => {
-    setSelectedKelas(kelas)
+  const handleDelete = (riwayatKelasSiswa: RiwayatKelasSiswa) => {
+    setSelectedRiwayatKelasSiswa(riwayatKelasSiswa)
     setShowDeleteDialog(true)
   }
 
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
-      const url = selectedKelas ? `/api/kelas/${selectedKelas.id}` : "/api/kelas"
-      const method = selectedKelas ? "PUT" : "POST"
-
-      // Convert string IDs to numbers
-      const processedData = {
-        ...formData,
-        tingkatan_id: Number.parseInt(formData.tingkatan_id),
-        wali_kelas_id: formData.wali_kelas_id ? Number.parseInt(formData.wali_kelas_id) : null,
-      }
+      const url = selectedRiwayatKelasSiswa ? `/api/riwayat-kelas-siswa/${selectedRiwayatKelasSiswa.id}` : "/api/riwayat-kelas-siswa"
+      const method = selectedRiwayatKelasSiswa ? "PUT" : "POST"
 
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(processedData),
+        body: JSON.stringify(formData),
       })
 
       const result = await response.json()
@@ -250,7 +235,7 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: result.message || `Kelas berhasil ${selectedKelas ? "diperbarui" : "ditambahkan"}`,
+          description: result.message || `Riwayat kelas siswa berhasil ${selectedRiwayatKelasSiswa ? "diperbarui" : "ditambahkan"}`,
         })
         fetchData(pagination.page, searchTerm)
         setShowFormModal(false)
@@ -273,10 +258,10 @@ export default function KelasPage() {
   }
 
   const handleDeleteConfirm = async () => {
-    if (!selectedKelas) return
+    if (!selectedRiwayatKelasSiswa) return
 
     try {
-      const response = await fetch(`/api/kelas/${selectedKelas.id}`, {
+      const response = await fetch(`/api/riwayat-kelas-siswa/${selectedRiwayatKelasSiswa.id}`, {
         method: "DELETE",
       })
 
@@ -285,13 +270,13 @@ export default function KelasPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: "Kelas berhasil dihapus",
+          description: "Riwayat kelas siswa berhasil dihapus",
         })
         fetchData(pagination.page, searchTerm)
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal menghapus kelas",
+          description: result.error || "Gagal menghapus riwayat kelas siswa",
           variant: "destructive",
         })
       }
@@ -305,19 +290,18 @@ export default function KelasPage() {
   }
 
   const getInitialFormData = () => {
-    if (!selectedKelas) return { status: "aktif" }
-
+    if (!selectedRiwayatKelasSiswa) return {}
     return {
-      ...selectedKelas,
-      tingkatan_id: selectedKelas.tingkatan_id.toString(),
-      wali_kelas_id: selectedKelas.wali_kelas_id?.toString() || "",
+      siswa_id: selectedRiwayatKelasSiswa.siswa?.id.toString() || "",
+      kelas_id: selectedRiwayatKelasSiswa.kelas?.id.toString() || "",
+      master_tahun_ajaran_id: selectedRiwayatKelasSiswa.master_tahun_ajaran?.id.toString() || "",
     }
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <DataTable
-        title="Data Kelas"
+        title="Riwayat Kelas Siswa"
         columns={columns}
         data={data}
         loading={loading}
@@ -327,13 +311,13 @@ export default function KelasPage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Cari nama kelas..."
-        addButtonText="Tambah Kelas"
-        emptyMessage="Belum ada data kelas"
+        searchPlaceholder="Cari nama siswa atau kelas..."
+        addButtonText="Tambah Riwayat"
+        emptyMessage="Belum ada data riwayat kelas siswa"
       />
 
       <FormModal
-        title={selectedKelas ? "Edit Kelas" : "Tambah Kelas"}
+        title={selectedRiwayatKelasSiswa ? "Edit Riwayat Kelas Siswa" : "Tambah Riwayat Kelas Siswa"}
         fields={getFormFields()}
         initialData={getInitialFormData()}
         open={showFormModal}
@@ -346,8 +330,8 @@ export default function KelasPage() {
         open={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
-        title="Hapus Kelas"
-        description={`Apakah Anda yakin ingin menghapus kelas "${selectedKelas?.nama_kelas}"? Tindakan ini tidak dapat dibatalkan.`}
+        title="Hapus Riwayat Kelas Siswa"
+        description={`Apakah Anda yakin ingin menghapus riwayat kelas siswa ini? Tindakan ini tidak dapat dibatalkan.`}
         confirmText="Hapus"
         variant="destructive"
       />
