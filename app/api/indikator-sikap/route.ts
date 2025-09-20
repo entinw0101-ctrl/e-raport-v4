@@ -14,8 +14,7 @@ export async function GET(request: NextRequest) {
     const where: any = {}
     if (search) {
       where.OR = [
-        { nama_indikator: { contains: search, mode: "insensitive" } },
-        { deskripsi: { contains: search, mode: "insensitive" } },
+        { indikator: { contains: search, mode: "insensitive" } },
       ]
     }
 
@@ -24,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const data = await prisma.indikatorSikap.findMany({
       where,
-      orderBy: { nama_indikator: "asc" },
+      orderBy: { indikator: "asc" },
       skip,
       take: per_page,
     })
@@ -50,8 +49,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Validate required fields
-    if (!body.nama_indikator) {
-      return NextResponse.json({ success: false, error: "Nama indikator wajib diisi" }, { status: 400 })
+    if (!body.indikator) {
+      return NextResponse.json({ success: false, error: "Indikator wajib diisi" }, { status: 400 })
     }
 
     const indikatorSikap = await prisma.indikatorSikap.create({

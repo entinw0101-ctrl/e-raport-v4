@@ -9,9 +9,6 @@ import { toast } from "@/hooks/use-toast"
 interface Kitab {
   id: number
   nama_kitab: string
-  pengarang: string | null
-  penerbit: string | null
-  tahun_terbit: number | null
   deskripsi: string | null
 }
 
@@ -41,21 +38,6 @@ export default function KitabPage() {
       className: "font-medium",
     },
     {
-      key: "pengarang",
-      label: "Pengarang",
-      render: (value) => value || "-",
-    },
-    {
-      key: "penerbit",
-      label: "Penerbit",
-      render: (value) => value || "-",
-    },
-    {
-      key: "tahun_terbit",
-      label: "Tahun Terbit",
-      render: (value) => value || "-",
-    },
-    {
       key: "deskripsi",
       label: "Deskripsi",
       render: (value) => value || "-",
@@ -69,31 +51,6 @@ export default function KitabPage() {
       type: "text",
       required: true,
       placeholder: "Contoh: Safinah An-Najah, Aqidatul Awam",
-    },
-    {
-      name: "pengarang",
-      label: "Pengarang",
-      type: "text",
-      placeholder: "Nama pengarang kitab",
-    },
-    {
-      name: "penerbit",
-      label: "Penerbit",
-      type: "text",
-      placeholder: "Nama penerbit",
-    },
-    {
-      name: "tahun_terbit",
-      label: "Tahun Terbit",
-      type: "number",
-      placeholder: "Tahun penerbitan",
-    },
-    {
-      name: "deskripsi",
-      label: "Deskripsi",
-      type: "textarea",
-      placeholder: "Deskripsi kitab (opsional)",
-      rows: 3,
     },
   ]
 
@@ -164,18 +121,12 @@ export default function KitabPage() {
       const url = selectedKitab ? `/api/kitab/${selectedKitab.id}` : "/api/kitab"
       const method = selectedKitab ? "PUT" : "POST"
 
-      // Convert tahun_terbit to number if provided
-      const processedData = {
-        ...formData,
-        tahun_terbit: formData.tahun_terbit ? Number.parseInt(formData.tahun_terbit) : null,
-      }
-
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(processedData),
+        body: JSON.stringify(formData),
       })
 
       const result = await response.json()

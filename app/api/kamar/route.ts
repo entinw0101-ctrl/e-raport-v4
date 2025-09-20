@@ -25,6 +25,13 @@ export async function GET(request: NextRequest) {
     // Get data with pagination
     const data = await prisma.kamar.findMany({
       where,
+      include: {
+        _count: {
+          select: {
+            siswa: true,
+          },
+        },
+      },
       orderBy: { nama_kamar: "asc" },
       skip,
       take: per_page,
@@ -59,6 +66,13 @@ export async function POST(request: NextRequest) {
       data: {
         nama_kamar: body.nama_kamar,
         kapasitas: body.kapasitas ? Number.parseInt(body.kapasitas) : null,
+      },
+      include: {
+        _count: {
+          select: {
+            siswa: true,
+          },
+        },
       },
     })
 

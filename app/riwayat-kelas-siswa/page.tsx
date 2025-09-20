@@ -117,13 +117,11 @@ export default function RiwayatKelasSiswaPage() {
       name: "master_tahun_ajaran_id",
       label: "Tahun Ajaran",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Tahun Ajaran (Opsional)" },
-        ...masterTahunAjaranOptions.map((mta) => ({
-          value: mta.id.toString(),
-          label: mta.nama_ajaran,
-        })),
-      ],
+      placeholder: "Pilih Tahun Ajaran (Opsional)",
+      options: masterTahunAjaranOptions.map((mta) => ({
+        value: mta.id.toString(),
+        label: mta.nama_ajaran,
+      })),
     },
   ]
 

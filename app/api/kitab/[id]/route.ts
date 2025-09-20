@@ -13,7 +13,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     const kitab = await prisma.kitab.update({
       where: { id },
-      data: body,
+      data: {
+        nama_kitab: body.nama_kitab,
+      },
     })
 
     return NextResponse.json({

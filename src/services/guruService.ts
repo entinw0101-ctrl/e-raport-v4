@@ -59,7 +59,7 @@ export interface GuruResponse {
 }
 
 class GuruService {
-  private baseUrl = "/api/guru"
+  private baseUrl = "/guru"
 
   async getAll(params: GuruListParams = {}): Promise<GuruListResponse> {
     const searchParams = new URLSearchParams()
@@ -69,23 +69,53 @@ class GuruService {
     if (params.search) searchParams.append("search", params.search)
 
     const url = `${this.baseUrl}?${searchParams.toString()}`
-    return httpService.get<GuruListResponse>(url)
+    const response = await httpService.get<GuruListResponse>(url)
+    return {
+      success: response.success,
+      data: response.data?.data || [],
+      pagination: response.data?.pagination || { page: 1, per_page: 10, total: 0, total_pages: 0 },
+      error: response.error,
+    }
   }
 
   async getById(id: number): Promise<GuruResponse> {
-    return httpService.get<GuruResponse>(`${this.baseUrl}/${id}`)
+    const response = await httpService.get<Guru>(`${this.baseUrl}/${id}`)
+    return {
+      success: response.success,
+      data: response.data,
+      message: response.message,
+      error: response.error,
+    }
   }
 
   async create(data: GuruCreateData): Promise<GuruResponse> {
-    return httpService.post<GuruResponse>(this.baseUrl, data)
+    const response = await httpService.post<Guru>(this.baseUrl, data)
+    return {
+      success: response.success,
+      data: response.data,
+      message: response.message,
+      error: response.error,
+    }
   }
 
   async update(id: number, data: GuruUpdateData): Promise<GuruResponse> {
-    return httpService.put<GuruResponse>(`${this.baseUrl}/${id}`, data)
+    const response = await httpService.put<Guru>(`${this.baseUrl}/${id}`, data)
+    return {
+      success: response.success,
+      data: response.data,
+      message: response.message,
+      error: response.error,
+    }
   }
 
   async delete(id: number): Promise<GuruResponse> {
-    return httpService.delete<GuruResponse>(`${this.baseUrl}/${id}`)
+    const response = await httpService.delete<Guru>(`${this.baseUrl}/${id}`)
+    return {
+      success: response.success,
+      data: response.data,
+      message: response.message,
+      error: response.error,
+    }
   }
 
   async uploadSignature(id: number, file: File): Promise<GuruResponse> {
@@ -93,7 +123,13 @@ class GuruService {
     formData.append("signature", file)
     formData.append("guru_id", id.toString())
 
-    return httpService.post<GuruResponse>("/api/upload/signature", formData)
+    const response = await httpService.post<Guru>("/api/upload/signature", formData)
+    return {
+      success: response.success,
+      data: response.data,
+      message: response.message,
+      error: response.error,
+    }
   }
 }
 

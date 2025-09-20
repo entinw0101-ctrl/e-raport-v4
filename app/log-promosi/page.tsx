@@ -111,49 +111,41 @@ export default function LogPromosiPage() {
       name: "tahun_ajaran_dari_id",
       label: "Periode Ajaran Dari",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Periode Ajaran Dari (Opsional)" },
-        ...periodeAjaranOptions.map((periode) => ({
-          value: periode.id.toString(),
-          label: `${periode.nama_ajaran} (${periode.semester === "SATU" ? "Semester 1" : "Semester 2"})`,
-        })),
-      ],
+      placeholder: "Pilih Periode Ajaran Dari (Opsional)",
+      options: periodeAjaranOptions.map((periode) => ({
+        value: periode.id.toString(),
+        label: `${periode.nama_ajaran} (${periode.semester === "SATU" ? "Semester 1" : "Semester 2"})`,
+      })),
     },
     {
       name: "tahun_ajaran_ke_id",
       label: "Periode Ajaran Ke",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Periode Ajaran Ke (Opsional)" },
-        ...periodeAjaranOptions.map((periode) => ({
-          value: periode.id.toString(),
-          label: `${periode.nama_ajaran} (${periode.semester === "SATU" ? "Semester 1" : "Semester 2"})`,
-        })),
-      ],
+      placeholder: "Pilih Periode Ajaran Ke (Opsional)",
+      options: periodeAjaranOptions.map((periode) => ({
+        value: periode.id.toString(),
+        label: `${periode.nama_ajaran} (${periode.semester === "SATU" ? "Semester 1" : "Semester 2"})`,
+      })),
     },
     {
       name: "kelas_dari_id",
       label: "Kelas Dari",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Kelas Dari (Opsional)" },
-        ...kelasOptions.map((kelas) => ({
-          value: kelas.id.toString(),
-          label: `${kelas.nama_kelas} - ${kelas.tingkatan?.nama_tingkatan}`,
-        })),
-      ],
+      placeholder: "Pilih Kelas Dari (Opsional)",
+      options: kelasOptions.map((kelas) => ({
+        value: kelas.id.toString(),
+        label: `${kelas.nama_kelas} - ${kelas.tingkatan?.nama_tingkatan}`,
+      })),
     },
     {
       name: "kelas_ke_id",
       label: "Kelas Ke",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Kelas Ke (Opsional)" },
-        ...kelasOptions.map((kelas) => ({
-          value: kelas.id.toString(),
-          label: `${kelas.nama_kelas} - ${kelas.tingkatan?.nama_tingkatan}`,
-        })),
-      ],
+      placeholder: "Pilih Kelas Ke (Opsional)",
+      options: kelasOptions.map((kelas) => ({
+        value: kelas.id.toString(),
+        label: `${kelas.nama_kelas} - ${kelas.tingkatan?.nama_tingkatan}`,
+      })),
     },
     {
       name: "dieksekusi_oleh",

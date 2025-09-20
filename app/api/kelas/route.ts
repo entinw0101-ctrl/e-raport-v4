@@ -68,9 +68,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Nama kelas dan tingkatan wajib diisi" }, { status: 400 })
     }
 
-    // Convert string IDs to integers
+    // Convert string IDs to integers and exclude invalid fields
+    const { tahun_ajaran, status, ...bodyWithoutInvalid } = body
     const data = {
-      ...body,
+      ...bodyWithoutInvalid,
       tingkatan_id: Number.parseInt(body.tingkatan_id),
       wali_kelas_id: body.wali_kelas_id ? Number.parseInt(body.wali_kelas_id) : null,
       next_kelas_id: body.next_kelas_id ? Number.parseInt(body.next_kelas_id) : null,

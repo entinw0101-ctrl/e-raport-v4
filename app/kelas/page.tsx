@@ -12,8 +12,6 @@ interface Kelas {
   nama_kelas: string
   tingkatan_id: number
   wali_kelas_id: number | null
-  tahun_ajaran: string
-  status: "aktif" | "nonaktif"
   tingkatan: {
     id: number
     nama_tingkatan: string
@@ -79,18 +77,6 @@ export default function KelasPage() {
       label: "Jumlah Siswa",
       render: (value) => `${value.siswa} siswa`,
     },
-    {
-      key: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      className: "font-mono",
-    },
-    {
-      key: "status",
-      label: "Status",
-      render: (value) => (
-        <Badge variant={value === "aktif" ? "default" : "secondary"}>{value === "aktif" ? "Aktif" : "Non-aktif"}</Badge>
-      ),
-    },
   ]
 
   const getFormFields = (): FormField[] => [
@@ -115,30 +101,11 @@ export default function KelasPage() {
       name: "wali_kelas_id",
       label: "Wali Kelas",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Wali Kelas (Opsional)" },
-        ...guruOptions.map((g) => ({
-          value: g.id.toString(),
-          label: g.nama,
-        })),
-      ],
-    },
-    {
-      name: "tahun_ajaran",
-      label: "Tahun Ajaran",
-      type: "text",
-      required: true,
-      placeholder: "Contoh: 2024/2025",
-    },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "aktif", label: "Aktif" },
-        { value: "nonaktif", label: "Non-aktif" },
-      ],
+      placeholder: "Pilih Wali Kelas (Opsional)",
+      options: guruOptions.map((g) => ({
+        value: g.id.toString(),
+        label: g.nama,
+      })),
     },
   ]
 
@@ -305,7 +272,7 @@ export default function KelasPage() {
   }
 
   const getInitialFormData = () => {
-    if (!selectedKelas) return { status: "aktif" }
+    if (!selectedKelas) return {}
 
     return {
       ...selectedKelas,

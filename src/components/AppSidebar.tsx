@@ -83,6 +83,11 @@ const data = {
           icon: BookMarked,
         },
         {
+          title: "Kurikulum",
+          url: "/kurikulum",
+          icon: BookOpen,
+        },
+        {
           title: "Indikator Sikap",
           url: "/indikator-sikap",
           icon: Target,

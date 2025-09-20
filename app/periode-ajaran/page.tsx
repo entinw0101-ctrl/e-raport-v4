@@ -115,13 +115,11 @@ export default function PeriodeAjaranPage() {
       name: "master_tahun_ajaran_id",
       label: "Master Tahun Ajaran",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Master Tahun Ajaran (Opsional)" },
-        ...masterTahunAjaranOptions.map((mta) => ({
-          value: mta.id.toString(),
-          label: mta.nama_ajaran,
-        })),
-      ],
+      placeholder: "Pilih Master Tahun Ajaran (Opsional)",
+      options: masterTahunAjaranOptions.map((mta) => ({
+        value: mta.id.toString(),
+        label: mta.nama_ajaran,
+      })),
     },
   ]
 

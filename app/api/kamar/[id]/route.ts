@@ -63,6 +63,13 @@ export async function PUT(
         nama_kamar: body.nama_kamar,
         kapasitas: body.kapasitas ? Number.parseInt(body.kapasitas) : null,
       },
+      include: {
+        _count: {
+          select: {
+            siswa: true,
+          },
+        },
+      },
     })
 
     return NextResponse.json({

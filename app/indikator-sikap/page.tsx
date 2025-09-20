@@ -8,8 +8,11 @@ import { toast } from "@/hooks/use-toast"
 
 interface IndikatorSikap {
   id: number
-  nama_indikator: string
-  deskripsi: string | null
+  jenis_sikap: "Spiritual" | "Sosial" | null
+  indikator: string | null
+  is_active: boolean
+  dibuat_pada: string
+  diperbarui_pada: string
 }
 
 export default function IndikatorSikapPage() {
@@ -33,31 +36,50 @@ export default function IndikatorSikapPage() {
 
   const columns: Column<IndikatorSikap>[] = [
     {
-      key: "nama_indikator",
-      label: "Nama Indikator",
+      key: "indikator",
+      label: "Indikator",
       className: "font-medium",
+      render: (value) => value || "-",
     },
     {
-      key: "deskripsi",
-      label: "Deskripsi",
+      key: "jenis_sikap",
+      label: "Jenis Sikap",
       render: (value) => value || "-",
+    },
+    {
+      key: "is_active",
+      label: "Status",
+      render: (value) => value ? "Aktif" : "Tidak Aktif",
     },
   ]
 
   const formFields: FormField[] = [
     {
-      name: "nama_indikator",
-      label: "Nama Indikator",
+      name: "indikator",
+      label: "Indikator",
       type: "text",
       required: true,
       placeholder: "Contoh: Kedisiplinan, Kejujuran, Tanggung Jawab",
     },
     {
-      name: "deskripsi",
-      label: "Deskripsi",
-      type: "textarea",
-      placeholder: "Deskripsi indikator sikap (opsional)",
-      rows: 3,
+      name: "jenis_sikap",
+      label: "Jenis Sikap",
+      type: "select",
+      required: true,
+      options: [
+        { value: "Spiritual", label: "Spiritual" },
+        { value: "Sosial", label: "Sosial" },
+      ],
+    },
+    {
+      name: "is_active",
+      label: "Status Aktif",
+      type: "select",
+      required: true,
+      options: [
+        { value: "true", label: "Aktif" },
+        { value: "false", label: "Tidak Aktif" },
+      ],
     },
   ]
 
@@ -128,12 +150,17 @@ export default function IndikatorSikapPage() {
       const url = selectedIndikator ? `/api/indikator-sikap/${selectedIndikator.id}` : "/api/indikator-sikap"
       const method = selectedIndikator ? "PUT" : "POST"
 
+      const processedData = {
+        ...formData,
+        is_active: formData.is_active === "true",
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(processedData),
       })
 
       const result = await response.json()
@@ -213,7 +240,7 @@ export default function IndikatorSikapPage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Cari nama indikator..."
+        searchPlaceholder="Cari indikator..."
         addButtonText="Tambah Indikator"
         emptyMessage="Belum ada data indikator sikap"
       />
@@ -233,7 +260,7 @@ export default function IndikatorSikapPage() {
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
         title="Hapus Indikator Sikap"
-        description={`Apakah Anda yakin ingin menghapus indikator sikap "${selectedIndikator?.nama_indikator}"? Tindakan ini tidak dapat dibatalkan.`}
+        description={`Apakah Anda yakin ingin menghapus indikator sikap "${selectedIndikator?.indikator}"? Tindakan ini tidak dapat dibatalkan.`}
         confirmText="Hapus"
         variant="destructive"
       />

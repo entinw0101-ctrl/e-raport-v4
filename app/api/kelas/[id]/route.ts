@@ -50,9 +50,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ success: false, error: "Kelas tidak ditemukan" }, { status: 404 })
     }
 
-    // Convert string IDs to integers
+    // Convert string IDs to integers and exclude invalid fields
+    const { tahun_ajaran, status, ...bodyWithoutInvalid } = body
     const data = {
-      ...body,
+      ...bodyWithoutInvalid,
       tingkatan_id: body.tingkatan_id ? Number.parseInt(body.tingkatan_id) : null,
       wali_kelas_id: body.wali_kelas_id ? Number.parseInt(body.wali_kelas_id) : null,
       next_kelas_id: body.next_kelas_id ? Number.parseInt(body.next_kelas_id) : null,

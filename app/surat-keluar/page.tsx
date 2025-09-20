@@ -88,13 +88,11 @@ export default function SuratKeluarPage() {
       name: "siswa_id",
       label: "Siswa",
       type: "select",
-      options: [
-        { value: "", label: "Pilih Siswa (Opsional)" },
-        ...siswaOptions.map((siswa) => ({
-          value: siswa.id.toString(),
-          label: `${siswa.nama} (${siswa.nis})`,
-        })),
-      ],
+      placeholder: "Pilih Siswa (Opsional)",
+      options: siswaOptions.map((siswa) => ({
+        value: siswa.id.toString(),
+        label: `${siswa.nama} (${siswa.nis})`,
+      })),
     },
     {
       name: "tanggal_surat",

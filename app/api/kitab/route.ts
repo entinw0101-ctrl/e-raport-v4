@@ -13,10 +13,7 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: any = {}
     if (search) {
-      where.OR = [
-        { nama_kitab: { contains: search, mode: "insensitive" } },
-        { pengarang: { contains: search, mode: "insensitive" } },
-      ]
+      where.nama_kitab = { contains: search, mode: "insensitive" }
     }
 
     // Get total count
@@ -55,7 +52,9 @@ export async function POST(request: NextRequest) {
     }
 
     const kitab = await prisma.kitab.create({
-      data: body,
+      data: {
+        nama_kitab: body.nama_kitab,
+      },
     })
 
     return NextResponse.json({
