@@ -12,9 +12,12 @@ export interface FilterOption {
 export interface SelectFilterProps {
   label: string
   placeholder?: string
-  options: FilterOption[]
+  options?: FilterOption[]
   value?: string | number
-  onValueChange: (value: string | number | undefined) => void
+  onValueChange?: (value: string | number | undefined) => void
+  // Alternative props for API-based filtering
+  endpoint?: string
+  onChange?: (value: string) => void
   disabled?: boolean
   required?: boolean
   className?: string
@@ -23,13 +26,60 @@ export interface SelectFilterProps {
 export function SelectFilter({
   label,
   placeholder = "Pilih...",
-  options,
+  options: initialOptions,
   value,
   onValueChange,
+  endpoint,
+  onChange,
   disabled = false,
   required = false,
   className = "",
 }: SelectFilterProps) {
+  const [options, setOptions] = useState<FilterOption[]>(initialOptions || [])
+  const [loading, setLoading] = useState(false)
+
+  // Load options from API if endpoint is provided
+  useEffect(() => {
+    if (endpoint && !initialOptions) {
+      const loadOptions = async () => {
+        setLoading(true)
+        try {
+          const response = await fetch(endpoint)
+          if (response.ok) {
+            const data = await response.json()
+            const apiData = data.data || data
+            setOptions(
+              apiData.map((item: any) => ({
+                value: item.id,
+                label: item.nama || item.nama_ajaran || item.nama_tingkatan || item.nama_kelas || item.nama_mapel || `${item.nama} - ${item.nis}`,
+              }))
+            )
+          }
+        } catch (error) {
+          console.error(`Error loading options from ${endpoint}:`, error)
+        } finally {
+          setLoading(false)
+        }
+      }
+
+      loadOptions()
+    }
+  }, [endpoint, initialOptions])
+
+  const handleValueChange = (val: string) => {
+    const actualValue = val === "default" ? "" : val
+
+    if (onChange) {
+      onChange(actualValue)
+    }
+
+    if (onValueChange) {
+      onValueChange(actualValue === "" ? undefined : actualValue)
+    }
+  }
+
+  const displayOptions = initialOptions || options
+
   return (
     <div className={`space-y-2 ${className}`}>
       <Label htmlFor={label.toLowerCase().replace(/\s+/g, "-")}>
@@ -38,15 +88,15 @@ export function SelectFilter({
       </Label>
       <Select
         value={value?.toString() || "default"}
-        onValueChange={(val) => onValueChange(val === "default" ? undefined : val)}
-        disabled={disabled}
+        onValueChange={handleValueChange}
+        disabled={disabled || loading}
       >
         <SelectTrigger>
-          <SelectValue placeholder={placeholder} />
+          <SelectValue placeholder={loading ? "Loading..." : placeholder} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="default">-- {placeholder} --</SelectItem>
-          {options.map((option) => (
+          {displayOptions.map((option) => (
             <SelectItem key={option.value} value={option.value.toString()}>
               {option.label}
             </SelectItem>
