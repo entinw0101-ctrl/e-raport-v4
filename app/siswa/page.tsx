@@ -72,6 +72,16 @@ export default function SiswaPage() {
       label: "Kamar",
     },
     {
+      key: "tahun_ajaran_masuk.nama_ajaran",
+      label: "Tahun Ajaran Masuk",
+      render: (value) => value || "-",
+    },
+    {
+      key: "master_tahun_ajaran.nama_ajaran",
+      label: "Tahun Ajaran Saat Ini",
+      render: (value) => value || "-",
+    },
+    {
       key: "status",
       label: "Status",
       render: (value) => {
@@ -91,104 +101,161 @@ export default function SiswaPage() {
     },
   ]
 
-  const getFormFields = (): FormField[] => [
-    {
-      name: "nama",
-      label: "Nama Lengkap",
-      type: "text",
-      required: true,
-      placeholder: "Masukkan nama lengkap siswa",
-    },
-    {
-      name: "nis",
-      label: "NIS",
-      type: "text",
-      required: true,
-      placeholder: "Nomor Induk Siswa",
-    },
-    {
-      name: "jenis_kelamin",
-      label: "Jenis Kelamin",
-      type: "select",
-      required: true,
-      options: [
-        { value: "LAKI_LAKI", label: "Laki-laki" },
-        { value: "PEREMPUAN", label: "Perempuan" },
-      ],
-    },
-    {
-      name: "tempat_lahir",
-      label: "Tempat Lahir",
-      type: "text",
-      placeholder: "Kota tempat lahir",
-    },
-    {
-      name: "tanggal_lahir",
-      label: "Tanggal Lahir",
-      type: "date",
-    },
-    {
-      name: "agama",
-      label: "Agama",
-      type: "text",
-      placeholder: "Agama siswa",
-    },
-    {
-      name: "kelas_id",
-      label: "Kelas",
-      type: "select",
-      options: kelasOptions,
-    },
-    {
-      name: "kamar_id",
-      label: "Kamar",
-      type: "select",
-      options: kamarOptions,
-    },
-    {
-      name: "alamat",
-      label: "Alamat",
-      type: "textarea",
-      placeholder: "Alamat lengkap siswa",
-      rows: 3,
-    },
-    {
-      name: "nama_ayah",
-      label: "Nama Ayah",
-      type: "text",
-      placeholder: "Nama lengkap ayah",
-    },
-    {
-      name: "pekerjaan_ayah",
-      label: "Pekerjaan Ayah",
-      type: "text",
-      placeholder: "Pekerjaan ayah",
-    },
-    {
-      name: "nama_ibu",
-      label: "Nama Ibu",
-      type: "text",
-      placeholder: "Nama lengkap ibu",
-    },
-    {
-      name: "pekerjaan_ibu",
-      label: "Pekerjaan Ibu",
-      type: "text",
-      placeholder: "Pekerjaan ibu",
-    },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "Aktif", label: "Aktif" },
-        { value: "Lulus", label: "Lulus" },
-        { value: "Keluar", label: "Keluar" },
-        { value: "Pindah", label: "Pindah" },
-      ],
-    },
-  ]
+  const getFormFields = (): FormField[] => {
+    const fields: FormField[] = [
+      {
+        name: "nama",
+        label: "Nama Lengkap",
+        type: "text",
+        required: true,
+        placeholder: "Masukkan nama lengkap siswa",
+      },
+      {
+        name: "nis",
+        label: "NIS",
+        type: "text",
+        required: true,
+        placeholder: "Nomor Induk Siswa",
+      },
+      {
+        name: "jenis_kelamin",
+        label: "Jenis Kelamin",
+        type: "select",
+        required: true,
+        options: [
+          { value: "LAKI_LAKI", label: "Laki-laki" },
+          { value: "PEREMPUAN", label: "Perempuan" },
+        ],
+      },
+    ]
+
+    // Only show Tahun Ajaran Masuk for new siswa
+    if (!selectedSiswa) {
+      fields.push({
+        name: "master_tahun_ajaran_id",
+        label: "Tahun Ajaran Masuk",
+        type: "select",
+        required: true,
+        options: tahunAjaranOptions,
+      })
+    }
+
+    fields.push(
+      {
+        name: "tempat_lahir",
+        label: "Tempat Lahir",
+        type: "text",
+        placeholder: "Kota tempat lahir",
+      },
+      {
+        name: "tanggal_lahir",
+        label: "Tanggal Lahir",
+        type: "date",
+      },
+      {
+        name: "agama",
+        label: "Agama",
+        type: "text",
+        placeholder: "Agama siswa",
+      },
+      {
+        name: "kelas_id",
+        label: "Kelas",
+        type: "select",
+        options: kelasOptions,
+      },
+      {
+        name: "kamar_id",
+        label: "Kamar",
+        type: "select",
+        options: kamarOptions,
+      },
+      {
+        name: "alamat",
+        label: "Alamat",
+        type: "textarea",
+        placeholder: "Alamat lengkap siswa",
+        rows: 3,
+      },
+      {
+        name: "kota_asal",
+        label: "Kota Asal",
+        type: "text",
+        placeholder: "Kota asal siswa",
+      },
+      {
+        name: "nama_ayah",
+        label: "Nama Ayah",
+        type: "text",
+        placeholder: "Nama lengkap ayah",
+      },
+      {
+        name: "pekerjaan_ayah",
+        label: "Pekerjaan Ayah",
+        type: "text",
+        placeholder: "Pekerjaan ayah",
+      },
+      {
+        name: "alamat_ayah",
+        label: "Alamat Ayah",
+        type: "textarea",
+        placeholder: "Alamat lengkap ayah",
+        rows: 2,
+      },
+      {
+        name: "nama_ibu",
+        label: "Nama Ibu",
+        type: "text",
+        placeholder: "Nama lengkap ibu",
+      },
+      {
+        name: "pekerjaan_ibu",
+        label: "Pekerjaan Ibu",
+        type: "text",
+        placeholder: "Pekerjaan ibu",
+      },
+      {
+        name: "alamat_ibu",
+        label: "Alamat Ibu",
+        type: "textarea",
+        placeholder: "Alamat lengkap ibu",
+        rows: 2,
+      },
+      {
+        name: "nama_wali",
+        label: "Nama Wali",
+        type: "text",
+        placeholder: "Nama lengkap wali (opsional)",
+      },
+      {
+        name: "pekerjaan_wali",
+        label: "Pekerjaan Wali",
+        type: "text",
+        placeholder: "Pekerjaan wali (opsional)",
+      },
+      {
+        name: "alamat_wali",
+        label: "Alamat Wali",
+        type: "textarea",
+        placeholder: "Alamat lengkap wali (opsional)",
+        rows: 2,
+      },
+      {
+        name: "status",
+        label: "Status",
+        type: "select",
+        required: true,
+        options: [
+          { value: "Aktif", label: "Aktif" },
+          { value: "Lulus", label: "Lulus" },
+          { value: "Keluar", label: "Keluar" },
+          { value: "Pindah", label: "Pindah" },
+        ],
+      }
+    )
+
+    return fields
+  }
 
   const fetchData = useCallback(async (page = 1, search = "") => {
     setLoading(true)
@@ -231,7 +298,7 @@ export default function SiswaPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination?.per_page])
+  }, [pagination.per_page])
 
   const fetchOptions = async () => {
     try {
@@ -338,7 +405,7 @@ export default function SiswaPage() {
           title: "Berhasil",
           description: response.message || `Siswa berhasil ${selectedSiswa ? "diperbarui" : "ditambahkan"}`,
         })
-        fetchData(pagination.page, searchTerm)
+        fetchData(1, "")
         setShowFormModal(false)
       } else {
         toast({
@@ -412,7 +479,7 @@ export default function SiswaPage() {
         : "",
       kelas_id: selectedSiswa.kelas_id || "",
       kamar_id: selectedSiswa.kamar_id || "",
-      master_tahun_ajaran_id: selectedSiswa.master_tahun_ajaran_id || "",
+      master_tahun_ajaran_id: selectedSiswa.tahun_ajaran_masuk_id || "", // For edit, show the entry year, but it's readonly
     }
   }
 

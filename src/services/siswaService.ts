@@ -22,6 +22,7 @@ export interface Siswa {
   pekerjaan_wali: string | null
   alamat_wali: string | null
   master_tahun_ajaran_id: number | null
+  tahun_ajaran_masuk_id: number | null
   status: "Aktif" | "Lulus" | "Keluar" | "Pindah"
   dibuat_pada: Date
   diperbarui_pada: Date
@@ -36,6 +37,9 @@ export interface Siswa {
     nama_kamar: string
   }
   master_tahun_ajaran?: {
+    nama_ajaran: string
+  }
+  tahun_ajaran_masuk?: {
     nama_ajaran: string
   }
 }
@@ -61,6 +65,7 @@ export interface CreateSiswaData {
   pekerjaan_wali?: string
   alamat_wali?: string
   master_tahun_ajaran_id?: number
+  tahun_ajaran_masuk_id?: number
   status?: "Aktif" | "Lulus" | "Keluar" | "Pindah"
 }
 
@@ -70,7 +75,11 @@ class SiswaService {
   private endpoint = "/siswa"
 
   async getAll(params?: PaginationParams) {
-    return httpService.get<PaginatedResponse<Siswa>>(this.endpoint, params)
+    // Filter out undefined values to avoid sending search=undefined in URL
+    const filteredParams = params ? Object.fromEntries(
+      Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
+    ) : undefined
+    return httpService.get<PaginatedResponse<Siswa>>(this.endpoint, filteredParams)
   }
 
   async getById(id: number) {

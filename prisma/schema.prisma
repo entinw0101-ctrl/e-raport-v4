@@ -25,6 +25,7 @@ model MasterTahunAjaran {
   // Relasi
   periode_ajaran PeriodeAjaran[]
   siswa         Siswa[]
+  siswa_masuk   Siswa[] @relation("TahunAjaranMasuk")
   riwayat_kelas_siswa RiwayatKelasSiswa[]
 
   @@index([status])
@@ -164,6 +165,7 @@ model Siswa {
   pekerjaan_wali         String?           @db.VarChar(255)
   alamat_wali            String?
   master_tahun_ajaran_id Int?
+  tahun_ajaran_masuk_id  Int?
   status                 StatusSiswa       @default(Aktif)
   dibuat_pada            DateTime          @default(now())
   diperbarui_pada        DateTime          @updatedAt
@@ -172,6 +174,7 @@ model Siswa {
   kelas               Kelas?              @relation(fields: [kelas_id], references: [id], onDelete: SetNull)
   kamar               Kamar?              @relation(fields: [kamar_id], references: [id], onDelete: SetNull)
   master_tahun_ajaran MasterTahunAjaran?  @relation(fields: [master_tahun_ajaran_id], references: [id], onDelete: SetNull)
+  tahun_ajaran_masuk   MasterTahunAjaran? @relation("TahunAjaranMasuk", fields: [tahun_ajaran_masuk_id], references: [id], onDelete: SetNull)
   nilai_ujian         NilaiUjian[]
   nilai_hafalan       NilaiHafalan[]
   kehadiran           Kehadiran[]

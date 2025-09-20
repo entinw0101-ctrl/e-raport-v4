@@ -15,6 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         },
         kamar: true,
         master_tahun_ajaran: true,
+        tahun_ajaran_masuk: true,
       },
     })
 
@@ -57,9 +58,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
+    // Exclude relations from body to avoid Prisma update errors
+    const { kamar, kelas, master_tahun_ajaran, tahun_ajaran_masuk, ...bodyWithoutRelations } = body
+
     // Convert date strings to Date objects
     const data = {
-      ...body,
+      ...bodyWithoutRelations,
       tanggal_lahir: body.tanggal_lahir ? new Date(body.tanggal_lahir) : null,
       kelas_id: body.kelas_id ? Number.parseInt(body.kelas_id) : null,
       kamar_id: body.kamar_id ? Number.parseInt(body.kamar_id) : null,
@@ -77,6 +81,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         },
         kamar: true,
         master_tahun_ajaran: true,
+        tahun_ajaran_masuk: true,
       },
     })
 
