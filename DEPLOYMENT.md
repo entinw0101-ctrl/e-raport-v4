@@ -1,224 +1,200 @@
-# Deployment Guide - E-RAPOT NUURUSH SHOLAAH
+# Deployment Guide - E-RAPOT NUURUSH SHOLAAH (Neon & Stack Auth Edition)
 
-Panduan lengkap untuk deploy aplikasi E-RAPOT ke production.
+Panduan lengkap untuk deploy aplikasi E-RAPOT ke production menggunakan **Vercel**, database **Neon Postgres**, dan autentikasi **Stack Auth**.
 
 ## 🚀 Quick Deploy ke Vercel
 
-### 1. Persiapan Repository
+### 1\. Persiapan Repository
 
-\`\`\`bash
+Jika Anda belum memiliki proyek secara lokal, clone dan siapkan terlebih dahulu.
+
+```bash
 # Clone dan setup project
 git clone <repository-url>
 cd e-rapot-nuurush-sholaah
 npm install
-\`\`\`
+```
 
-### 2. Setup Supabase Database
+### 2\. Setup Neon Database
 
-1. **Buat Project Supabase**
-   - Login ke [supabase.com](https://supabase.com)
-   - Create new project
-   - Tunggu database setup selesai
+Kita akan menggunakan Neon sebagai provider database Postgres serverless.
 
-2. **Setup Database Schema**
-   \`\`\`bash
-   # Copy environment variables dari Supabase dashboard
-   cp .env.example .env.local
-   
-   # Edit .env.local dengan credentials Supabase
-   NEXT_PUBLIC_SUPABASE_URL=your_project_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-   DATABASE_URL=your_database_url
-   \`\`\`
+1.  **Buat Project Neon**
 
-3. **Run Database Migration**
-   \`\`\`bash
-   npx prisma generate
-   npx prisma db push
-   npm run db:seed
-   \`\`\`
+      * Login ke [neon.tech](https://neon.tech).
+      * Klik **"New Project"**.
+      * Beri nama project Anda, pilih versi Postgres, dan tentukan region. Klik **"Create Project"**.
 
-### 3. Deploy ke Vercel
+2.  **Dapatkan Connection String**
 
-1. **Push ke GitHub**
-   \`\`\`bash
-   git add .
-   git commit -m "Initial deployment"
-   git push origin main
-   \`\`\`
+      * Setelah project dibuat, di dashboard Neon Anda akan melihat widget **"Connection Details"**.
+      * Pastikan branch yang terpilih adalah `main`.
+      * Salin (copy) **Connection String** yang ditampilkan. Formatnya akan terlihat seperti ini: `postgresql://user:password@endpoint.neon.tech/dbname?sslmode=require`.
 
-2. **Import ke Vercel**
-   - Login ke [vercel.com](https://vercel.com)
-   - Click "New Project"
-   - Import dari GitHub repository
-   - Configure environment variables
+3.  **Setup Environment Variables Lokal**
 
-3. **Environment Variables di Vercel**
-   \`\`\`env
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-   DATABASE_URL=your_database_url
-   NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000
-   \`\`\`
+      * Salin file `.env.example` menjadi `.env.local`. File ini digunakan untuk pengembangan di mesin lokal Anda.
 
-4. **Deploy**
-   - Click "Deploy"
-   - Tunggu build process selesai
-   - Aplikasi akan tersedia di URL Vercel
+    <!-- end list -->
 
-### 4. Post-Deployment Setup
+    ```bash
+    cp .env.example .env.local
+    ```
 
-1. **Update Supabase Auth Settings**
-   - Buka Supabase Dashboard > Authentication > URL Configuration
-   - Tambahkan production URL ke Site URL dan Redirect URLs
-   - Format: `https://your-app.vercel.app`
+      * Edit file `.env.local` dan masukkan connection string dari Neon. Hapus variabel-variabel Supabase yang lama.
 
-2. **Test Production App**
-   - Akses aplikasi di URL production
-   - Test login/register functionality
-   - Verify database operations
+    <!-- end list -->
+
+    ```env
+    # .env.local
+
+    # 1. DATABASE (NEON)
+    # Ganti dengan connection string dari dashboard Neon Anda
+    DATABASE_URL="postgresql://user:password@endpoint.neon.tech/dbname?sslmode=require"
+
+    # 2. STACK AUTH
+    NEXT_PUBLIC_STACK_PROJECT_ID='your_stack_project_id'
+    NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY='your_stack_publishable_client_key'
+    STACK_SECRET_SERVER_KEY='your_stack_secret_server_key'
+    ```
+
+4.  **Run Database Migration**
+
+      * Dengan `DATABASE_URL` yang sudah mengarah ke Neon, jalankan migrasi Prisma untuk membuat skema tabel.
+
+    <!-- end list -->
+
+    ```bash
+    npx prisma generate
+    npx prisma db push
+    npm run db:seed
+    ```
+
+### 3\. Deploy ke Vercel
+
+1.  **Push ke GitHub**
+
+      * Pastikan semua perubahan sudah disimpan dan di-push ke repository GitHub Anda.
+
+    <!-- end list -->
+
+    ```bash
+    git add .
+    git commit -m "feat: integrate Neon DB and NextAuth.js"
+    git push origin main
+    ```
+
+2.  **Import ke Vercel**
+
+      * Login ke [vercel.com](https://vercel.com).
+      * Klik **"Add New... \> Project"**.
+      * Pilih repository GitHub Anda dan klik **"Import"**.
+
+3.  **Configure Environment Variables di Vercel**
+
+      * Pada halaman konfigurasi project, buka bagian **"Environment Variables"**.
+      * Tambahkan semua variabel yang ada di `.env.local` tadi. **PENTING:** Gunakan nilai untuk production.
+
+    <!-- end list -->
+
+    ```env
+    # Variabel Lingkungan di Vercel
+
+    # 1. DATABASE
+    DATABASE_URL                  # Salin dari Neon (nilai yang sama dengan lokal)
+
+    # 2. STACK AUTH
+    NEXT_PUBLIC_STACK_PROJECT_ID          # Project ID dari Stack Auth
+    NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY  # Publishable client key dari Stack Auth
+    STACK_SECRET_SERVER_KEY               # Secret server key dari Stack Auth
+    ```
+
+4.  **Deploy**
+
+      * Klik tombol **"Deploy"**.
+      * Vercel akan memulai proses build dan deployment. Tunggu hingga selesai.
+      * Setelah berhasil, aplikasi Anda akan tersedia di URL yang diberikan Vercel.
+
+### 4\. Post-Deployment Setup
+
+Setelah aplikasi di-deploy, lakukan pengujian untuk memastikan semuanya berfungsi dengan baik.
+
+1.  **Test Production App**
+
+      * Akses aplikasi Anda di URL production.
+      * Coba fungsionalitas login menggunakan Stack Auth.
+      * Verifikasi bahwa data tersimpan di database Neon Anda.
 
 ## 🔧 Advanced Configuration
 
 ### Custom Domain
 
-1. **Add Domain di Vercel**
-   - Project Settings > Domains
-   - Add custom domain
-   - Configure DNS records
+1.  **Add Domain di Vercel**
 
-2. **Update Supabase Settings**
-   - Update Site URL dengan custom domain
-   - Update redirect URLs
+      * Buka Project Settings \> Domains.
+      * Tambahkan custom domain Anda dan ikuti instruksi untuk konfigurasi DNS.
 
-### Environment-Specific Configuration
+2.  **Update Environment & OAuth Settings**
 
-\`\`\`env
-# Production
-NODE_ENV=production
-NEXT_PUBLIC_APP_URL=https://your-domain.com
-
-# Staging
-NODE_ENV=staging
-NEXT_PUBLIC_APP_URL=https://staging-your-app.vercel.app
-\`\`\`
-
-### Database Backup Strategy
-
-\`\`\`bash
-# Backup database
-pg_dump $DATABASE_URL > backup.sql
-
-# Restore database
-psql $DATABASE_URL < backup.sql
-\`\`\`
+      * Jika sudah menggunakan custom domain, perbarui variabel `NEXTAUTH_URL` di Vercel ke domain baru Anda (misal: `https://www.rapor-nuurushsholaah.com`).
+      * Jangan lupa untuk menambahkan redirect URI baru yang menggunakan custom domain di Google Cloud Console.
 
 ## 🔍 Monitoring & Maintenance
 
-### 1. Vercel Analytics
-- Enable di Project Settings > Analytics
-- Monitor performance dan usage
+### 1\. Vercel Analytics
 
-### 2. Error Monitoring
-- Check Vercel Functions logs
-- Monitor Supabase logs
+  * Aktifkan di Project Settings \> Analytics untuk memonitor performa dan penggunaan.
 
-### 3. Database Monitoring
-- Monitor Supabase dashboard
-- Set up alerts untuk usage limits
+### 2\. Error Monitoring
+
+  * Periksa log di dashboard Vercel pada tab **"Logs"** untuk Realtime-logs atau Serverless Functions.
+
+### 3\. Database Monitoring
+
+  * Gunakan dashboard **Neon** untuk memonitor penggunaan database, query, dan kesehatan project secara umum.
 
 ## 🚨 Troubleshooting
 
 ### Common Deployment Issues
 
-1. **Build Errors**
-   \`\`\`bash
-   # Test build locally
-   npm run build
-   
-   # Check TypeScript errors
-   npm run lint
-   \`\`\`
+1.  **Build Errors**
 
-2. **Database Connection Issues**
-   - Verify DATABASE_URL format
-   - Check Supabase project status
-   - Verify IP restrictions
+      * Pastikan semua dependencies terinstall dan tidak ada error TypeScript atau linting.
 
-3. **Authentication Issues**
-   - Check Supabase Auth settings
-   - Verify redirect URLs
-   - Check environment variables
+    <!-- end list -->
 
-4. **API Route Errors**
-   - Check Vercel function logs
-   - Verify environment variables
-   - Test API endpoints locally
+    ```bash
+    # Test build secara lokal sebelum push
+    npm run build
+    npm run lint
+    ```
 
-### Performance Optimization
+2.  **Database Connection Issues**
 
-1. **Database Optimization**
-   - Add database indexes
-   - Optimize queries
-   - Use connection pooling
+      * Pastikan format `DATABASE_URL` di Vercel sudah benar dan tidak ada karakter yang salah salin.
+      * Cek status project di dashboard Neon.
+      * Beberapa paket (seperti `pg`) mungkin memerlukan parameter tambahan pada connection string, seperti `?pg-bouncer=true` jika Anda menggunakan pooling.
 
-2. **Frontend Optimization**
-   - Enable Next.js Image optimization
-   - Use dynamic imports
-   - Implement caching strategies
+3.  **Authentication Issues (Stack Auth)**
+
+      * Pastikan semua Stack Auth environment variables sudah diatur dengan benar di Vercel.
+      * Periksa Stack Auth dashboard untuk status proyek.
+      * Verifikasi bahwa project ID dan keys sesuai dengan yang ada di dashboard Stack Auth.
 
 ## 📋 Deployment Checklist
 
-- [ ] Repository setup dan dependencies installed
-- [ ] Supabase project created dan configured
-- [ ] Database schema deployed
-- [ ] Environment variables configured
-- [ ] GitHub repository connected to Vercel
-- [ ] Production deployment successful
-- [ ] Supabase Auth URLs updated
-- [ ] Custom domain configured (optional)
-- [ ] SSL certificate active
-- [ ] Application tested in production
-- [ ] Monitoring setup
-- [ ] Backup strategy implemented
+  - [x] Repository setup dan dependencies installed
+  - [x] Neon project dibuat dan dikonfigurasi
+  - [x] `DATABASE_URL` telah didapatkan dari Neon
+  - [x] Skema database berhasil di-push ke Neon menggunakan Prisma
+  - [x] Environment variables untuk Neon dan Stack Auth dikonfigurasi di Vercel
+  - [x] GitHub repository terhubung ke Vercel
+  - [x] Deployment ke production berhasil
+  - [x] Custom domain dikonfigurasi (opsional)
+  - [x] Sertifikat SSL aktif (otomatis oleh Vercel)
+  - [x] Aplikasi telah diuji di lingkungan production
+  - [x] Strategi monitoring dan backup diimplementasikan
 
-## 🔄 CI/CD Pipeline
+-----
 
-### GitHub Actions (Optional)
-
-\`\`\`yaml
-# .github/workflows/deploy.yml
-name: Deploy to Vercel
-on:
-  push:
-    branches: [main]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
-        with:
-          node-version: '18'
-      - run: npm install
-      - run: npm run build
-      - uses: amondnet/vercel-action@v20
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.ORG_ID }}
-          vercel-project-id: ${{ secrets.PROJECT_ID }}
-\`\`\`
-
-## 📞 Support
-
-Jika mengalami masalah deployment:
-1. Check Vercel deployment logs
-2. Verify environment variables
-3. Test locally dengan production build
-4. Contact support team
-
----
-
-**Happy Deploying! 🚀**
+**Happy Deploying\! 🚀**

@@ -8,7 +8,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 // =====================================================
@@ -306,6 +305,7 @@ model Kehadiran {
   id                Int           @id @default(autoincrement())
   siswa_id          Int
   periode_ajaran_id Int
+  tanggal           DateTime
   sakit             Int           @default(0)
   izin              Int           @default(0)
   alpha             Int           @default(0)
@@ -316,9 +316,10 @@ model Kehadiran {
   siswa          Siswa         @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
   periode_ajaran PeriodeAjaran @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
 
-  @@unique([siswa_id, periode_ajaran_id])
+  @@unique([siswa_id, periode_ajaran_id, tanggal])
   @@index([siswa_id])
   @@index([periode_ajaran_id])
+  @@index([tanggal])
   @@index([siswa_id, periode_ajaran_id])
   @@map("kehadiran")
 }
