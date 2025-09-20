@@ -80,10 +80,26 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Auto-create Periode Ajaran for Semester 1 and 2
+    await prisma.periodeAjaran.createMany({
+      data: [
+        {
+          nama_ajaran: body.nama_ajaran,
+          semester: "SATU",
+          master_tahun_ajaran_id: masterTahunAjaran.id,
+        },
+        {
+          nama_ajaran: body.nama_ajaran,
+          semester: "DUA",
+          master_tahun_ajaran_id: masterTahunAjaran.id,
+        },
+      ],
+    })
+
     return NextResponse.json({
       success: true,
       data: masterTahunAjaran,
-      message: "Master tahun ajaran berhasil ditambahkan",
+      message: "Master tahun ajaran berhasil ditambahkan beserta periode ajaran",
     })
   } catch (error) {
     console.error("Error creating master tahun ajaran:", error)

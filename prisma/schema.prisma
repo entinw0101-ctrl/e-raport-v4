@@ -305,24 +305,29 @@ model NilaiHafalan {
 
 // Tabel Kehadiran
 model Kehadiran {
-  id                Int           @id @default(autoincrement())
-  siswa_id          Int
-  periode_ajaran_id Int
-  tanggal           DateTime
-  sakit             Int           @default(0)
-  izin              Int           @default(0)
-  alpha             Int           @default(0)
-  dibuat_pada       DateTime      @default(now())
-  diperbarui_pada   DateTime      @updatedAt
+  id                     Int      @id @default(autoincrement())
+  siswa_id               Int
+  periode_ajaran_id      Int
+  indikator_kehadiran_id Int
+
+  // Kolom untuk jumlah akumulasi ketidakhadiran per indikator
+  sakit                  Int      @default(0)
+  izin                   Int      @default(0)
+  alpha                  Int      @default(0)
+
+  dibuat_pada            DateTime @default(now())
+  diperbarui_pada        DateTime @updatedAt
 
   // Relasi
-  siswa          Siswa         @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
-  periode_ajaran PeriodeAjaran @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
+  siswa               Siswa              @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
+  periode_ajaran      PeriodeAjaran      @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
+  indikator_kehadiran IndikatorKehadiran @relation(fields: [indikator_kehadiran_id], references: [id], onDelete: Cascade)
 
-  @@unique([siswa_id, periode_ajaran_id, tanggal])
+  // Setiap siswa hanya boleh punya satu entri per indikator per periode
+  @@unique([siswa_id, periode_ajaran_id, indikator_kehadiran_id])
   @@index([siswa_id])
   @@index([periode_ajaran_id])
-  @@index([tanggal])
+  @@index([indikator_kehadiran_id])
   @@index([siswa_id, periode_ajaran_id])
   @@map("kehadiran")
 }
@@ -342,6 +347,20 @@ model IndikatorSikap {
   @@index([jenis_sikap])
   @@index([is_active])
   @@map("indikator_sikap")
+}
+
+// Tabel Indikator Kehadiran
+model IndikatorKehadiran {
+  id              Int      @id @default(autoincrement())
+  nama_indikator  String   @unique @db.VarChar(255)
+  deskripsi       String?
+  dibuat_pada     DateTime @default(now())
+  diperbarui_pada DateTime @updatedAt
+
+  // Relasi
+  kehadiran Kehadiran[]
+
+  @@map("indikator_kehadiran")
 }
 
 // Tabel Penilaian Sikap
@@ -555,3 +574,4 @@ enum StatusPejabat {
   aktif
   nonaktif
 }
+

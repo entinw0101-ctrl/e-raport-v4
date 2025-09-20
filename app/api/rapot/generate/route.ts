@@ -80,18 +80,17 @@ export async function POST(request: NextRequest) {
       })
     ])
 
-    // Calculate attendance totals
-    const totalSakit = kehadiran.filter((k) => k.sakit > 0).length
-    const totalIzin = kehadiran.filter((k) => k.izin > 0).length
-    const totalAlpha = kehadiran.filter((k) => k.alpha > 0).length
-    const totalHadir = kehadiran.length - totalSakit - totalIzin - totalAlpha
+    // Calculate attendance totals by summing all indicators
+    const totalSakit = kehadiran.reduce((sum, k) => sum + (k.sakit || 0), 0)
+    const totalIzin = kehadiran.reduce((sum, k) => sum + (k.izin || 0), 0)
+    const totalAlpha = kehadiran.reduce((sum, k) => sum + (k.alpha || 0), 0)
+    const totalHadir = 0 // Not applicable in semester-based system
 
     const rapotData = {
       siswa,
       nilaiUjian,
       nilaiHafalan,
       kehadiran: {
-        hadir: totalHadir,
         sakit: totalSakit,
         izin: totalIzin,
         alpa: totalAlpha,
@@ -110,12 +109,18 @@ export async function POST(request: NextRequest) {
         }
       },
       update: {
+        total_sakit: totalSakit,
+        total_izin: totalIzin,
+        total_alpha: totalAlpha,
         catatan_akademik: JSON.stringify(rapotData),
         diperbarui_pada: new Date()
       },
       create: {
         siswa_id: siswaId,
         periode_ajaran_id: periodeAjaranId,
+        total_sakit: totalSakit,
+        total_izin: totalIzin,
+        total_alpha: totalAlpha,
         catatan_akademik: JSON.stringify(rapotData)
       }
     })

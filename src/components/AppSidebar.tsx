@@ -53,11 +53,6 @@ const data = {
           icon: School,
         },
         {
-          title: "Periode Ajaran",
-          url: "/periode-ajaran",
-          icon: School,
-        },
-        {
           title: "Tingkatan",
           url: "/tingkatan",
           icon: School,
@@ -91,6 +86,11 @@ const data = {
           title: "Indikator Sikap",
           url: "/indikator-sikap",
           icon: Target,
+        },
+        {
+          title: "Indikator Kehadiran",
+          url: "/indikator-kehadiran",
+          icon: UserCheck,
         },
       ],
     },

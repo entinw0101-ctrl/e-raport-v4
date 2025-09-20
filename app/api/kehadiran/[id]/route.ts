@@ -7,19 +7,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const body = await request.json()
 
     // Validate required fields
-    if (!body.siswa_id || !body.periode_ajaran_id || !body.semester || !body.tanggal || !body.status) {
+    if (!body.siswa_id || !body.periode_ajaran_id || !body.indikator_kehadiran_id || !body.tanggal || !body.status) {
       return NextResponse.json(
-        { success: false, error: "Siswa, periode ajaran, semester, tanggal, dan status wajib diisi" },
+        { success: false, error: "Siswa, periode ajaran, indikator kehadiran, tanggal, dan status wajib diisi" },
         { status: 400 },
       )
     }
 
     const data = {
-      ...body,
       siswa_id: Number.parseInt(body.siswa_id),
       periode_ajaran_id: Number.parseInt(body.periode_ajaran_id),
-      semester: Number.parseInt(body.semester),
+      indikator_kehadiran_id: Number.parseInt(body.indikator_kehadiran_id),
       tanggal: new Date(body.tanggal),
+      status: body.status,
     }
 
     const kehadiran = await prisma.kehadiran.update({
@@ -40,6 +40,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             master_tahun_ajaran: true,
           },
         },
+        indikator_kehadiran: true,
       },
     })
 

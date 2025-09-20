@@ -7,6 +7,8 @@ export async function GET(request: NextRequest) {
     const page = Number.parseInt(searchParams.get("page") || "1")
     const per_page = Number.parseInt(searchParams.get("per_page") || "10")
     const search = searchParams.get("search") || ""
+    const master_tahun_ajaran_id = searchParams.get("master_tahun_ajaran_id")
+    const semester = searchParams.get("semester")
 
     const skip = (page - 1) * per_page
 
@@ -17,6 +19,14 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { nama_ajaran: { contains: search, mode: "insensitive" } },
       ]
+    }
+
+    if (master_tahun_ajaran_id) {
+      where.master_tahun_ajaran_id = Number.parseInt(master_tahun_ajaran_id)
+    }
+
+    if (semester) {
+      where.semester = semester
     }
 
     // Get total count
