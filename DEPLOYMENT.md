@@ -107,6 +107,11 @@ Kita akan menggunakan Neon sebagai provider database Postgres serverless.
     NEXT_PUBLIC_STACK_PROJECT_ID          # Project ID dari Stack Auth
     NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY  # Publishable client key dari Stack Auth
     STACK_SECRET_SERVER_KEY               # Secret server key dari Stack Auth
+
+    # 3. LEGACY SUPABASE (untuk kompatibilitas - hapus setelah migrasi ke Stack Auth)
+    NEXT_PUBLIC_SUPABASE_URL              # Set ke: 'https://dummy.supabase.co'
+    NEXT_PUBLIC_SUPABASE_ANON_KEY         # Set ke: 'dummy_key'
+    SUPABASE_SERVICE_ROLE_KEY             # Set ke: 'dummy_key'
     ```
 
 4.  **Deploy**

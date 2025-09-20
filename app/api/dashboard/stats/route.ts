@@ -1,50 +1,56 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase/server"
-import { cookies } from "next/headers"
+import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
-
     // Get total counts
     const [siswaCount, guruCount, kelasCount, nilaiUjianCount] = await Promise.all([
-      supabase.from("siswa").select("id", { count: "exact", head: true }),
-      supabase.from("guru").select("id", { count: "exact", head: true }),
-      supabase.from("kelas").select("id", { count: "exact", head: true }),
-      supabase.from("nilai_ujian").select("id", { count: "exact", head: true }),
+      prisma.siswa.count(),
+      prisma.guru.count(),
+      prisma.kelas.count(),
+      prisma.nilaiUjian.count(),
     ])
 
     // Get recent activities
-    const { data: recentNilai } = await supabase
-      .from("nilai_ujian")
-      .select(`
-        id,
-        nilai,
-        created_at,
-        siswa:siswa_id(nama),
-        mata_pelajaran:mata_pelajaran_id(nama)
-      `)
-      .order("created_at", { ascending: false })
-      .limit(5)
+    const recentNilai = await prisma.nilaiUjian.findMany({
+      take: 5,
+      orderBy: { dibuat_pada: "desc" },
+      include: {
+        siswa: {
+          select: { nama: true }
+        },
+        mata_pelajaran: {
+          select: { nama_mapel: true }
+        }
+      }
+    })
 
-    // Get grade distribution
-    const { data: gradeDistribution } = await supabase.from("nilai_ujian").select("grade")
+    // Get grade distribution (assuming predikat field exists)
+    const gradeDistribution = await prisma.nilaiUjian.findMany({
+      select: { predikat: true }
+    })
 
-    const gradeCounts =
-      gradeDistribution?.reduce((acc: any, item) => {
-        acc[item.grade] = (acc[item.grade] || 0) + 1
-        return acc
-      }, {}) || {}
+    const gradeCounts = gradeDistribution.reduce((acc: any, item) => {
+      if (item.predikat) {
+        acc[item.predikat] = (acc[item.predikat] || 0) + 1
+      }
+      return acc
+    }, {})
 
     return NextResponse.json({
       stats: {
-        totalSiswa: siswaCount.count || 0,
-        totalGuru: guruCount.count || 0,
-        totalKelas: kelasCount.count || 0,
-        totalNilai: nilaiUjianCount.count || 0,
+        totalSiswa: siswaCount,
+        totalGuru: guruCount,
+        totalKelas: kelasCount,
+        totalNilai: nilaiUjianCount,
       },
-      recentActivities: recentNilai || [],
+      recentActivities: recentNilai.map(item => ({
+        id: item.id,
+        nilai_angka: item.nilai_angka,
+        dibuat_pada: item.dibuat_pada,
+        siswa: item.siswa,
+        mata_pelajaran: item.mata_pelajaran
+      })),
       gradeDistribution: gradeCounts,
     })
   } catch (error) {

@@ -1,12 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase/server"
-import { cookies } from "next/headers"
+import { prisma } from "@/lib/prisma"
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
-
     const { tahun_ajaran_lama, tahun_ajaran_baru, tingkatan_promosi } = await request.json()
 
     if (!tahun_ajaran_lama || !tahun_ajaran_baru) {
@@ -27,24 +23,22 @@ export async function POST(request: NextRequest) {
 
       if (tingkatan_tujuan_id === null) {
         // Handle graduation - update siswa status to lulus
-        const { data: siswaLulus, error: errorLulus } = await supabase
-          .from("siswa")
-          .update({
-            status: "lulus",
-            tahun_lulus: new Date().getFullYear(),
-          })
-          .eq("tingkatan_id", tingkatan_asal_id)
-          .eq("status", "aktif")
-          .select()
-
-        if (errorLulus) {
-          throw new Error(`Error updating graduated students: ${errorLulus.message}`)
-        }
+        const siswaLulus = await prisma.siswa.updateMany({
+          where: {
+            master_tahun_ajaran: {
+              nama_ajaran: tingkatan_asal_id.toString()
+            },
+            status: "Aktif"
+          },
+          data: {
+            status: "Lulus"
+          }
+        })
 
         results.push({
           type: "graduation",
           tingkatan_asal_id,
-          count: siswaLulus?.length || 0,
+          count: siswaLulus.count,
         })
       } else {
         // Handle promotion to next level
@@ -52,40 +46,33 @@ export async function POST(request: NextRequest) {
           const { kelas_asal_id, kelas_tujuan_id } = mapping
 
           // Get students from source class
-          const { data: siswaPromosi, error: errorGetSiswa } = await supabase
-            .from("siswa")
-            .select("id")
-            .eq("kelas_id", kelas_asal_id)
-            .eq("status", "aktif")
-
-          if (errorGetSiswa) {
-            throw new Error(`Error getting students: ${errorGetSiswa.message}`)
-          }
+          const siswaPromosi = await prisma.siswa.findMany({
+            where: {
+              kelas_id: kelas_asal_id,
+              status: "Aktif"
+            },
+            select: { id: true }
+          })
 
           if (siswaPromosi && siswaPromosi.length > 0) {
             // Update students to new class and tingkatan
-            const { data: updatedSiswa, error: errorUpdate } = await supabase
-              .from("siswa")
-              .update({
+            const updatedSiswa = await prisma.siswa.updateMany({
+              where: {
+                id: {
+                  in: siswaPromosi.map(s => s.id)
+                }
+              },
+              data: {
                 kelas_id: kelas_tujuan_id,
-                tingkatan_id: tingkatan_tujuan_id,
-                tahun_ajaran_saat_ini: tahun_ajaran_baru,
-              })
-              .in(
-                "id",
-                siswaPromosi.map((s) => s.id),
-              )
-              .select()
-
-            if (errorUpdate) {
-              throw new Error(`Error updating students: ${errorUpdate.message}`)
-            }
+                master_tahun_ajaran_id: tingkatan_tujuan_id
+              }
+            })
 
             results.push({
               type: "promotion",
               kelas_asal_id,
               kelas_tujuan_id,
-              count: updatedSiswa?.length || 0,
+              count: updatedSiswa.count,
             })
           }
         }
@@ -93,16 +80,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Log the promotion activity
-    const { error: logError } = await supabase.from("log_promosi_kelas").insert({
-      tahun_ajaran_lama,
-      tahun_ajaran_baru,
-      detail_promosi: results,
-      created_at: new Date().toISOString(),
+    await prisma.logPromosi.create({
+      data: {
+        tahun_ajaran_dari_id: tahun_ajaran_lama,
+        tahun_ajaran_ke_id: tahun_ajaran_baru,
+        catatan: JSON.stringify(results)
+      }
     })
-
-    if (logError) {
-      console.error("Error logging promotion:", logError)
-    }
 
     return NextResponse.json({
       success: true,
@@ -123,52 +107,47 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
-
     const { searchParams } = new URL(request.url)
     const tahun_ajaran = searchParams.get("tahun_ajaran")
 
     // Get promotion preview data
-    const { data: tingkatanData, error: tingkatanError } = await supabase
-      .from("tingkatan")
-      .select(`
-        id,
-        nama_tingkatan,
-        urutan,
-        kelas (
-          id,
-          nama_kelas,
-          _count: siswa(count)
-        )
-      `)
-      .order("urutan")
+    const tingkatanData = await prisma.tingkatan.findMany({
+      orderBy: { urutan: "asc" },
+      include: {
+        kelas: {
+          include: {
+            _count: {
+              select: { siswa: true }
+            }
+          }
+        }
+      }
+    })
 
-    if (tingkatanError) {
-      throw new Error(tingkatanError.message)
-    }
-
-    // Get current active students count by tingkatan
-    const { data: siswaCount, error: siswaError } = await supabase
-      .from("siswa")
-      .select("tingkatan_id, kelas_id")
-      .eq("status", "aktif")
-      .eq("tahun_ajaran_saat_ini", tahun_ajaran || new Date().getFullYear().toString())
-
-    if (siswaError) {
-      throw new Error(siswaError.message)
-    }
+    // Get current active students count by tingkatan and kelas
+    const siswaCount = await prisma.siswa.findMany({
+      where: {
+        status: "Aktif",
+        master_tahun_ajaran: tahun_ajaran ? {
+          nama_ajaran: tahun_ajaran
+        } : undefined
+      },
+      select: {
+        master_tahun_ajaran_id: true,
+        kelas_id: true
+      }
+    })
 
     // Process data for promotion preview
-    const promosiPreview = tingkatanData?.map((tingkatan) => {
-      const siswaCount_tingkatan = siswaCount?.filter((s) => s.tingkatan_id === tingkatan.id).length || 0
+    const promosiPreview = tingkatanData.map((tingkatan) => {
+      const siswaCountTingkatan = siswaCount.filter((s) => s.master_tahun_ajaran_id === tingkatan.id).length
 
       return {
         ...tingkatan,
-        jumlah_siswa: siswaCount_tingkatan,
+        jumlah_siswa: siswaCountTingkatan,
         kelas: tingkatan.kelas?.map((kelas) => ({
           ...kelas,
-          jumlah_siswa: siswaCount?.filter((s) => s.kelas_id === kelas.id).length || 0,
+          jumlah_siswa: siswaCount.filter((s) => s.kelas_id === kelas.id).length,
         })),
       }
     })

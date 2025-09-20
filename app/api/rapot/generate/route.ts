@@ -1,119 +1,124 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase/server"
-import { cookies } from "next/headers"
+import { prisma } from "@/lib/prisma"
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
     const { siswaId, periodeAjaranId, semester } = await request.json()
 
-    const { data: existingRapot } = await supabase
-      .from("ringkasan_rapot")
-      .select("*")
-      .eq("siswa_id", siswaId)
-      .eq("periode_ajaran_id", periodeAjaranId)
-      .eq("semester", semester)
-      .single()
+    // Check for existing rapot
+    const existingRapot = await prisma.ringkasanRapot.findUnique({
+      where: {
+        siswa_id_periode_ajaran_id: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId
+        }
+      }
+    })
 
     if (existingRapot) {
-      const lastUpdated = new Date(existingRapot.updated_at)
+      const lastUpdated = new Date(existingRapot.diperbarui_pada)
       const now = new Date()
       const hoursDiff = (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60)
 
       if (hoursDiff < 24) {
         // Cache for 24 hours
         return NextResponse.json({
-          rapot: existingRapot.data_rapot,
+          rapot: existingRapot.catatan_akademik, // Using catatan_akademik as data_rapot equivalent
           cached: true,
-          lastUpdated: existingRapot.updated_at,
+          lastUpdated: existingRapot.diperbarui_pada,
         })
       }
     }
 
     // Get student data
-    const { data: siswa } = await supabase
-      .from("siswa")
-      .select(`
-        *,
-        kelas:kelas_id(nama_kelas, tingkatan:tingkatan_id(nama_tingkatan))
-      `)
-      .eq("id", siswaId)
-      .single()
+    const siswa = await prisma.siswa.findUnique({
+      where: { id: siswaId },
+      include: {
+        kelas: {
+          include: {
+            tingkatan: true
+          }
+        }
+      }
+    })
 
     if (!siswa) {
       return NextResponse.json({ error: "Siswa not found" }, { status: 404 })
     }
 
-    const [{ data: nilaiUjian }, { data: nilaiHafalan }, { data: kehadiran }, { data: penilaianSikap }] =
-      await Promise.all([
-        supabase
-          .from("nilai_ujian")
-          .select(`
-          *,
-          mata_pelajaran:mata_pelajaran_id(nama, kode)
-        `)
-          .eq("siswa_id", siswaId)
-          .eq("periode_ajaran_id", periodeAjaranId)
-          .eq("semester", semester),
+    // Get all required data in parallel
+    const [nilaiUjian, nilaiHafalan, kehadiran, penilaianSikap] = await Promise.all([
+      prisma.nilaiUjian.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId
+        },
+        include: {
+          mata_pelajaran: true
+        }
+      }),
+      prisma.nilaiHafalan.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId
+        },
+        include: {
+          mata_pelajaran: true
+        }
+      }),
+      prisma.kehadiran.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId
+        }
+      }),
+      prisma.penilaianSikap.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId
+        }
+      })
+    ])
 
-        supabase
-          .from("nilai_hafalan")
-          .select(`
-          *,
-          mata_pelajaran:mata_pelajaran_id(nama, kode)
-        `)
-          .eq("siswa_id", siswaId)
-          .eq("periode_ajaran_id", periodeAjaranId)
-          .eq("semester", semester),
-
-        supabase
-          .from("kehadiran")
-          .select("*")
-          .eq("siswa_id", siswaId)
-          .eq("periode_ajaran_id", periodeAjaranId)
-          .eq("semester", semester),
-
-        supabase
-          .from("penilaian_sikap")
-          .select("*")
-          .eq("siswa_id", siswaId)
-          .eq("periode_ajaran_id", periodeAjaranId)
-          .eq("semester", semester),
-      ])
-
-    // Calculate totals
-    const totalHadir = kehadiran?.filter((k) => k.status === "HADIR").length || 0
-    const totalSakit = kehadiran?.filter((k) => k.status === "SAKIT").length || 0
-    const totalIzin = kehadiran?.filter((k) => k.status === "IZIN").length || 0
-    const totalAlpa = kehadiran?.filter((k) => k.status === "ALPA").length || 0
+    // Calculate attendance totals
+    const totalSakit = kehadiran.filter((k) => k.sakit > 0).length
+    const totalIzin = kehadiran.filter((k) => k.izin > 0).length
+    const totalAlpha = kehadiran.filter((k) => k.alpha > 0).length
+    const totalHadir = kehadiran.length - totalSakit - totalIzin - totalAlpha
 
     const rapotData = {
       siswa,
-      nilaiUjian: nilaiUjian || [],
-      nilaiHafalan: nilaiHafalan || [],
+      nilaiUjian,
+      nilaiHafalan,
       kehadiran: {
         hadir: totalHadir,
         sakit: totalSakit,
         izin: totalIzin,
-        alpa: totalAlpa,
+        alpa: totalAlpha,
       },
-      penilaianSikap: penilaianSikap || [],
+      penilaianSikap,
       semester,
       periodeAjaran: periodeAjaranId,
     }
 
-    const { error: upsertError } = await supabase.from("ringkasan_rapot").upsert({
-      siswa_id: siswaId,
-      periode_ajaran_id: periodeAjaranId,
-      semester: semester,
-      data_rapot: rapotData,
-      updated_at: new Date().toISOString(),
+    // Upsert rapot data
+    await prisma.ringkasanRapot.upsert({
+      where: {
+        siswa_id_periode_ajaran_id: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId
+        }
+      },
+      update: {
+        catatan_akademik: JSON.stringify(rapotData),
+        diperbarui_pada: new Date()
+      },
+      create: {
+        siswa_id: siswaId,
+        periode_ajaran_id: periodeAjaranId,
+        catatan_akademik: JSON.stringify(rapotData)
+      }
     })
-
-    if (upsertError) {
-      console.error("Error caching rapot:", upsertError)
-    }
 
     return NextResponse.json({ rapot: rapotData, cached: false })
   } catch (error) {
