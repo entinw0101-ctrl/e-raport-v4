@@ -73,7 +73,7 @@ export default function PenilaianSikapPage() {
     {
       key: "nilai",
       label: "Nilai",
-      render: (value, row) => (
+      render: (value: any) => (
         <span>{value}</span>
       ),
     },

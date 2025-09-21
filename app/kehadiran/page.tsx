@@ -138,21 +138,21 @@ export default function KehadiranPage() {
     {
       key: "sakit",
       label: "Sakit",
-      render: (value, row) => (
+      render: (value: any) => (
         <span>{value}</span>
       ),
     },
     {
       key: "izin",
       label: "Izin",
-      render: (value, row) => (
+      render: (value: any) => (
         <span>{value}</span>
       ),
     },
     {
       key: "alpha",
       label: "Alpha",
-      render: (value, row) => (
+      render: (value: any) => (
         <span>{value}</span>
       ),
     },

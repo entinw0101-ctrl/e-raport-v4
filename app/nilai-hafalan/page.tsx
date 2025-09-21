@@ -78,7 +78,7 @@ export default function NilaiHafalanPage() {
     {
       key: "predikat",
       label: "Predikat",
-      render: (value, row) => (
+      render: (value: any) => (
         <Badge variant={getGradeBadgeVariant(value)}>{value}</Badge>
       ),
     },
