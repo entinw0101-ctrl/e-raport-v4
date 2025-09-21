@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `Header '${required}' tidak ditemukan dalam file Excel`
         }, { status: 400 })
+      }
     }
 
     // Process data rows
@@ -116,9 +117,6 @@ export async function POST(request: NextRequest) {
         errors.push(`Baris ${rowNumber}: NIS dan Nama Siswa wajib diisi`)
         return
       }
-
-      // Find student by NIS
-      // Note: We'll validate student existence later in the transaction
 
       // Process subject scores
       const subjectScores: any[] = []
@@ -214,7 +212,6 @@ export async function POST(request: NextRequest) {
       message: `Berhasil mengimpor ${result.successCount} data nilai ujian`,
       details: result.errorDetails.length > 0 ? result.errorDetails : undefined
     })
-
   } catch (error) {
     console.error("Error importing nilai ujian:", error)
     return NextResponse.json({

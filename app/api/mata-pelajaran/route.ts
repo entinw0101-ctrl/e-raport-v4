@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { nama_mapel: { contains: search, mode: "insensitive" } },
-        { kode_mapel: { contains: search, mode: "insensitive" } },
       ]
     }
 
@@ -58,15 +57,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Nama mata pelajaran dan jenis wajib diisi" }, { status: 400 })
     }
 
-    // Check if kode_mapel already exists (if provided)
-    if (body.kode_mapel) {
-      const existingMapel = await prisma.mataPelajaran.findFirst({
-        where: { kode_mapel: body.kode_mapel },
-      })
-
-      if (existingMapel) {
-        return NextResponse.json({ success: false, error: "Kode mata pelajaran sudah digunakan" }, { status: 400 })
-      }
+    // Validate jenis enum
+    if (!['Ujian', 'Hafalan'].includes(body.jenis)) {
+      return NextResponse.json({ success: false, error: "Jenis mata pelajaran harus 'Ujian' atau 'Hafalan'" }, { status: 400 })
     }
 
     const mataPelajaran = await prisma.mataPelajaran.create({

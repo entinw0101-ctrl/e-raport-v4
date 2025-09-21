@@ -7,8 +7,17 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const body = await request.json()
 
     // Validate required fields
-    if (!body.nama_indikator) {
-      return NextResponse.json({ success: false, error: "Nama indikator wajib diisi" }, { status: 400 })
+    if (!body.indikator) {
+      return NextResponse.json({ success: false, error: "Indikator wajib diisi" }, { status: 400 })
+    }
+
+    if (!body.jenis_sikap) {
+      return NextResponse.json({ success: false, error: "Jenis sikap wajib diisi" }, { status: 400 })
+    }
+
+    // Validate jenis_sikap enum
+    if (!['Spiritual', 'Sosial'].includes(body.jenis_sikap)) {
+      return NextResponse.json({ success: false, error: "Jenis sikap harus 'Spiritual' atau 'Sosial'" }, { status: 400 })
     }
 
     const indikatorSikap = await prisma.indikatorSikap.update({
@@ -33,7 +42,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     // Check if indikator is being used
     const penilaianCount = await prisma.penilaianSikap.count({
-      where: { indikator_sikap_id: id },
+      where: { indikator_id: id },
     })
 
     if (penilaianCount > 0) {

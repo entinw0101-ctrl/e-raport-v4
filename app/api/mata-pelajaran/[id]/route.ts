@@ -11,6 +11,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ success: false, error: "Nama mata pelajaran dan jenis wajib diisi" }, { status: 400 })
     }
 
+    // Validate jenis enum
+    if (!['Ujian', 'Hafalan'].includes(body.jenis)) {
+      return NextResponse.json({ success: false, error: "Jenis mata pelajaran harus 'Ujian' atau 'Hafalan'" }, { status: 400 })
+    }
+
 
     const mataPelajaran = await prisma.mataPelajaran.update({
       where: { id },

@@ -21,26 +21,21 @@ import { Plus, FileDown, Upload } from "lucide-react"
 interface NilaiUjian {
   id: string
   siswa_id: string
-  mata_pelajaran_id: string
-  kelas_id: string
-  periode_id: string
-  jenis_ujian: string
-  nilai: number
-  grade: string
+  mapel_id: string
+  periode_ajaran_id: string
+  nilai_angka: number
+  predikat: string
   created_at: string
-  siswa: { nama: string; nis: string }
-  mata_pelajaran: { nama: string }
-  kelas: { nama: string }
-  periode: { nama: string }
+  siswa: { nama: string; nis: string; kelas: { nama_kelas: string } }
+  mata_pelajaran: { nama_mapel: string }
+  periode_ajaran: { nama_ajaran: string }
 }
 
 interface FormData {
   siswa_id: string
-  mata_pelajaran_id: string
-  kelas_id: string
-  periode_id: string
-  jenis_ujian: string
-  nilai: number
+  mapel_id: string
+  periode_ajaran_id: string
+  nilai_angka: number
 }
 
 export default function NilaiUjianPage() {
@@ -51,11 +46,9 @@ export default function NilaiUjianPage() {
   const [editingItem, setEditingItem] = useState<NilaiUjian | null>(null)
   const [formData, setFormData] = useState<FormData>({
     siswa_id: "",
-    mata_pelajaran_id: "",
-    kelas_id: "",
-    periode_id: "",
-    jenis_ujian: "",
-    nilai: 0,
+    mapel_id: "",
+    periode_ajaran_id: "",
+    nilai_angka: 0,
   })
 
   // Filter states (removed for now to fix build)
@@ -91,20 +84,19 @@ export default function NilaiUjianPage() {
   const columns = [
     { key: "siswa.nama", label: "Nama Siswa" },
     { key: "siswa.nis", label: "NIS" },
-    { key: "mata_pelajaran.nama", label: "Mata Pelajaran" },
-    { key: "kelas.nama_kelas", label: "Kelas" },
-    { key: "jenis_ujian", label: "Jenis Ujian" },
+    { key: "mata_pelajaran.nama_mapel", label: "Mata Pelajaran" },
+    { key: "siswa.kelas.nama_kelas", label: "Kelas" },
     {
-      key: "nilai",
+      key: "nilai_angka",
       label: "Nilai",
       render: (item: NilaiUjian) => (
         <div className="flex items-center gap-2">
-          <span className="font-medium">{item.nilai}</span>
-          <Badge variant={getGradeBadgeVariant(item.grade)}>{item.grade}</Badge>
+          <span className="font-medium">{item.nilai_angka}</span>
+          <Badge variant={getGradeBadgeVariant(item.predikat)}>{item.predikat}</Badge>
         </div>
       ),
     },
-    { key: "periode.nama", label: "Periode" },
+    { key: "periode_ajaran.nama_ajaran", label: "Periode" },
   ]
 
   const filterOptions = [
@@ -114,19 +106,14 @@ export default function NilaiUjianPage() {
       options: kelasOptions?.map((k: any) => ({ value: k.id, label: k.nama_kelas })) || [],
     },
     {
-      key: "mata_pelajaran_id",
+      key: "mapel_id",
       label: "Mata Pelajaran",
       options: mataPelajaranOptions?.map((mp: any) => ({ value: mp.id, label: mp.nama })) || [],
     },
     {
-      key: "periode_id",
-      label: "Periode",
-      options: periodeOptions?.map((p: any) => ({ value: p.id, label: p.nama })) || [],
-    },
-    {
-      key: "jenis_ujian",
-      label: "Jenis Ujian",
-      options: jenisUjianOptions,
+      key: "periode_ajaran_id",
+      label: "Periode Ajaran",
+      options: periodeOptions?.map((p: any) => ({ value: p.id, label: p.nama_ajaran })) || [],
     },
   ]
 
@@ -240,11 +227,9 @@ export default function NilaiUjianPage() {
     setEditingItem(item)
     setFormData({
       siswa_id: item.siswa_id,
-      mata_pelajaran_id: item.mata_pelajaran_id,
-      kelas_id: item.kelas_id,
-      periode_id: item.periode_id,
-      jenis_ujian: item.jenis_ujian,
-      nilai: item.nilai,
+      mapel_id: item.mapel_id,
+      periode_ajaran_id: item.periode_ajaran_id,
+      nilai_angka: item.nilai_angka,
     })
     setIsModalOpen(true)
   }
@@ -278,11 +263,9 @@ export default function NilaiUjianPage() {
   const resetForm = () => {
     setFormData({
       siswa_id: "",
-      mata_pelajaran_id: "",
-      kelas_id: "",
-      periode_id: "",
-      jenis_ujian: "",
-      nilai: 0,
+      mapel_id: "",
+      periode_ajaran_id: "",
+      nilai_angka: 0,
     })
     setEditingItem(null)
   }
@@ -491,7 +474,7 @@ export default function NilaiUjianPage() {
             })) || []
           },
           {
-            name: "mata_pelajaran_id",
+            name: "mapel_id",
             label: "Mata Pelajaran",
             type: "select",
             required: true,
@@ -501,34 +484,17 @@ export default function NilaiUjianPage() {
             })) || []
           },
           {
-            name: "kelas_id",
-            label: "Kelas",
-            type: "select",
-            required: true,
-            options: kelasOptions?.map((kelas: any) => ({
-              value: kelas.id,
-              label: kelas.nama
-            })) || []
-          },
-          {
-            name: "periode_id",
-            label: "Periode",
+            name: "periode_ajaran_id",
+            label: "Periode Ajaran",
             type: "select",
             required: true,
             options: periodeOptions?.map((periode: any) => ({
               value: periode.id,
-              label: periode.nama
+              label: periode.nama_ajaran
             })) || []
           },
           {
-            name: "jenis_ujian",
-            label: "Jenis Ujian",
-            type: "select",
-            required: true,
-            options: jenisUjianOptions
-          },
-          {
-            name: "nilai",
+            name: "nilai_angka",
             label: "Nilai",
             type: "number",
             required: true,
@@ -538,11 +504,9 @@ export default function NilaiUjianPage() {
         ]}
         initialData={editingItem ? {
           siswa_id: editingItem.siswa_id,
-          mata_pelajaran_id: editingItem.mata_pelajaran_id,
-          kelas_id: editingItem.kelas_id,
-          periode_id: editingItem.periode_id,
-          jenis_ujian: editingItem.jenis_ujian,
-          nilai: editingItem.nilai
+          mapel_id: editingItem.mapel_id,
+          periode_ajaran_id: editingItem.periode_ajaran_id,
+          nilai_angka: editingItem.nilai_angka
         } : {}}
         open={isModalOpen}
         onClose={() => {
