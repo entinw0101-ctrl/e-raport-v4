@@ -49,7 +49,6 @@ model PeriodeAjaran {
   kehadiran          Kehadiran[]
   penilaian_sikap    PenilaianSikap[]
   ringkasan_rapot    RingkasanRapot[]
-  kelas_periode      KelasPeriode[]
   log_promosi_dari   LogPromosi[] @relation("PromosiDari")
   log_promosi_ke     LogPromosi[] @relation("PromosiKe")
 
@@ -120,19 +119,15 @@ model Kelas {
   nama_kelas      String?  @db.VarChar(255)
   kapasitas       Int?
   wali_kelas_id   Int?
-  next_kelas_id   Int?
   tingkatan_id    Int?
   dibuat_pada     DateTime @default(now())
   diperbarui_pada DateTime @updatedAt
 
   // Relasi
   wali_kelas    Guru?      @relation(fields: [wali_kelas_id], references: [id], onDelete: SetNull)
-  next_kelas    Kelas?     @relation("NextKelas", fields: [next_kelas_id], references: [id], onDelete: SetNull)
-  prev_kelas    Kelas[]    @relation("NextKelas")
   tingkatan     Tingkatan? @relation(fields: [tingkatan_id], references: [id], onDelete: SetNull)
   siswa         Siswa[]
   riwayat_kelas_siswa RiwayatKelasSiswa[]
-  kelas_periode KelasPeriode[]
   log_promosi_dari LogPromosi[] @relation("KelasDari")
   log_promosi_ke   LogPromosi[] @relation("KelasKe")
 
@@ -458,23 +453,6 @@ model RiwayatKelasSiswa {
   @@map("riwayat_kelas_siswa")
 }
 
-// Tabel Kelas Periode
-model KelasPeriode {
-  id                Int           @id @default(autoincrement())
-  kelas_id          Int
-  periode_ajaran_id Int
-  dibuat_pada       DateTime      @default(now())
-  diperbarui_pada   DateTime      @updatedAt
-
-  // Relasi
-  kelas          Kelas         @relation(fields: [kelas_id], references: [id], onDelete: Cascade)
-  periode_ajaran PeriodeAjaran @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
-
-  @@unique([kelas_id, periode_ajaran_id])
-  @@index([kelas_id])
-  @@index([periode_ajaran_id])
-  @@map("kelas_periode")
-}
 
 // Tabel Log Promosi
 model LogPromosi {

@@ -7,19 +7,26 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const body = await request.json()
 
     // Validate required fields
-    if (!body.siswa_id || !body.periode_ajaran_id || !body.semester || !body.indikator_sikap_id || !body.nilai) {
+    if (!body.siswa_id || !body.periode_ajaran_id || !body.indikator_sikap_id || !body.nilai) {
       return NextResponse.json(
-        { success: false, error: "Siswa, periode ajaran, semester, indikator sikap, dan nilai wajib diisi" },
+        { success: false, error: "Siswa, periode ajaran, indikator sikap, dan nilai wajib diisi" },
         { status: 400 },
       )
     }
 
+    // Map nilai string to number
+    const nilaiMapping: Record<string, number> = {
+      "Sangat Baik": 4,
+      "Baik": 3,
+      "Cukup": 2,
+      "Kurang": 1,
+    }
+
     const data = {
-      ...body,
       siswa_id: Number.parseInt(body.siswa_id),
       periode_ajaran_id: Number.parseInt(body.periode_ajaran_id),
-      semester: Number.parseInt(body.semester),
-      indikator_sikap_id: Number.parseInt(body.indikator_sikap_id),
+      indikator_id: Number.parseInt(body.indikator_sikap_id),
+      nilai: nilaiMapping[body.nilai] || 1,
     }
 
     const penilaianSikap = await prisma.penilaianSikap.update({
@@ -44,9 +51,22 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       },
     })
 
+    // Map nilai back to string for response
+    const nilaiReverseMapping: Record<number, string> = {
+      4: "Sangat Baik",
+      3: "Baik",
+      2: "Cukup",
+      1: "Kurang",
+    }
+
+    const responseData = {
+      ...penilaianSikap,
+      nilai: nilaiReverseMapping[penilaianSikap.nilai] || "Kurang",
+    }
+
     return NextResponse.json({
       success: true,
-      data: penilaianSikap,
+      data: responseData,
       message: "Penilaian sikap berhasil diperbarui",
     })
   } catch (error) {

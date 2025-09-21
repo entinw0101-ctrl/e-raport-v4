@@ -2,20 +2,38 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
 export async function GET() {
-  try {
-    const data = await prisma.tingkatan.findMany({
-      orderBy: { urutan: "asc" },
-    })
+   try {
+     const data = await prisma.tingkatan.findMany({
+       include: {
+         kelas: {
+           select: {
+             nama_kelas: true,
+           },
+           orderBy: {
+             nama_kelas: "asc",
+           },
+         },
+       },
+       orderBy: { urutan: "asc" },
+     })
 
-    return NextResponse.json({
-      success: true,
-      data,
-    })
-  } catch (error) {
-    console.error("Error fetching tingkatan:", error)
-    return NextResponse.json({ success: false, error: "Gagal mengambil data tingkatan" }, { status: 500 })
-  }
-}
+     // Transform data to include class names in display
+     const transformedData = data.map((tingkatan) => ({
+       ...tingkatan,
+       display_name: tingkatan.kelas.length > 0
+         ? `${tingkatan.kelas.map(k => k.nama_kelas).join(", ")} - ${tingkatan.nama_tingkatan}`
+         : tingkatan.nama_tingkatan,
+     }))
+
+     return NextResponse.json({
+       success: true,
+       data: transformedData,
+     })
+   } catch (error) {
+     console.error("Error fetching tingkatan:", error)
+     return NextResponse.json({ success: false, error: "Gagal mengambil data tingkatan" }, { status: 500 })
+   }
+ }
 
 export async function POST(request: NextRequest) {
   try {

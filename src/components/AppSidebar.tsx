@@ -168,11 +168,6 @@ const data = {
           icon: ClipboardList,
         },
         {
-          title: "Kelas Periode",
-          url: "/kelas-periode",
-          icon: ClipboardList,
-        },
-        {
           title: "Log Promosi",
           url: "/log-promosi",
           icon: ClipboardList,

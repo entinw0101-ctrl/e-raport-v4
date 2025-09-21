@@ -11,14 +11,15 @@ import { useToast } from "@/hooks/use-toast"
 import { ArrowUp, Users, CheckCircle, AlertCircle } from "lucide-react"
 
 interface PromosiData {
-  siswa_id: string
-  nama: string
-  nis: string
-  kelas_asal: string
-  kelas_tujuan: string
-  status: "naik" | "lulus" | "tinggal"
-  rata_rata: number
-}
+   id: string
+   siswa_id: string
+   nama: string
+   nis: string
+   kelas_asal: string
+   kelas_tujuan: string
+   status: "naik" | "lulus" | "tinggal"
+   rata_rata: number
+ }
 
 interface KelasMapping {
   kelas_asal_id: string
@@ -28,14 +29,14 @@ interface KelasMapping {
 }
 
 export default function PromosiKelasPage() {
-  const [data, setData] = useState<PromosiData[]>([])
-  const [kelasOptions, setKelasOptions] = useState([])
-  const [periodeOptions, setPeriodeOptions] = useState([])
-  const [selectedPeriode, setSelectedPeriode] = useState("")
-  const [selectedKelasAsal, setSelectedKelasAsal] = useState("")
-  const [kelasMapping, setKelasMapping] = useState<KelasMapping[]>([])
-  const [loading, setLoading] = useState(false)
-  const [previewMode, setPreviewMode] = useState(true)
+   const [data, setData] = useState<PromosiData[]>([])
+   const [tahunAjaranOptions, setTahunAjaranOptions] = useState([])
+   const [tingkatanOptions, setTingkatanOptions] = useState([])
+   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState("")
+   const [selectedTingkatanAsal, setSelectedTingkatanAsal] = useState("")
+   const [kelasMapping, setKelasMapping] = useState<KelasMapping[]>([])
+   const [loading, setLoading] = useState(false)
+   const [previewMode, setPreviewMode] = useState(true)
 
   const { toast } = useToast()
 
@@ -62,22 +63,30 @@ export default function PromosiKelasPage() {
 
   const fetchOptions = async () => {
     try {
-      const [kelasRes, periodeRes] = await Promise.all([fetch("/api/kelas"), fetch("/api/periode-ajaran")])
+      const [tahunAjaranRes, tingkatanRes] = await Promise.all([
+        fetch("/api/master-tahun-ajaran"),
+        fetch("/api/tingkatan")
+      ])
 
-      const [kelas, periode] = await Promise.all([kelasRes.json(), periodeRes.json()])
+      const [tahunAjaran, tingkatan] = await Promise.all([
+        tahunAjaranRes.json(),
+        tingkatanRes.json()
+      ])
 
-      setKelasOptions(kelas)
-      setPeriodeOptions(periode)
+      setTahunAjaranOptions(tahunAjaran.success ? tahunAjaran.data : [])
+      setTingkatanOptions(tingkatan.success ? tingkatan.data : [])
     } catch (error) {
       console.error("Error fetching options:", error)
+      setTahunAjaranOptions([])
+      setTingkatanOptions([])
     }
   }
 
   const generatePreview = async () => {
-    if (!selectedPeriode || !selectedKelasAsal) {
+    if (!selectedTahunAjaran || !selectedTingkatanAsal) {
       toast({
         title: "Error",
-        description: "Pilih periode dan kelas terlebih dahulu",
+        description: "Pilih tahun ajaran dan tingkatan terlebih dahulu",
         variant: "destructive",
       })
       return
@@ -89,16 +98,24 @@ export default function PromosiKelasPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          periode_id: selectedPeriode,
-          kelas_asal_id: selectedKelasAsal,
+          tahun_ajaran_id: selectedTahunAjaran,
+          tingkatan_asal_id: selectedTingkatanAsal,
           preview: true,
         }),
       })
 
       const result = await response.json()
-      setData(result.siswa)
-      setKelasMapping(result.kelasMapping)
-      setPreviewMode(true)
+      if (result.success) {
+        setData(result.siswa)
+        setKelasMapping(result.kelasMapping)
+        setPreviewMode(true)
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Gagal generate preview promosi",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -130,13 +147,15 @@ export default function PromosiKelasPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          periode_id: selectedPeriode,
-          kelas_asal_id: selectedKelasAsal,
+          tahun_ajaran_id: selectedTahunAjaran,
+          tingkatan_asal_id: selectedTingkatanAsal,
           preview: false,
         }),
       })
 
-      if (response.ok) {
+      const result = await response.json()
+
+      if (result.success) {
         toast({
           title: "Berhasil",
           description: "Promosi kelas berhasil dilaksanakan",
@@ -144,10 +163,14 @@ export default function PromosiKelasPage() {
         setPreviewMode(false)
         // Reset form
         setData([])
-        setSelectedPeriode("")
-        setSelectedKelasAsal("")
+        setSelectedTahunAjaran("")
+        setSelectedTingkatanAsal("")
       } else {
-        throw new Error("Failed to execute promotion")
+        toast({
+          title: "Error",
+          description: result.error || "Gagal melaksanakan promosi kelas",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       toast({
@@ -181,20 +204,20 @@ export default function PromosiKelasPage() {
       <Card>
         <CardHeader>
           <CardTitle>Pengaturan Promosi</CardTitle>
-          <CardDescription>Pilih periode dan kelas untuk memulai proses promosi</CardDescription>
+          <CardDescription>Pilih tahun ajaran dan tingkatan untuk memulai proses promosi</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-sm font-medium mb-2 block">Periode Ajaran</label>
-              <Select value={selectedPeriode} onValueChange={setSelectedPeriode}>
+              <label className="text-sm font-medium mb-2 block">Tahun Ajaran</label>
+              <Select value={selectedTahunAjaran} onValueChange={setSelectedTahunAjaran}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih periode" />
+                  <SelectValue placeholder="Pilih tahun ajaran" />
                 </SelectTrigger>
                 <SelectContent>
-                  {periodeOptions.map((periode: any) => (
-                    <SelectItem key={periode.id} value={periode.id}>
-                      {periode.nama}
+                  {tahunAjaranOptions.map((tahun: any) => (
+                    <SelectItem key={tahun.id} value={tahun.id.toString()}>
+                      {tahun.nama_ajaran}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -202,15 +225,15 @@ export default function PromosiKelasPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Kelas Asal</label>
-              <Select value={selectedKelasAsal} onValueChange={setSelectedKelasAsal}>
+              <label className="text-sm font-medium mb-2 block">Tingkatan Asal</label>
+              <Select value={selectedTingkatanAsal} onValueChange={setSelectedTingkatanAsal}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih kelas" />
+                  <SelectValue placeholder="Pilih tingkatan" />
                 </SelectTrigger>
                 <SelectContent>
-                  {kelasOptions.map((kelas: any) => (
-                    <SelectItem key={kelas.id} value={kelas.id}>
-                      {kelas.nama}
+                  {tingkatanOptions.map((tingkatan: any) => (
+                    <SelectItem key={tingkatan.id} value={tingkatan.id.toString()}>
+                      {tingkatan.display_name || tingkatan.nama_tingkatan}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -292,7 +315,7 @@ export default function PromosiKelasPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <DataTable data={data} columns={columns} loading={loading} showActions={false} />
+            <DataTable title="" data={data} columns={columns} loading={loading} actions={false} />
           </CardContent>
         </Card>
       )}

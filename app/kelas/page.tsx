@@ -26,9 +26,10 @@ interface Kelas {
 }
 
 interface Tingkatan {
-  id: number
-  nama_tingkatan: string
-}
+   id: number
+   nama_tingkatan: string
+   display_name?: string
+ }
 
 interface Guru {
   id: number
@@ -94,7 +95,7 @@ export default function KelasPage() {
       required: true,
       options: tingkatanOptions.map((t) => ({
         value: t.id.toString(),
-        label: t.nama_tingkatan,
+        label: t.display_name || t.nama_tingkatan,
       })),
     },
     {

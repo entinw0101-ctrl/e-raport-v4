@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
       include: {
         wali_kelas: true,
         tingkatan: true,
-        next_kelas: true,
         _count: {
           select: {
             siswa: true,
@@ -69,12 +68,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert string IDs to integers and exclude invalid fields
-    const { tahun_ajaran, status, ...bodyWithoutInvalid } = body
+    const { tahun_ajaran, status, next_kelas_id, ...bodyWithoutInvalid } = body
     const data = {
       ...bodyWithoutInvalid,
       tingkatan_id: Number.parseInt(body.tingkatan_id),
       wali_kelas_id: body.wali_kelas_id ? Number.parseInt(body.wali_kelas_id) : null,
-      next_kelas_id: body.next_kelas_id ? Number.parseInt(body.next_kelas_id) : null,
       kapasitas: body.kapasitas ? Number.parseInt(body.kapasitas) : null,
     }
 
@@ -83,7 +81,6 @@ export async function POST(request: NextRequest) {
       include: {
         wali_kelas: true,
         tingkatan: true,
-        next_kelas: true,
         _count: {
           select: {
             siswa: true,

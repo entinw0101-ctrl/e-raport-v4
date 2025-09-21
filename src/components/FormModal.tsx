@@ -16,20 +16,21 @@ import { format } from "date-fns"
 import { id } from "date-fns/locale"
 
 export interface FormField {
-  name: string
-  label: string
-  type: "text" | "email" | "number" | "textarea" | "select" | "date" | "file"
-  required?: boolean
-  placeholder?: string
-  options?: { value: string | number; label: string }[]
-  accept?: string // untuk file input
-  multiple?: boolean // untuk file input
-  rows?: number // untuk textarea
-  min?: number // untuk number input
-  max?: number // untuk number input
-  disabled?: boolean
-  className?: string
-}
+   name: string
+   label: string
+   type: "text" | "email" | "number" | "textarea" | "select" | "date" | "file"
+   required?: boolean
+   placeholder?: string
+   options?: { value: string | number; label: string }[]
+   accept?: string // untuk file input
+   multiple?: boolean // untuk file input
+   rows?: number // untuk textarea
+   min?: number // untuk number input
+   max?: number // untuk number input
+   disabled?: boolean
+   className?: string
+   onChange?: (value: any) => void
+ }
 
 export interface FormModalProps {
   title: string
@@ -68,6 +69,12 @@ export function FormModal({
     setFormData((prev) => ({ ...prev, [name]: value }))
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }))
+    }
+
+    // Call onChange callback if provided
+    const field = currentFields.find(f => f.name === name)
+    if (field?.onChange) {
+      field.onChange(value)
     }
   }
 

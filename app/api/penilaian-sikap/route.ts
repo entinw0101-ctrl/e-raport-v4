@@ -31,14 +31,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (semester) {
-      where.semester = Number.parseInt(semester)
+      where.periode_ajaran = { semester: Number.parseInt(semester) }
     }
 
     // Get total count
     const total = await prisma.penilaianSikap.count({ where })
 
     // Get data with pagination
-    const data = await prisma.penilaianSikap.findMany({
+    const rawData = await prisma.penilaianSikap.findMany({
       where,
       include: {
         siswa: {
@@ -57,10 +57,23 @@ export async function GET(request: NextRequest) {
         },
         indikator_sikap: true,
       },
-      orderBy: [{ siswa: { nama: "asc" } }, { indikator_sikap: { nama_indikator: "asc" } }],
+      orderBy: [{ siswa: { nama: "asc" } }, { indikator_sikap: { indikator: "asc" } }],
       skip,
       take: per_page,
     })
+
+    // Map nilai number to string
+    const nilaiReverseMapping: Record<number, string> = {
+      4: "Sangat Baik",
+      3: "Baik",
+      2: "Cukup",
+      1: "Kurang",
+    }
+
+    const data = rawData.map(item => ({
+      ...item,
+      nilai: nilaiReverseMapping[item.nilai] || "Kurang",
+    }))
 
     return NextResponse.json({
       success: true,
@@ -95,8 +108,7 @@ export async function POST(request: NextRequest) {
       where: {
         siswa_id: Number.parseInt(body.siswa_id),
         periode_ajaran_id: Number.parseInt(body.periode_ajaran_id),
-        semester: Number.parseInt(body.semester),
-        indikator_sikap_id: Number.parseInt(body.indikator_sikap_id),
+        indikator_id: Number.parseInt(body.indikator_sikap_id),
       },
     })
 
@@ -107,12 +119,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Map nilai string to number
+    const nilaiMapping: Record<string, number> = {
+      "Sangat Baik": 4,
+      "Baik": 3,
+      "Cukup": 2,
+      "Kurang": 1,
+    }
+
     const data = {
-      ...body,
       siswa_id: Number.parseInt(body.siswa_id),
       periode_ajaran_id: Number.parseInt(body.periode_ajaran_id),
-      semester: Number.parseInt(body.semester),
-      indikator_sikap_id: Number.parseInt(body.indikator_sikap_id),
+      indikator_id: Number.parseInt(body.indikator_sikap_id),
+      nilai: nilaiMapping[body.nilai] || 1,
     }
 
     const penilaianSikap = await prisma.penilaianSikap.create({
@@ -136,9 +155,22 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Map nilai back to string for response
+    const nilaiReverseMapping: Record<number, string> = {
+      4: "Sangat Baik",
+      3: "Baik",
+      2: "Cukup",
+      1: "Kurang",
+    }
+
+    const responseData = {
+      ...penilaianSikap,
+      nilai: nilaiReverseMapping[penilaianSikap.nilai] || "Kurang",
+    }
+
     return NextResponse.json({
       success: true,
-      data: penilaianSikap,
+      data: responseData,
       message: "Penilaian sikap berhasil ditambahkan",
     })
   } catch (error) {

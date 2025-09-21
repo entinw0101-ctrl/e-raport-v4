@@ -8,36 +8,39 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 
 interface PenilaianSikap {
-  id: number
-  siswa_id: number
-  periode_ajaran_id: number
-  semester: number
-  indikator_sikap_id: number
-  nilai: string
-  keterangan: string | null
-  siswa: {
-    id: number
-    nama: string
-    nis: string
-    kelas: {
-      nama_kelas: string
-      tingkatan: {
-        nama_tingkatan: string
-      }
-    }
-  }
-  periode_ajaran: {
-    semester: number
-    master_tahun_ajaran: {
-      nama_ajaran: string
-    }
-  }
-  indikator_sikap: {
-    id: number
-    nama_indikator: string
-    deskripsi: string | null
-  }
-}
+   id: number
+   siswa_id: number
+   periode_ajaran_id: number
+   indikator_id: number
+   nilai: number
+   siswa: {
+     id: number
+     nama: string
+     nis: string
+     master_tahun_ajaran?: {
+       id: number
+       nama_ajaran: string
+     }
+     kelas: {
+       id: number
+       nama_kelas: string
+       tingkatan: {
+         id: number
+         nama_tingkatan: string
+       }
+     }
+   }
+   periode_ajaran: {
+     semester: number
+     master_tahun_ajaran: {
+       nama_ajaran: string
+     }
+   }
+   indikator_sikap: {
+     id: number
+     indikator: string
+   }
+ }
 
 export default function PenilaianSikapPage() {
   const [data, setData] = useState<PenilaianSikap[]>([])
@@ -59,9 +62,17 @@ export default function PenilaianSikapPage() {
   const [searchTerm, setSearchTerm] = useState("")
 
   // Options for form selects
+  const [masterTahunAjaranOptions, setMasterTahunAjaranOptions] = useState<{ value: number; label: string }[]>([])
+  const [tingkatanOptions, setTingkatanOptions] = useState<{ value: number; label: string }[]>([])
+  const [kelasOptions, setKelasOptions] = useState<{ value: number; label: string }[]>([])
   const [siswaOptions, setSiswaOptions] = useState<{ value: number; label: string }[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<{ value: number; label: string }[]>([])
   const [indikatorOptions, setIndikatorOptions] = useState<{ value: number; label: string }[]>([])
+
+  // Selected values for cascading
+  const [selectedMasterTahunAjaran, setSelectedMasterTahunAjaran] = useState<number | null>(null)
+  const [selectedTingkatan, setSelectedTingkatan] = useState<number | null>(null)
+  const [selectedKelas, setSelectedKelas] = useState<number | null>(null)
 
   const columns: Column<PenilaianSikap>[] = [
     {
@@ -85,21 +96,13 @@ export default function PenilaianSikapPage() {
       ),
     },
     {
-      key: "indikator_sikap.nama_indikator",
+      key: "indikator_sikap.indikator",
       label: "Indikator Sikap",
     },
     {
       key: "nilai",
       label: "Nilai",
-      render: (value) => {
-        const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-          "Sangat Baik": "default",
-          Baik: "secondary",
-          Cukup: "outline",
-          Kurang: "destructive",
-        }
-        return <Badge variant={variants[value] || "outline"}>{value}</Badge>
-      },
+      render: (value) => <span className="font-mono">{value}</span>,
     },
     {
       key: "keterangan",
@@ -110,11 +113,50 @@ export default function PenilaianSikapPage() {
 
   const getFormFields = (): FormField[] => [
     {
+      name: "master_tahun_ajaran_id",
+      label: "Master Tahun Ajaran",
+      type: "select",
+      required: true,
+      options: masterTahunAjaranOptions,
+      onChange: (value) => {
+        setSelectedMasterTahunAjaran(value ? Number(value) : null)
+        setSelectedTingkatan(null)
+        setSelectedKelas(null)
+        setSiswaOptions([])
+      },
+    },
+    {
+      name: "tingkatan_id",
+      label: "Tingkatan",
+      type: "select",
+      required: true,
+      options: tingkatanOptions,
+      disabled: !selectedMasterTahunAjaran,
+      onChange: (value) => {
+        setSelectedTingkatan(value ? Number(value) : null)
+        setSelectedKelas(null)
+        setSiswaOptions([])
+      },
+    },
+    {
+      name: "kelas_id",
+      label: "Kelas",
+      type: "select",
+      required: true,
+      options: kelasOptions,
+      disabled: !selectedTingkatan,
+      onChange: (value) => {
+        setSelectedKelas(value ? Number(value) : null)
+        setSiswaOptions([])
+      },
+    },
+    {
       name: "siswa_id",
       label: "Siswa",
       type: "select",
       required: true,
       options: siswaOptions,
+      disabled: !selectedKelas,
     },
     {
       name: "periode_ajaran_id",
@@ -122,16 +164,6 @@ export default function PenilaianSikapPage() {
       type: "select",
       required: true,
       options: periodeOptions,
-    },
-    {
-      name: "semester",
-      label: "Semester",
-      type: "select",
-      required: true,
-      options: [
-        { value: 1, label: "Semester 1" },
-        { value: 2, label: "Semester 2" },
-      ],
     },
     {
       name: "indikator_sikap_id",
@@ -143,14 +175,11 @@ export default function PenilaianSikapPage() {
     {
       name: "nilai",
       label: "Nilai",
-      type: "select",
+      type: "number",
       required: true,
-      options: [
-        { value: "Sangat Baik", label: "Sangat Baik" },
-        { value: "Baik", label: "Baik" },
-        { value: "Cukup", label: "Cukup" },
-        { value: "Kurang", label: "Kurang" },
-      ],
+      placeholder: "Masukkan nilai angka (contoh: 85)",
+      min: 0,
+      max: 100,
     },
     {
       name: "keterangan",
@@ -196,14 +225,14 @@ export default function PenilaianSikapPage() {
 
   const fetchOptions = async () => {
     try {
-      // Fetch siswa options
-      const siswaResponse = await fetch("/api/siswa")
-      if (siswaResponse.ok) {
-        const siswaData = await siswaResponse.json()
-        setSiswaOptions(
-          siswaData.data.map((siswa: any) => ({
-            value: siswa.id,
-            label: `${siswa.nama} (${siswa.nis})`,
+      // Fetch master tahun ajaran options
+      const masterTahunAjaranResponse = await fetch("/api/master-tahun-ajaran")
+      if (masterTahunAjaranResponse.ok) {
+        const masterTahunAjaranData = await masterTahunAjaranResponse.json()
+        setMasterTahunAjaranOptions(
+          masterTahunAjaranData.data.map((tahun: any) => ({
+            value: tahun.id,
+            label: tahun.nama_ajaran,
           })),
         )
       }
@@ -227,7 +256,7 @@ export default function PenilaianSikapPage() {
         setIndikatorOptions(
           indikatorData.data.map((indikator: any) => ({
             value: indikator.id,
-            label: indikator.nama_indikator,
+            label: indikator.indikator,
           })),
         )
       }
@@ -236,10 +265,87 @@ export default function PenilaianSikapPage() {
     }
   }
 
+  const fetchTingkatanOptions = async () => {
+    try {
+      const response = await fetch("/api/tingkatan")
+      if (response.ok) {
+        const data = await response.json()
+        setTingkatanOptions(
+          data.data.map((tingkatan: any) => ({
+            value: tingkatan.id,
+            label: tingkatan.nama_tingkatan,
+          })),
+        )
+      }
+    } catch (error) {
+      console.error("Error fetching tingkatan options:", error)
+    }
+  }
+
+  const fetchKelasOptions = async (tingkatanId: number) => {
+    try {
+      const response = await fetch(`/api/kelas?tingkatan_id=${tingkatanId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setKelasOptions(
+          data.data.map((kelas: any) => ({
+            value: kelas.id,
+            label: kelas.nama_kelas,
+          })),
+        )
+      }
+    } catch (error) {
+      console.error("Error fetching kelas options:", error)
+    }
+  }
+
+  const fetchSiswaOptions = async (kelasId: number) => {
+    try {
+      const response = await fetch(`/api/siswa?kelas_id=${kelasId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSiswaOptions(
+          data.data.map((siswa: any) => ({
+            value: siswa.id,
+            label: `${siswa.nama} (${siswa.nis})`,
+          })),
+        )
+      }
+    } catch (error) {
+      console.error("Error fetching siswa options:", error)
+    }
+  }
+
   useEffect(() => {
     fetchData()
     fetchOptions()
   }, [])
+
+  useEffect(() => {
+    if (selectedMasterTahunAjaran) {
+      fetchTingkatanOptions()
+    } else {
+      setTingkatanOptions([])
+      setSelectedTingkatan(null)
+    }
+  }, [selectedMasterTahunAjaran])
+
+  useEffect(() => {
+    if (selectedTingkatan) {
+      fetchKelasOptions(selectedTingkatan)
+    } else {
+      setKelasOptions([])
+      setSelectedKelas(null)
+    }
+  }, [selectedTingkatan])
+
+  useEffect(() => {
+    if (selectedKelas) {
+      fetchSiswaOptions(selectedKelas)
+    } else {
+      setSiswaOptions([])
+    }
+  }, [selectedKelas])
 
   const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm)
@@ -271,12 +377,21 @@ export default function PenilaianSikapPage() {
       const url = selectedPenilaian ? `/api/penilaian-sikap/${selectedPenilaian.id}` : "/api/penilaian-sikap"
       const method = selectedPenilaian ? "PUT" : "POST"
 
+      // Only send the required fields for the API
+      const apiData = {
+        siswa_id: formData.siswa_id,
+        periode_ajaran_id: formData.periode_ajaran_id,
+        indikator_sikap_id: formData.indikator_sikap_id,
+        nilai: Number(formData.nilai),
+        keterangan: formData.keterangan || null,
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(apiData),
       })
 
       const result = await response.json()
@@ -340,7 +455,19 @@ export default function PenilaianSikapPage() {
 
   const getInitialFormData = () => {
     if (!selectedPenilaian) return {}
-    return selectedPenilaian
+
+    // For editing, we need to set the selected values for cascading
+    if (selectedPenilaian.siswa?.kelas?.tingkatan) {
+      setSelectedTingkatan(selectedPenilaian.siswa.kelas.tingkatan.id)
+      setSelectedKelas(selectedPenilaian.siswa.kelas.id)
+    }
+
+    return {
+      ...selectedPenilaian,
+      master_tahun_ajaran_id: selectedPenilaian.siswa?.master_tahun_ajaran?.id,
+      tingkatan_id: selectedPenilaian.siswa?.kelas?.tingkatan?.id,
+      kelas_id: selectedPenilaian.siswa?.kelas?.id,
+    }
   }
 
   return (
@@ -376,7 +503,7 @@ export default function PenilaianSikapPage() {
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
         title="Hapus Penilaian Sikap"
-        description={`Apakah Anda yakin ingin menghapus penilaian sikap siswa "${selectedPenilaian?.siswa.nama}" untuk indikator "${selectedPenilaian?.indikator_sikap.nama_indikator}"?`}
+        description={`Apakah Anda yakin ingin menghapus penilaian sikap siswa "${selectedPenilaian?.siswa.nama}" untuk indikator "${selectedPenilaian?.indikator_sikap.indikator}"?`}
         confirmText="Hapus"
         variant="destructive"
       />

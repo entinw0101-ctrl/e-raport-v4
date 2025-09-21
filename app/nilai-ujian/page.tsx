@@ -71,6 +71,13 @@ export default function NilaiUjianPage() {
   const [mataPelajaranOptions, setMataPelajaranOptions] = useState<any[]>([])
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
+  const [tahunAjaranOptions, setTahunAjaranOptions] = useState<any[]>([])
+  const [filteredKelasOptions, setFilteredKelasOptions] = useState<any[]>([])
+
+  // Template selection states
+  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<string>("")
+  const [selectedSemester, setSelectedSemester] = useState<string>("")
+  const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
 
   const { toast } = useToast()
 
@@ -132,6 +139,11 @@ export default function NilaiUjianPage() {
     setFilteredData(data) // No filtering for now
   }, [data])
 
+  // Set filtered kelas options to all kelas (no filtering by tingkatan)
+  useEffect(() => {
+    setFilteredKelasOptions(kelasOptions)
+  }, [kelasOptions])
+
   const fetchData = async () => {
     try {
       const response = await fetch("/api/nilai-ujian")
@@ -150,26 +162,35 @@ export default function NilaiUjianPage() {
 
   const fetchOptions = async () => {
     try {
-      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes] = await Promise.all([
+      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes, tahunAjaranRes] = await Promise.all([
         fetch("/api/siswa"),
         fetch("/api/mata-pelajaran"),
         fetch("/api/kelas"),
         fetch("/api/periode-ajaran"),
+        fetch("/api/master-tahun-ajaran"),
       ])
 
-      const [siswa, mataPelajaran, kelas, periode] = await Promise.all([
+      const [siswa, mataPelajaran, kelas, periode, tahunAjaran] = await Promise.all([
         siswaRes.json(),
         mataPelajaranRes.json(),
         kelasRes.json(),
         periodeRes.json(),
+        tahunAjaranRes.json(),
       ])
 
-      setSiswaOptions(siswa.data || siswa)
-      setMataPelajaranOptions(mataPelajaran.data || mataPelajaran)
-      setKelasOptions(kelas.data || kelas)
-      setPeriodeOptions(periode.data || periode)
+      setSiswaOptions(siswa.success ? (siswa.data || []) : [])
+      setMataPelajaranOptions(mataPelajaran.success ? (mataPelajaran.data || []) : [])
+      setKelasOptions(kelas.success ? (kelas.data || []) : [])
+      setPeriodeOptions(periode.success ? (periode.data || []) : [])
+      setTahunAjaranOptions(tahunAjaran.success ? (tahunAjaran.data || []) : [])
     } catch (error) {
       console.error("Error fetching options:", error)
+      // Set empty arrays on error
+      setSiswaOptions([])
+      setMataPelajaranOptions([])
+      setKelasOptions([])
+      setPeriodeOptions([])
+      setTahunAjaranOptions([])
     }
   }
 
@@ -292,12 +313,89 @@ export default function NilaiUjianPage() {
     }
   }
 
+  const handleDownloadTemplate = async () => {
+    if (!selectedTahunAjaran || !selectedSemester || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih tahun ajaran, semester, dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/export/excel/nilai-ujian/template/${selectedKelasForTemplate}?tahun_ajaran_id=${selectedTahunAjaran}&semester=${selectedSemester}`)
+      if (!response.ok) {
+        throw new Error("Failed to download template")
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `template_nilai_ujian_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Berhasil",
+        description: "Template berhasil diunduh",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal mengunduh template",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <PageHeader title="Nilai Ujian" description="Kelola nilai ujian siswa" />
 
       <div className="flex justify-between items-center">
         <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Select value={selectedTahunAjaran} onValueChange={setSelectedTahunAjaran}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Pilih Tahun Ajaran" />
+              </SelectTrigger>
+              <SelectContent>
+                {tahunAjaranOptions?.map((ta: any) => (
+                  <SelectItem key={ta.id} value={ta.id.toString()}>
+                    {ta.nama_ajaran}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Select value={selectedSemester} onValueChange={setSelectedSemester} disabled={!selectedTahunAjaran}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="Semester" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SATU">1</SelectItem>
+                <SelectItem value="DUA">2</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedSemester}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih Kelas" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredKelasOptions?.map((kelas: any) => (
+                  <SelectItem key={kelas.id} value={kelas.id.toString()}>
+                    Kelas: {kelas.nama} - Tingkatan: {kelas.tingkatan?.nama_tingkatan || 'N/A'} {kelas.wali_kelas ? `- Wali: ${kelas.wali_kelas.nama}` : ''}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedTahunAjaran || !selectedSemester || !selectedKelasForTemplate}>
+              <FileDown className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
+          </div>
           <Button variant="outline" onClick={handleExport}>
             <FileDown className="w-4 h-4 mr-2" />
             Export Excel
