@@ -3,10 +3,29 @@ import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("Fetching indikator kehadiran data...")
+    console.log("Database URL exists:", !!process.env.DATABASE_URL)
+    console.log("Node env:", process.env.NODE_ENV)
+
+    // Test database connection
+    try {
+      await prisma.$connect()
+      console.log("Database connection successful")
+    } catch (dbError) {
+      console.error("Database connection failed:", dbError)
+      return NextResponse.json({
+        success: false,
+        error: "Database connection failed",
+        details: dbError instanceof Error ? dbError.message : 'Unknown DB error'
+      }, { status: 500 })
+    }
+
     const { searchParams } = new URL(request.url)
     const page = Number.parseInt(searchParams.get("page") || "1")
     const per_page = Number.parseInt(searchParams.get("per_page") || "10")
     const search = searchParams.get("search") || ""
+
+    console.log(`Page: ${page}, Per page: ${per_page}, Search: ${search}`)
 
     const skip = (page - 1) * per_page
 
@@ -18,8 +37,11 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    console.log("Where clause:", where)
+
     // Get total count
     const total = await prisma.indikatorKehadiran.count({ where })
+    console.log(`Total records: ${total}`)
 
     const data = await prisma.indikatorKehadiran.findMany({
       where,
@@ -27,6 +49,8 @@ export async function GET(request: NextRequest) {
       skip,
       take: per_page,
     })
+
+    console.log(`Fetched ${data.length} records`)
 
     return NextResponse.json({
       success: true,
@@ -40,7 +64,16 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error fetching indikator kehadiran:", error)
-    return NextResponse.json({ success: false, error: "Gagal mengambil data indikator kehadiran" }, { status: 500 })
+    console.error("Error details:", {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
+    })
+    return NextResponse.json({
+      success: false,
+      error: "Gagal mengambil data indikator kehadiran",
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }
 
@@ -54,7 +87,10 @@ export async function POST(request: NextRequest) {
     }
 
     const indikatorKehadiran = await prisma.indikatorKehadiran.create({
-      data: body,
+      data: {
+        nama_indikator: body.nama_indikator,
+        deskripsi: body.deskripsi || null,
+      },
     })
 
     return NextResponse.json({
