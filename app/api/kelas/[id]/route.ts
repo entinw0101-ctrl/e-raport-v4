@@ -3,14 +3,14 @@ import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const id = Number.parseInt(params.id)
+    const { id } = await params
+    const kelasId = Number.parseInt(id)
 
     const kelas = await prisma.kelas.findUnique({
-      where: { id },
+      where: { id: kelasId },
       include: {
         wali_kelas: true,
         tingkatan: true,
-        next_kelas: true,
         siswa: {
           orderBy: { nama: "asc" },
         },
@@ -38,35 +38,46 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const id = Number.parseInt(params.id)
+    const { id } = await params
+    const kelasId = Number.parseInt(id)
     const body = await request.json()
 
     // Check if kelas exists
     const existingKelas = await prisma.kelas.findUnique({
-      where: { id },
+      where: { id: kelasId },
     })
 
     if (!existingKelas) {
       return NextResponse.json({ success: false, error: "Kelas tidak ditemukan" }, { status: 404 })
     }
 
-    // Convert string IDs to integers and exclude invalid fields
-    const { tahun_ajaran, status, ...bodyWithoutInvalid } = body
-    const data = {
-      ...bodyWithoutInvalid,
-      tingkatan_id: body.tingkatan_id ? Number.parseInt(body.tingkatan_id) : null,
-      wali_kelas_id: body.wali_kelas_id ? Number.parseInt(body.wali_kelas_id) : null,
-      next_kelas_id: body.next_kelas_id ? Number.parseInt(body.next_kelas_id) : null,
-      kapasitas: body.kapasitas ? Number.parseInt(body.kapasitas) : null,
+    // Extract only the fields that belong to Kelas model
+    const allowedFields = ['nama_kelas', 'kapasitas', 'wali_kelas_id', 'tingkatan_id']
+    const data: any = {}
+
+    // Handle each allowed field
+    if (body.nama_kelas !== undefined) {
+      data.nama_kelas = body.nama_kelas
+    }
+
+    if (body.kapasitas !== undefined) {
+      data.kapasitas = body.kapasitas ? Number.parseInt(body.kapasitas) : null
+    }
+
+    if (body.wali_kelas_id !== undefined) {
+      data.wali_kelas_id = body.wali_kelas_id ? Number.parseInt(body.wali_kelas_id) : null
+    }
+
+    if (body.tingkatan_id !== undefined) {
+      data.tingkatan_id = body.tingkatan_id ? Number.parseInt(body.tingkatan_id) : null
     }
 
     const kelas = await prisma.kelas.update({
-      where: { id },
+      where: { id: kelasId },
       data,
       include: {
         wali_kelas: true,
         tingkatan: true,
-        next_kelas: true,
         _count: {
           select: {
             siswa: true,
@@ -88,11 +99,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const id = Number.parseInt(params.id)
+    const { id } = await params
+    const kelasId = Number.parseInt(id)
 
     // Check if kelas exists
     const existingKelas = await prisma.kelas.findUnique({
-      where: { id },
+      where: { id: kelasId },
       include: {
         _count: {
           select: {
@@ -115,7 +127,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     await prisma.kelas.delete({
-      where: { id },
+      where: { id: kelasId },
     })
 
     return NextResponse.json({
