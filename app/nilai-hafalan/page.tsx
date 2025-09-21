@@ -60,11 +60,10 @@ export default function NilaiHafalanPage() {
   const [mataPelajaranOptions, setMataPelajaranOptions] = useState<any[]>([])
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
-  const [tahunAjaranOptions, setTahunAjaranOptions] = useState<any[]>([])
   const [filteredKelasOptions, setFilteredKelasOptions] = useState<any[]>([])
 
   // Template selection states
-  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<string>("")
+  const [selectedPeriodeAjaran, setSelectedPeriodeAjaran] = useState<string>("")
   const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isImporting, setIsImporting] = useState(false)
@@ -79,8 +78,8 @@ export default function NilaiHafalanPage() {
     {
       key: "predikat",
       label: "Predikat",
-      render: (item: NilaiHafalan) => (
-        <Badge variant={getGradeBadgeVariant(item.predikat)}>{item.predikat}</Badge>
+      render: (value, row) => (
+        <Badge variant={getGradeBadgeVariant(value)}>{value}</Badge>
       ),
     },
     { key: "periode_ajaran.nama_ajaran", label: "Periode" },
@@ -118,27 +117,24 @@ export default function NilaiHafalanPage() {
 
   const fetchOptions = async () => {
     try {
-      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes, tahunAjaranRes] = await Promise.all([
+      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes] = await Promise.all([
         fetch("/api/siswa"),
         fetch("/api/mata-pelajaran"),
         fetch("/api/kelas?include=tingkatan,wali_kelas"),
         fetch("/api/periode-ajaran"),
-        fetch("/api/master-tahun-ajaran"),
       ])
 
-      const [siswa, mataPelajaran, kelas, periode, tahunAjaran] = await Promise.all([
+      const [siswa, mataPelajaran, kelas, periode] = await Promise.all([
         siswaRes.json(),
         mataPelajaranRes.json(),
         kelasRes.json(),
         periodeRes.json(),
-        tahunAjaranRes.json(),
       ])
 
       setSiswaOptions(siswa.success ? (siswa.data || []) : [])
       setMataPelajaranOptions(mataPelajaran.success ? (mataPelajaran.data || []) : [])
       setKelasOptions(kelas.success ? (kelas.data || []) : [])
       setPeriodeOptions(periode.success ? (periode.data || []) : [])
-      setTahunAjaranOptions(tahunAjaran.success ? (tahunAjaran.data || []) : [])
     } catch (error) {
       console.error("Error fetching options:", error)
       // Set empty arrays on error
@@ -146,7 +142,6 @@ export default function NilaiHafalanPage() {
       setMataPelajaranOptions([])
       setKelasOptions([])
       setPeriodeOptions([])
-      setTahunAjaranOptions([])
     }
   }
 
@@ -251,10 +246,10 @@ export default function NilaiHafalanPage() {
       return
     }
 
-    if (!selectedTahunAjaran || !selectedKelasForTemplate) {
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
       toast({
         title: "Pilih Lengkap",
-        description: "Silakan pilih tahun ajaran dan kelas terlebih dahulu",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
         variant: "destructive",
       })
       return
@@ -302,17 +297,17 @@ export default function NilaiHafalanPage() {
   }
 
   const handleDownloadTemplate = async () => {
-    if (!selectedTahunAjaran || !selectedKelasForTemplate) {
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
       toast({
         title: "Pilih Lengkap",
-        description: "Silakan pilih tahun ajaran dan kelas terlebih dahulu",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
         variant: "destructive",
       })
       return
     }
 
     try {
-      const response = await fetch(`/api/export/excel/nilai-hafalan/template/${selectedKelasForTemplate}?tahun_ajaran_id=${selectedTahunAjaran}`)
+      const response = await fetch(`/api/export/excel/nilai-hafalan/template/${selectedKelasForTemplate}?periode_ajaran_id=${selectedPeriodeAjaran}`)
       if (!response.ok) {
         throw new Error("Failed to download template")
       }
@@ -346,19 +341,19 @@ export default function NilaiHafalanPage() {
       <div className="flex justify-between items-center">
         <div className="flex gap-2">
           <div className="flex items-center gap-2">
-            <Select value={selectedTahunAjaran} onValueChange={setSelectedTahunAjaran}>
+            <Select value={selectedPeriodeAjaran} onValueChange={setSelectedPeriodeAjaran}>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Pilih Tahun Ajaran" />
+                <SelectValue placeholder="Pilih Periode Ajaran" />
               </SelectTrigger>
               <SelectContent>
-                {tahunAjaranOptions?.map((ta: any) => (
-                  <SelectItem key={ta.id} value={ta.id.toString()}>
-                    {ta.nama_ajaran}
+                {periodeOptions?.map((periode: any) => (
+                  <SelectItem key={periode.id} value={periode.id.toString()}>
+                    {periode.nama_ajaran} - Semester {periode.semester === "SATU" ? "1" : "2"}
                   </SelectItem>
                 )) || []}
               </SelectContent>
             </Select>
-            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedTahunAjaran}>
+            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedPeriodeAjaran}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Pilih Kelas" />
               </SelectTrigger>
@@ -370,7 +365,7 @@ export default function NilaiHafalanPage() {
                 )) || []}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedTahunAjaran || !selectedKelasForTemplate}>
+            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedPeriodeAjaran || !selectedKelasForTemplate}>
               <FileDown className="w-4 h-4 mr-2" />
               Download Template
             </Button>

@@ -69,14 +69,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const resolvedParams = await params
     const kelasId = parseInt(resolvedParams.kelas_id)
     const { searchParams } = new URL(request.url)
-    const tahunAjaranId = searchParams.get("tahun_ajaran_id")
+    const periodeAjaranId = searchParams.get("periode_ajaran_id")
 
     if (isNaN(kelasId)) {
       return NextResponse.json({ success: false, error: "ID kelas tidak valid" }, { status: 400 })
     }
 
-    if (!tahunAjaranId) {
-      return NextResponse.json({ success: false, error: "ID tahun ajaran diperlukan" }, { status: 400 })
+    if (!periodeAjaranId) {
+      return NextResponse.json({ success: false, error: "ID periode ajaran diperlukan" }, { status: 400 })
     }
 
     // Mengambil data kelas, siswa, kurikulum, dan periode (tidak ada perubahan di sini)
@@ -121,16 +121,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, error: "Tidak ada mata pelajaran hafalan untuk tingkatan ini" }, { status: 404 })
     }
 
-    const periodeAjaran = await prisma.periodeAjaran.findFirst({
-        where: {
-            master_tahun_ajaran_id: parseInt(tahunAjaranId),
-            semester: 'SATU' // Default to semester 1
-        },
+    const periodeAjaran = await prisma.periodeAjaran.findUnique({
+        where: { id: parseInt(periodeAjaranId) },
         include: { master_tahun_ajaran: true }
     });
 
     if (!periodeAjaran?.master_tahun_ajaran) {
-      return NextResponse.json({ success: false, error: "Periode atau master tahun ajaran tidak ditemukan" }, { status: 404 })
+      return NextResponse.json({ success: false, error: "Periode ajaran tidak ditemukan" }, { status: 404 })
     }
 
     // Membuat workbook Excel
