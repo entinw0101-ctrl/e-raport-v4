@@ -10,7 +10,6 @@ import { toast } from "@/hooks/use-toast"
 interface MataPelajaran {
   id: number
   nama_mapel: string
-  kode_mapel: string | null
   jenis: "Ujian" | "Hafalan"
   deskripsi: string | null
 }
@@ -36,12 +35,6 @@ export default function MataPelajaranPage() {
 
   const columns: Column<MataPelajaran>[] = [
     {
-      key: "kode_mapel",
-      label: "Kode",
-      className: "font-mono",
-      render: (value) => value || "-",
-    },
-    {
       key: "nama_mapel",
       label: "Nama Mata Pelajaran",
       className: "font-medium",
@@ -65,12 +58,6 @@ export default function MataPelajaranPage() {
       type: "text",
       required: true,
       placeholder: "Contoh: Bahasa Arab, Fiqih, Akhlaq",
-    },
-    {
-      name: "kode_mapel",
-      label: "Kode Mata Pelajaran",
-      type: "text",
-      placeholder: "Contoh: BA, FQ, AK (opsional)",
     },
     {
       name: "jenis",
@@ -244,7 +231,7 @@ export default function MataPelajaranPage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Cari nama atau kode mata pelajaran..."
+        searchPlaceholder="Cari nama mata pelajaran..."
         addButtonText="Tambah Mata Pelajaran"
         emptyMessage="Belum ada data mata pelajaran"
       />
