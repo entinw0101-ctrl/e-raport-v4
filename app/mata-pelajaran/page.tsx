@@ -11,7 +11,6 @@ interface MataPelajaran {
   id: number
   nama_mapel: string
   jenis: "Ujian" | "Hafalan"
-  deskripsi: string | null
 }
 
 export default function MataPelajaranPage() {
@@ -44,11 +43,6 @@ export default function MataPelajaranPage() {
       label: "Jenis",
       render: (value) => <Badge variant={value === "Ujian" ? "default" : "secondary"}>{value}</Badge>,
     },
-    {
-      key: "deskripsi",
-      label: "Deskripsi",
-      render: (value) => value || "-",
-    },
   ]
 
   const formFields: FormField[] = [
@@ -68,13 +62,6 @@ export default function MataPelajaranPage() {
         { value: "Ujian", label: "Ujian" },
         { value: "Hafalan", label: "Hafalan" },
       ],
-    },
-    {
-      name: "deskripsi",
-      label: "Deskripsi",
-      type: "textarea",
-      placeholder: "Deskripsi mata pelajaran (opsional)",
-      rows: 3,
     },
   ]
 
