@@ -16,7 +16,7 @@ import { DataTable } from "@/src/components/DataTable"
 import { FormModal } from "@/src/components/FormModal"
 import { PageHeader } from "@/src/components/PageHeader"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, FileDown } from "lucide-react"
+import { Plus, FileDown, Upload } from "lucide-react"
 
 interface NilaiUjian {
   id: string
@@ -71,13 +71,13 @@ export default function NilaiUjianPage() {
   const [mataPelajaranOptions, setMataPelajaranOptions] = useState<any[]>([])
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
-  const [tahunAjaranOptions, setTahunAjaranOptions] = useState<any[]>([])
   const [filteredKelasOptions, setFilteredKelasOptions] = useState<any[]>([])
 
   // Template selection states
-  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<string>("")
-  const [selectedSemester, setSelectedSemester] = useState<string>("")
+  const [selectedPeriodeAjaran, setSelectedPeriodeAjaran] = useState<string>("")
   const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
 
   const { toast } = useToast()
 
@@ -92,7 +92,7 @@ export default function NilaiUjianPage() {
     { key: "siswa.nama", label: "Nama Siswa" },
     { key: "siswa.nis", label: "NIS" },
     { key: "mata_pelajaran.nama", label: "Mata Pelajaran" },
-    { key: "kelas.nama", label: "Kelas" },
+    { key: "kelas.nama_kelas", label: "Kelas" },
     { key: "jenis_ujian", label: "Jenis Ujian" },
     {
       key: "nilai",
@@ -111,7 +111,7 @@ export default function NilaiUjianPage() {
     {
       key: "kelas_id",
       label: "Kelas",
-      options: kelasOptions?.map((k: any) => ({ value: k.id, label: k.nama })) || [],
+      options: kelasOptions?.map((k: any) => ({ value: k.id, label: k.nama_kelas })) || [],
     },
     {
       key: "mata_pelajaran_id",
@@ -162,27 +162,24 @@ export default function NilaiUjianPage() {
 
   const fetchOptions = async () => {
     try {
-      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes, tahunAjaranRes] = await Promise.all([
+      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes] = await Promise.all([
         fetch("/api/siswa"),
         fetch("/api/mata-pelajaran"),
         fetch("/api/kelas"),
         fetch("/api/periode-ajaran"),
-        fetch("/api/master-tahun-ajaran"),
       ])
 
-      const [siswa, mataPelajaran, kelas, periode, tahunAjaran] = await Promise.all([
+      const [siswa, mataPelajaran, kelas, periode] = await Promise.all([
         siswaRes.json(),
         mataPelajaranRes.json(),
         kelasRes.json(),
         periodeRes.json(),
-        tahunAjaranRes.json(),
       ])
 
       setSiswaOptions(siswa.success ? (siswa.data || []) : [])
       setMataPelajaranOptions(mataPelajaran.success ? (mataPelajaran.data || []) : [])
       setKelasOptions(kelas.success ? (kelas.data || []) : [])
       setPeriodeOptions(periode.success ? (periode.data || []) : [])
-      setTahunAjaranOptions(tahunAjaran.success ? (tahunAjaran.data || []) : [])
     } catch (error) {
       console.error("Error fetching options:", error)
       // Set empty arrays on error
@@ -190,7 +187,6 @@ export default function NilaiUjianPage() {
       setMataPelajaranOptions([])
       setKelasOptions([])
       setPeriodeOptions([])
-      setTahunAjaranOptions([])
     }
   }
 
@@ -314,17 +310,17 @@ export default function NilaiUjianPage() {
   }
 
   const handleDownloadTemplate = async () => {
-    if (!selectedTahunAjaran || !selectedSemester || !selectedKelasForTemplate) {
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
       toast({
         title: "Pilih Lengkap",
-        description: "Silakan pilih tahun ajaran, semester, dan kelas terlebih dahulu",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
         variant: "destructive",
       })
       return
     }
 
     try {
-      const response = await fetch(`/api/export/excel/nilai-ujian/template/${selectedKelasForTemplate}?tahun_ajaran_id=${selectedTahunAjaran}&semester=${selectedSemester}`)
+      const response = await fetch(`/api/export/excel/nilai-ujian/template/${selectedKelasForTemplate}?periode_ajaran_id=${selectedPeriodeAjaran}`)
       if (!response.ok) {
         throw new Error("Failed to download template")
       }
@@ -351,6 +347,68 @@ export default function NilaiUjianPage() {
     }
   }
 
+  const handleImportExcel = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "Pilih File",
+        description: "Silakan pilih file Excel terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsImporting(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      formData.append("kelas_id", selectedKelasForTemplate)
+      formData.append("periode_ajaran_id", selectedPeriodeAjaran)
+
+      const response = await fetch("/api/upload/excel/nilai-ujian", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Berhasil",
+          description: result.message,
+        })
+        setSelectedFile(null)
+        fetchData() // Refresh data
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+        if (result.details) {
+          console.error("Import errors:", result.details)
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal mengimpor data",
+        variant: "destructive",
+      })
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <PageHeader title="Nilai Ujian" description="Kelola nilai ujian siswa" />
@@ -358,48 +416,51 @@ export default function NilaiUjianPage() {
       <div className="flex justify-between items-center">
         <div className="flex gap-2">
           <div className="flex items-center gap-2">
-            <Select value={selectedTahunAjaran} onValueChange={setSelectedTahunAjaran}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Pilih Tahun Ajaran" />
+            <Select value={selectedPeriodeAjaran} onValueChange={setSelectedPeriodeAjaran}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih Periode Ajaran" />
               </SelectTrigger>
               <SelectContent>
-                {tahunAjaranOptions?.map((ta: any) => (
-                  <SelectItem key={ta.id} value={ta.id.toString()}>
-                    {ta.nama_ajaran}
+                {periodeOptions?.map((periode: any) => (
+                  <SelectItem key={periode.id} value={periode.id.toString()}>
+                    {periode.nama_ajaran} - Semester {periode.semester === "SATU" ? "1" : "2"}
                   </SelectItem>
                 )) || []}
               </SelectContent>
             </Select>
-            <Select value={selectedSemester} onValueChange={setSelectedSemester} disabled={!selectedTahunAjaran}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="Semester" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SATU">1</SelectItem>
-                <SelectItem value="DUA">2</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedSemester}>
+            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedPeriodeAjaran}>
               <SelectTrigger className="w-64">
                 <SelectValue placeholder="Pilih Kelas" />
               </SelectTrigger>
               <SelectContent>
                 {filteredKelasOptions?.map((kelas: any) => (
                   <SelectItem key={kelas.id} value={kelas.id.toString()}>
-                    Kelas: {kelas.nama} - Tingkatan: {kelas.tingkatan?.nama_tingkatan || 'N/A'} {kelas.wali_kelas ? `- Wali: ${kelas.wali_kelas.nama}` : ''}
+                    Kelas: {kelas.nama_kelas || 'N/A'} - Tingkatan: {kelas.tingkatan?.nama_tingkatan || 'N/A'} {kelas.wali_kelas ? `- Wali: ${kelas.wali_kelas.nama}` : ''}
                   </SelectItem>
                 )) || []}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedTahunAjaran || !selectedSemester || !selectedKelasForTemplate}>
+            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedPeriodeAjaran || !selectedKelasForTemplate}>
               <FileDown className="w-4 h-4 mr-2" />
               Download Template
             </Button>
           </div>
-          <Button variant="outline" onClick={handleExport}>
-            <FileDown className="w-4 h-4 mr-2" />
-            Export Excel
-          </Button>
+          <div className="flex items-center gap-2">
+            <Input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              className="max-w-xs"
+            />
+            <Button
+              variant="outline"
+              onClick={handleImportExcel}
+              disabled={!selectedFile || isImporting}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isImporting ? "Importing..." : "Import Excel"}
+            </Button>
+          </div>
           <Button onClick={() => setIsModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Tambah Nilai

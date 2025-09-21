@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const master_tahun_ajaran_id = searchParams.get("master_tahun_ajaran_id")
     const semester = searchParams.get("semester")
 
+
     const skip = (page - 1) * per_page
 
     // Build where clause
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     if (semester) {
       where.semester = semester
     }
+
 
     // Get total count
     const total = await prisma.periodeAjaran.count({ where })
@@ -50,7 +52,6 @@ export async function GET(request: NextRequest) {
             kehadiran: true,
             penilaian_sikap: true,
             ringkasan_rapot: true,
-            kelas_periode: true,
           },
         },
       },
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
       skip,
       take: per_page,
     })
+
 
     return NextResponse.json({
       success: true,

@@ -2,35 +2,33 @@ import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
 
-export async function GET(request: NextRequest, { params }: { params: { kelas_id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ kelas_id: string }> }) {
   try {
-    const kelasId = parseInt(params.kelas_id)
+    const resolvedParams = await params
+    const kelasId = parseInt(resolvedParams.kelas_id)
     const { searchParams } = new URL(request.url)
-    const tahunAjaranId = searchParams.get("tahun_ajaran_id")
-    const semester = searchParams.get("semester")
+    const periodeAjaranId = searchParams.get("periode_ajaran_id")
 
     if (isNaN(kelasId)) {
       return NextResponse.json({ success: false, error: "ID kelas tidak valid" }, { status: 400 })
     }
 
-    if (!tahunAjaranId) {
-      return NextResponse.json({ success: false, error: "ID tahun ajaran diperlukan" }, { status: 400 })
+    if (!periodeAjaranId) {
+      return NextResponse.json({ success: false, error: "ID periode ajaran diperlukan" }, { status: 400 })
     }
 
-    if (!semester) {
-      return NextResponse.json({ success: false, error: "Semester diperlukan" }, { status: 400 })
-    }
-
-    // Find periode ajaran based on master_tahun_ajaran_id and semester
-    const periodeAjaran = await prisma.periodeAjaran.findFirst({
-      where: {
-        master_tahun_ajaran_id: parseInt(tahunAjaranId),
-        semester: semester as any, // SATU or DUA
-      },
+    // Find periode ajaran
+    const periodeAjaran = await prisma.periodeAjaran.findUnique({
+      where: { id: parseInt(periodeAjaranId) },
+      select: {
+        id: true,
+        nama_ajaran: true,
+        semester: true
+      }
     })
 
     if (!periodeAjaran) {
-      return NextResponse.json({ success: false, error: "Periode ajaran tidak ditemukan untuk tahun ajaran dan semester yang dipilih" }, { status: 404 })
+      return NextResponse.json({ success: false, error: "Periode ajaran tidak ditemukan" }, { status: 404 })
     }
 
     // Get kelas with tingkatan
@@ -108,6 +106,8 @@ export async function GET(request: NextRequest, { params }: { params: { kelas_id
     const columns = [
       { header: "NIS", key: "nis", width: 15 },
       { header: "Nama Siswa", key: "nama", width: 25 },
+      { header: "Periode Ajaran", key: "periode_ajaran", width: 20 },
+      { header: "Semester", key: "semester", width: 10 },
     ]
 
     // Add columns for each subject (one column per subject, not per exam type)
@@ -137,6 +137,12 @@ export async function GET(request: NextRequest, { params }: { params: { kelas_id
         horizontal: "center",
         vertical: "middle",
       }
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      }
     })
 
     // Add data rows for each student
@@ -144,6 +150,8 @@ export async function GET(request: NextRequest, { params }: { params: { kelas_id
       const row: any = {
         nis: siswa.nis,
         nama: siswa.nama,
+        periode_ajaran: periodeAjaran.nama_ajaran,
+        semester: `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}`,
       }
 
       // Initialize all score columns with empty values
@@ -151,7 +159,17 @@ export async function GET(request: NextRequest, { params }: { params: { kelas_id
         row[`mapel_${item.mata_pelajaran!.id}`] = ""
       })
 
-      worksheet.addRow(row)
+      const addedRow = worksheet.addRow(row)
+
+      // Add borders to all cells in the data row
+      addedRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      })
     })
 
     // Set response headers
@@ -160,7 +178,7 @@ export async function GET(request: NextRequest, { params }: { params: { kelas_id
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename=template_nilai_ujian_${kelas.nama_kelas}_semester_${semester === "SATU" ? "1" : "2"}_${new Date().toISOString().split("T")[0]}.xlsx`,
+        "Content-Disposition": `attachment; filename=template_nilai_ujian_${kelas.nama_kelas}_semester_${periodeAjaran.semester === "SATU" ? "1" : "2"}_${new Date().toISOString().split("T")[0]}.xlsx`,
       },
     })
   } catch (error) {

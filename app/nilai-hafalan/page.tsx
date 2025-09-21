@@ -85,7 +85,7 @@ export default function NilaiHafalanPage() {
     { key: "siswa.nama", label: "Nama Siswa" },
     { key: "siswa.nis", label: "NIS" },
     { key: "kitab.nama", label: "Kitab" },
-    { key: "kelas.nama", label: "Kelas" },
+    { key: "kelas.nama_kelas", label: "Kelas" },
     { key: "jenis_hafalan", label: "Jenis Hafalan" },
     { key: "jumlah_halaman", label: "Jumlah Halaman" },
     {
@@ -105,7 +105,7 @@ export default function NilaiHafalanPage() {
     {
       key: "kelas_id",
       label: "Kelas",
-      options: kelasOptions?.map((k: any) => ({ value: k.id, label: k.nama })) || [],
+      options: kelasOptions?.map((k: any) => ({ value: k.id, label: k.nama_kelas })) || [],
     },
     {
       key: "kitab_id",

@@ -11,19 +11,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ success: false, error: "Nama mata pelajaran dan jenis wajib diisi" }, { status: 400 })
     }
 
-    // Check if kode_mapel already exists (excluding current record)
-    if (body.kode_mapel) {
-      const existingMapel = await prisma.mataPelajaran.findFirst({
-        where: {
-          kode_mapel: body.kode_mapel,
-          NOT: { id },
-        },
-      })
-
-      if (existingMapel) {
-        return NextResponse.json({ success: false, error: "Kode mata pelajaran sudah digunakan" }, { status: 400 })
-      }
-    }
 
     const mataPelajaran = await prisma.mataPelajaran.update({
       where: { id },
@@ -47,11 +34,11 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     // Check if mata pelajaran is being used
     const nilaiUjianCount = await prisma.nilaiUjian.count({
-      where: { mata_pelajaran_id: id },
+      where: { mapel_id: id },
     })
 
     const nilaiHafalanCount = await prisma.nilaiHafalan.count({
-      where: { mata_pelajaran_id: id },
+      where: { mapel_id: id },
     })
 
     if (nilaiUjianCount > 0 || nilaiHafalanCount > 0) {
