@@ -6,17 +6,42 @@ export async function GET(request: NextRequest) {
     console.log("Fetching indikator kehadiran data...")
     console.log("Database URL exists:", !!process.env.DATABASE_URL)
     console.log("Node env:", process.env.NODE_ENV)
+    console.log("Prisma client exists:", !!prisma)
+    console.log("Prisma indikatorKehadiran exists:", !!prisma?.indikatorKehadiran)
+
+    // Check if Prisma client is properly initialized
+    if (!prisma) {
+      console.error("Prisma client is not initialized")
+      return NextResponse.json({
+        success: false,
+        error: "Database client not initialized",
+        details: "Prisma client is undefined"
+      }, { status: 500 })
+    }
+
+    if (!prisma.indikatorKehadiran) {
+      console.error("Prisma indikatorKehadiran model is not available")
+      return NextResponse.json({
+        success: false,
+        error: "Database model not available",
+        details: "indikatorKehadiran model is undefined"
+      }, { status: 500 })
+    }
 
     // Test database connection
     try {
       await prisma.$connect()
-      console.log("Database connection successful")
+      console.log("✅ Database connection successful")
     } catch (dbError) {
-      console.error("Database connection failed:", dbError)
+      console.error("❌ Database connection failed:", dbError)
       return NextResponse.json({
         success: false,
         error: "Database connection failed",
-        details: dbError instanceof Error ? dbError.message : 'Unknown DB error'
+        details: dbError instanceof Error ? dbError.message : 'Unknown DB error',
+        env: {
+          hasDatabaseUrl: !!process.env.DATABASE_URL,
+          nodeEnv: process.env.NODE_ENV,
+        }
       }, { status: 500 })
     }
 
@@ -63,16 +88,24 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error fetching indikator kehadiran:", error)
+    console.error("❌ Error fetching indikator kehadiran:", error)
     console.error("Error details:", {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined
+      name: error instanceof Error ? error.name : undefined,
+      prismaExists: !!prisma,
+      modelExists: !!(prisma?.indikatorKehadiran),
     })
     return NextResponse.json({
       success: false,
       error: "Gagal mengambil data indikator kehadiran",
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      debug: {
+        prismaInitialized: !!prisma,
+        modelAvailable: !!(prisma?.indikatorKehadiran),
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        nodeEnv: process.env.NODE_ENV,
+      }
     }, { status: 500 })
   }
 }
