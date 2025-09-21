@@ -1,10 +1,73 @@
 import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
+import { PredikatHafalan } from "@prisma/client"; // Pastikan Enum diimpor
 
-export async function GET(request: NextRequest, { params }: { params: { kelas_id: string } }) {
+
+/**
+ * Menerapkan styling (warna header dan border) ke seluruh sheet.
+ */
+function applySheetStyling(sheet: ExcelJS.Worksheet) {
+  // Styling untuk baris header
+  const headerRow = sheet.getRow(1);
+  headerRow.font = {
+    bold: true,
+    color: { argb: "FFFFFFFF" }, // Teks putih
+  };
+  headerRow.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF4F81BD" }, // Latar belakang biru tua
+  };
+  headerRow.alignment = {
+    vertical: "middle",
+    horizontal: "center",
+  };
+
+  // Menambahkan border ke SEMUA sel yang digunakan
+  sheet.eachRow((row) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+  });
+}
+
+/**
+ * Menggabungkan sel untuk kolom NIS dan Nama Siswa.
+ */
+function mergeCellsForStudent(sheet: ExcelJS.Worksheet, startRow: number, endRow: number, siswa: { nis: string; nama: string }) {
+    // Always set the NIS and Nama values in the cells
+    for (let row = startRow; row <= endRow; row++) {
+        const nisCell = sheet.getCell(`A${row}`);
+        nisCell.value = siswa.nis;
+        nisCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        const namaCell = sheet.getCell(`B${row}`);
+        namaCell.value = siswa.nama;
+        namaCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    }
+
+    // Merge cells only if there are multiple rows
+    if (startRow < endRow) {
+        sheet.mergeCells(`A${startRow}:A${endRow}`);
+        sheet.mergeCells(`B${startRow}:B${endRow}`);
+    }
+}
+
+
+// ==================================================================================
+// INTI LOGIKA ANDA (Dengan Penyesuaian)
+// ==================================================================================
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ kelas_id: string }> }) {
   try {
-    const kelasId = parseInt(params.kelas_id)
+    const resolvedParams = await params
+    const kelasId = parseInt(resolvedParams.kelas_id)
     const { searchParams } = new URL(request.url)
     const tahunAjaranId = searchParams.get("tahun_ajaran_id")
 
@@ -16,176 +79,128 @@ export async function GET(request: NextRequest, { params }: { params: { kelas_id
       return NextResponse.json({ success: false, error: "ID tahun ajaran diperlukan" }, { status: 400 })
     }
 
-    // Get kelas with tingkatan
+    // Mengambil data kelas, siswa, kurikulum, dan periode (tidak ada perubahan di sini)
     const kelas = await prisma.kelas.findUnique({
       where: { id: kelasId },
-      include: {
-        tingkatan: true,
-      },
+      include: { tingkatan: true },
     })
 
-    if (!kelas) {
-      return NextResponse.json({ success: false, error: "Kelas tidak ditemukan" }, { status: 404 })
+    if (!kelas?.tingkatan) {
+      return NextResponse.json({ success: false, error: "Kelas atau tingkatan tidak ditemukan" }, { status: 404 })
     }
-
-    if (!kelas.tingkatan) {
-      return NextResponse.json({ success: false, error: "Tingkatan kelas tidak ditemukan" }, { status: 404 })
-    }
-
-    // Get students currently in this class (active students)
+    
     const siswaInKelas = await prisma.siswa.findMany({
-      where: {
-        kelas_id: kelasId,
-        status: "Aktif",
-      },
-      select: {
-        id: true,
-        nama: true,
-        nis: true,
-      },
-      orderBy: {
-        nama: "asc",
-      },
-    })
+        where: { 
+            kelas_id: kelasId, 
+            status: "Aktif",
+            nama: { not: null }
+        },
+        select: { id: true, nama: true, nis: true },
+        orderBy: { nama: "asc" },
+    }) as { id: number; nama: string; nis: string }[];
 
     if (siswaInKelas.length === 0) {
       return NextResponse.json({ success: false, error: "Tidak ada siswa aktif di kelas ini" }, { status: 404 })
     }
 
-    // Get hafalan subjects from curriculum for this level
-    const kurikulum = await prisma.kurikulum.findMany({
-      where: {
-        tingkatan_id: kelas.tingkatan.id,
-        mata_pelajaran: {
-          jenis: "Hafalan",
+    const kurikulumHafalan = await prisma.kurikulum.findMany({
+        where: {
+            tingkatan_id: kelas.tingkatan.id,
+            mata_pelajaran: { jenis: "Hafalan" },
         },
-      },
-      include: {
-        mata_pelajaran: {
-          select: {
-            id: true,
-            nama_mapel: true,
-          },
+        include: {
+            mata_pelajaran: { select: { id: true, nama_mapel: true } },
+            kitab: { select: { id: true, nama_kitab: true } },
         },
-        kitab: {
-          select: {
-            id: true,
-            nama_kitab: true,
-          },
-        },
-      },
-      orderBy: {
-        mata_pelajaran: {
-          nama_mapel: "asc",
-        },
-      },
-    })
-
-    // Filter out kurikulum without mata_pelajaran (shouldn't happen but for type safety)
-    const validKurikulum = kurikulum.filter((item) => item.mata_pelajaran !== null)
+        orderBy: { mata_pelajaran: { nama_mapel: "asc" } },
+    });
+    
+    const validKurikulum = kurikulumHafalan.filter((item) => item.mata_pelajaran !== null);
 
     if (validKurikulum.length === 0) {
       return NextResponse.json({ success: false, error: "Tidak ada mata pelajaran hafalan untuk tingkatan ini" }, { status: 404 })
     }
 
-    // Get periode ajaran for the selected tahun ajaran
     const periodeAjaran = await prisma.periodeAjaran.findFirst({
-      where: {
-        master_tahun_ajaran_id: parseInt(tahunAjaranId),
-      },
-      select: {
-        id: true,
-        nama_ajaran: true,
-        semester: true,
-      },
-    })
+        where: {
+            master_tahun_ajaran_id: parseInt(tahunAjaranId),
+            semester: 'SATU' // Default to semester 1
+        },
+        include: { master_tahun_ajaran: true }
+    });
 
-    if (!periodeAjaran) {
-      return NextResponse.json({ success: false, error: "Periode ajaran tidak ditemukan untuk tahun ajaran ini" }, { status: 404 })
+    if (!periodeAjaran?.master_tahun_ajaran) {
+      return NextResponse.json({ success: false, error: "Periode atau master tahun ajaran tidak ditemukan" }, { status: 404 })
     }
 
-    // Create workbook
+    // Membuat workbook Excel
     const workbook = new ExcelJS.Workbook()
     const worksheet = workbook.addWorksheet(`Template Nilai Hafalan - ${kelas.nama_kelas}`)
 
-    // Add periode information at the top
-    worksheet.addRow([`Periode: ${periodeAjaran.nama_ajaran} - Semester ${periodeAjaran.semester === 'SATU' ? '1' : '2'}`])
-    worksheet.addRow([]) // Empty row
-
-    // Define columns
-    const columns = [
+    // Mendefinisikan Kolom (Ini akan otomatis membuat header di baris pertama)
+    worksheet.columns = [
       { header: "NIS", key: "nis", width: 15 },
-      { header: "Nama Siswa", key: "nama", width: 25 },
+      { header: "Nama Siswa", key: "nama", width: 30 },
+      { header: "Nama Mapel", key: "nama_mapel", width: 25 },
+      { header: "Kitab", key: "kitab", width: 20 },
+      { header: "Target Hafalan", key: "target_hafalan", width: 25 },
+      { header: "Predikat", key: "predikat", width: 20 },
+      { header: "Semester", key: "semester", width: 12 },
+      { header: "Tahun Ajaran", key: "tahun_ajaran", width: 15 },
     ]
 
-    // Add columns for each hafalan subject (one column per mata pelajaran)
-    validKurikulum.forEach((item) => {
-      const header = item.mata_pelajaran!.nama_mapel || "Mata Pelajaran"
-      columns.push({
-        header,
-        key: `mapel_${item.mata_pelajaran!.id}`,
-        width: Math.max(header.length, 15),
-      })
-    })
+    // Mengisi data siswa dan mata pelajaran
+    let currentRow = 2; // Mulai dari baris 2 karena baris 1 adalah header
+    for (const siswa of siswaInKelas) {
+        const startRow = currentRow;
+        for (const kurikulum of validKurikulum) {
+            worksheet.addRow({
+                nama_mapel: kurikulum.mata_pelajaran!.nama_mapel,
+                kitab: kurikulum.kitab?.nama_kitab || '-',
+                target_hafalan: kurikulum.batas_hafalan || '',
+                semester: periodeAjaran.semester,
+                tahun_ajaran: periodeAjaran.master_tahun_ajaran.nama_ajaran
+            });
+            currentRow++;
+        }
+        const endRow = currentRow - 1;
+        // Panggil fungsi merge setelah semua baris mapel untuk satu siswa ditambahkan
+        mergeCellsForStudent(worksheet, startRow, endRow, siswa);
+    }
+    
+    // ==================================================================================
+    // PERBAIKAN UTAMA 1: TAMBAHKAN BLOK INI UNTUK MEMBUAT DROPDOWN
+    // ==================================================================================
+    // Menggunakan nilai display yang sesuai dengan @map di enum
+    const predikatList = ["Tercapai", "Tidak Tercapai"];
+    const predikatFormula = `"${predikatList.join(",")}"`;
 
-    // Add predikat column
-    columns.push({
-      header: "Predikat",
-      key: "predikat",
-      width: 15,
-    })
+    // Kolom 'F' adalah kolom ke-6 untuk 'Predikat'
+    for (let i = 2; i <= worksheet.rowCount; i++) {
+        const cell = worksheet.getCell(`F${i}`);
+        cell.dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            formulae: [predikatFormula],
+            showErrorMessage: true,
+            errorTitle: 'Predikat Tidak Valid',
+            error: `Harap pilih salah satu dari: ${predikatList.join(", ")}`
+        };
+    }
 
-    worksheet.columns = columns
+    // ==================================================================================
+    // PERBAIKAN UTAMA 2: PANGGIL FUNGSI STYLING DI AKHIR
+    // ==================================================================================
+    applySheetStyling(worksheet);
 
-    // Style periode info
-    worksheet.getRow(1).eachCell((cell) => {
-      cell.font = {
-        bold: true,
-      }
-    })
-
-    // Style headers (now at row 3)
-    worksheet.getRow(3).eachCell((cell) => {
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF0066CC" }, // Blue color
-      }
-      cell.font = {
-        color: { argb: "FFFFFFFF" }, // White text
-        bold: true,
-      }
-      cell.alignment = {
-        horizontal: "center",
-        vertical: "middle",
-      }
-    })
-
-    // Add data rows for each student
-    siswaInKelas.forEach((siswa) => {
-      const row: any = {
-        nis: siswa.nis,
-        nama: siswa.nama,
-      }
-
-      // Initialize all mata pelajaran columns with empty values
-      validKurikulum.forEach((item) => {
-        row[`mapel_${item.mata_pelajaran!.id}`] = ""
-      })
-
-      // Initialize predikat column
-      row.predikat = ""
-
-      worksheet.addRow(row)
-    })
-
-    // Set response headers
+    // Generate buffer dan kirimkan file
     const buffer = await workbook.xlsx.writeBuffer()
+    const fileName = `Template_Nilai_Hafalan_${kelas.nama_kelas}_${periodeAjaran.master_tahun_ajaran.nama_ajaran.replace('/', '-')}.xlsx`;
 
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename=template_nilai_hafalan_${kelas.nama_kelas}_${new Date().toISOString().split("T")[0]}.xlsx`,
+        "Content-Disposition": `attachment; filename="${fileName}"`,
       },
     })
   } catch (error) {

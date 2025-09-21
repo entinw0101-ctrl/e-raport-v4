@@ -16,26 +16,26 @@ import { DataTable } from "@/src/components/DataTable"
 import { FormModal } from "@/src/components/FormModal"
 import { PageHeader } from "@/src/components/PageHeader"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, FileDown } from "lucide-react"
+import { Plus, FileDown, Upload } from "lucide-react"
 
 interface NilaiHafalan {
   id: string
   siswa_id: string
-  kitab_id: string
+  mapel_id: string
   kelas_id: string
   periode_id: string
   target_hafalan: string
   predikat: string
   created_at: string
-  siswa: { nama: string; nis: string }
-  kitab: { nama: string }
+  siswa: { nama: string; nis: string; kelas: { nama_kelas: string } }
+  mata_pelajaran: { nama_mapel: string }
   kelas: { nama: string }
-  periode: { nama: string }
+  periode_ajaran: { nama_ajaran: string }
 }
 
 interface FormData {
   siswa_id: string
-  kitab_id: string
+  mapel_id: string
   kelas_id: string
   periode_id: string
   target_hafalan: string
@@ -49,7 +49,7 @@ export default function NilaiHafalanPage() {
   const [editingItem, setEditingItem] = useState<NilaiHafalan | null>(null)
   const [formData, setFormData] = useState<FormData>({
     siswa_id: "",
-    kitab_id: "",
+    mapel_id: "",
     kelas_id: "",
     periode_id: "",
     target_hafalan: "",
@@ -57,7 +57,7 @@ export default function NilaiHafalanPage() {
 
   // Options for dropdowns
   const [siswaOptions, setSiswaOptions] = useState<any[]>([])
-  const [kitabOptions, setKitabOptions] = useState<any[]>([])
+  const [mataPelajaranOptions, setMataPelajaranOptions] = useState<any[]>([])
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
   const [tahunAjaranOptions, setTahunAjaranOptions] = useState<any[]>([])
@@ -66,14 +66,16 @@ export default function NilaiHafalanPage() {
   // Template selection states
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<string>("")
   const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
 
   const { toast } = useToast()
 
   const columns = [
     { key: "siswa.nama", label: "Nama Siswa" },
     { key: "siswa.nis", label: "NIS" },
-    { key: "kitab.nama", label: "Kitab" },
-    { key: "kelas.nama", label: "Kelas" },
+    { key: "mata_pelajaran.nama_mapel", label: "Mata Pelajaran" },
+    { key: "siswa.kelas.nama_kelas", label: "Kelas" },
     {
       key: "predikat",
       label: "Predikat",
@@ -81,7 +83,7 @@ export default function NilaiHafalanPage() {
         <Badge variant={getGradeBadgeVariant(item.predikat)}>{item.predikat}</Badge>
       ),
     },
-    { key: "periode.nama", label: "Periode" },
+    { key: "periode_ajaran.nama_ajaran", label: "Periode" },
   ]
 
   useEffect(() => {
@@ -116,24 +118,24 @@ export default function NilaiHafalanPage() {
 
   const fetchOptions = async () => {
     try {
-      const [siswaRes, kitabRes, kelasRes, periodeRes, tahunAjaranRes] = await Promise.all([
+      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes, tahunAjaranRes] = await Promise.all([
         fetch("/api/siswa"),
-        fetch("/api/kitab"),
+        fetch("/api/mata-pelajaran"),
         fetch("/api/kelas?include=tingkatan,wali_kelas"),
         fetch("/api/periode-ajaran"),
         fetch("/api/master-tahun-ajaran"),
       ])
 
-      const [siswa, kitab, kelas, periode, tahunAjaran] = await Promise.all([
+      const [siswa, mataPelajaran, kelas, periode, tahunAjaran] = await Promise.all([
         siswaRes.json(),
-        kitabRes.json(),
+        mataPelajaranRes.json(),
         kelasRes.json(),
         periodeRes.json(),
         tahunAjaranRes.json(),
       ])
 
       setSiswaOptions(siswa.success ? (siswa.data || []) : [])
-      setKitabOptions(kitab.success ? (kitab.data || []) : [])
+      setMataPelajaranOptions(mataPelajaran.success ? (mataPelajaran.data || []) : [])
       setKelasOptions(kelas.success ? (kelas.data || []) : [])
       setPeriodeOptions(periode.success ? (periode.data || []) : [])
       setTahunAjaranOptions(tahunAjaran.success ? (tahunAjaran.data || []) : [])
@@ -141,7 +143,7 @@ export default function NilaiHafalanPage() {
       console.error("Error fetching options:", error)
       // Set empty arrays on error
       setSiswaOptions([])
-      setKitabOptions([])
+      setMataPelajaranOptions([])
       setKelasOptions([])
       setPeriodeOptions([])
       setTahunAjaranOptions([])
@@ -194,7 +196,7 @@ export default function NilaiHafalanPage() {
     setEditingItem(item)
     setFormData({
       siswa_id: item.siswa_id,
-      kitab_id: item.kitab_id,
+      mapel_id: item.mapel_id,
       kelas_id: item.kelas_id,
       periode_id: item.periode_id,
       target_hafalan: item.target_hafalan,
@@ -231,7 +233,7 @@ export default function NilaiHafalanPage() {
   const resetForm = () => {
     setFormData({
       siswa_id: "",
-      kitab_id: "",
+      mapel_id: "",
       kelas_id: "",
       periode_id: "",
       target_hafalan: "",
@@ -239,25 +241,63 @@ export default function NilaiHafalanPage() {
     setEditingItem(null)
   }
 
-  const handleExport = async () => {
+  const handleImportExcel = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "Pilih File",
+        description: "Silakan pilih file Excel terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!selectedTahunAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih tahun ajaran dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsImporting(true)
+
     try {
-      // Export all data without filters for now
-      const response = await fetch(`/api/nilai-hafalan/export`)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `nilai-hafalan-${new Date().toISOString().split("T")[0]}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+
+      const response = await fetch("/api/upload/excel/nilai-hafalan", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Berhasil",
+          description: result.message,
+        })
+        setSelectedFile(null)
+        fetchData() // Refresh data
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+        if (result.details) {
+          console.error("Import errors:", result.details)
+        }
+      }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Gagal mengekspor data",
+        description: "Gagal mengimpor data",
         variant: "destructive",
       })
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -335,10 +375,22 @@ export default function NilaiHafalanPage() {
               Download Template
             </Button>
           </div>
-          <Button variant="outline" onClick={handleExport}>
-            <FileDown className="w-4 h-4 mr-2" />
-            Export Excel
-          </Button>
+          <div className="flex items-center gap-2">
+            <Input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              className="max-w-xs"
+            />
+            <Button
+              variant="outline"
+              onClick={handleImportExcel}
+              disabled={!selectedFile || isImporting}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isImporting ? "Importing..." : "Import Excel"}
+            </Button>
+          </div>
           <Button onClick={() => setIsModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Tambah Nilai
@@ -369,13 +421,13 @@ export default function NilaiHafalanPage() {
             })) || []
           },
           {
-            name: "kitab_id",
-            label: "Kitab",
+            name: "mapel_id",
+            label: "Mata Pelajaran",
             type: "select",
             required: true,
-            options: kitabOptions?.map((kitab: any) => ({
-              value: kitab.id,
-              label: kitab.nama
+            options: mataPelajaranOptions?.map((mapel: any) => ({
+              value: mapel.id,
+              label: mapel.nama
             })) || []
           },
           {
@@ -408,7 +460,7 @@ export default function NilaiHafalanPage() {
         ]}
         initialData={editingItem ? {
           siswa_id: editingItem.siswa_id,
-          kitab_id: editingItem.kitab_id,
+          mapel_id: editingItem.mapel_id,
           kelas_id: editingItem.kelas_id,
           periode_id: editingItem.periode_id,
           target_hafalan: editingItem.target_hafalan
