@@ -1,320 +1,84 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { DataTable, type Column } from "@/src/components/DataTable"
-import { FormModal, type FormField } from "@/src/components/FormModal"
-import { ConfirmDialog } from "@/src/components/ConfirmDialog"
+import type React from "react"
+
+// Force dynamic rendering to avoid build-time data fetching issues
+export const dynamic = 'force-dynamic'
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { toast } from "@/hooks/use-toast"
+import { DataTable } from "@/src/components/DataTable"
+import { FormModal } from "@/src/components/FormModal"
+import { PageHeader } from "@/src/components/PageHeader"
+import { useToast } from "@/hooks/use-toast"
+import { Plus, FileDown, Upload } from "lucide-react"
 
 interface PenilaianSikap {
-   id: number
-   siswa_id: number
-   periode_ajaran_id: number
-   indikator_id: number
-   nilai: number
-   siswa: {
-     id: number
-     nama: string
-     nis: string
-     master_tahun_ajaran?: {
-       id: number
-       nama_ajaran: string
-     }
-     kelas: {
-       id: number
-       nama_kelas: string
-       tingkatan: {
-         id: number
-         nama_tingkatan: string
-       }
-     }
-   }
-   periode_ajaran: {
-     semester: number
-     master_tahun_ajaran: {
-       nama_ajaran: string
-     }
-   }
-   indikator_sikap: {
-     id: number
-     indikator: string
-   }
- }
+  id: string
+  siswa_id: string
+  indikator_sikap_id: string
+  periode_ajaran_id: string
+  nilai: number
+  created_at: string
+  siswa: { nama: string; nis: string; kelas: { nama_kelas: string } }
+  indikator_sikap: { indikator: string }
+  periode_ajaran: { nama_ajaran: string }
+}
+
+interface FormData {
+  siswa_id: string
+  indikator_sikap_id: string
+  periode_ajaran_id: string
+  nilai: number
+}
 
 export default function PenilaianSikapPage() {
   const [data, setData] = useState<PenilaianSikap[]>([])
-  const [loading, setLoading] = useState(false)
-  const [pagination, setPagination] = useState({
-    page: 1,
-    per_page: 10,
-    total: 0,
-    total_pages: 0,
+  const [filteredData, setFilteredData] = useState<PenilaianSikap[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<PenilaianSikap | null>(null)
+  const [formData, setFormData] = useState<FormData>({
+    siswa_id: "",
+    indikator_sikap_id: "",
+    periode_ajaran_id: "",
+    nilai: 0,
   })
 
-  // Modal states
-  const [showFormModal, setShowFormModal] = useState(false)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [selectedPenilaian, setSelectedPenilaian] = useState<PenilaianSikap | null>(null)
-  const [formLoading, setFormLoading] = useState(false)
+  // Options for dropdowns
+  const [siswaOptions, setSiswaOptions] = useState<any[]>([])
+  const [indikatorSikapOptions, setIndikatorSikapOptions] = useState<any[]>([])
+  const [kelasOptions, setKelasOptions] = useState<any[]>([])
+  const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
+  const [filteredKelasOptions, setFilteredKelasOptions] = useState<any[]>([])
 
-  // Filter states
-  const [searchTerm, setSearchTerm] = useState("")
+  // Template selection states
+  const [selectedPeriodeAjaran, setSelectedPeriodeAjaran] = useState<string>("")
+  const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
 
-  // Options for form selects
-  const [masterTahunAjaranOptions, setMasterTahunAjaranOptions] = useState<{ value: number; label: string }[]>([])
-  const [tingkatanOptions, setTingkatanOptions] = useState<{ value: number; label: string }[]>([])
-  const [kelasOptions, setKelasOptions] = useState<{ value: number; label: string }[]>([])
-  const [siswaOptions, setSiswaOptions] = useState<{ value: number; label: string }[]>([])
-  const [periodeOptions, setPeriodeOptions] = useState<{ value: number; label: string }[]>([])
-  const [indikatorOptions, setIndikatorOptions] = useState<{ value: number; label: string }[]>([])
+  const { toast } = useToast()
 
-  // Selected values for cascading
-  const [selectedMasterTahunAjaran, setSelectedMasterTahunAjaran] = useState<number | null>(null)
-  const [selectedTingkatan, setSelectedTingkatan] = useState<number | null>(null)
-  const [selectedKelas, setSelectedKelas] = useState<number | null>(null)
-
-  const columns: Column<PenilaianSikap>[] = [
-    {
-      key: "siswa.nama",
-      label: "Nama Siswa",
-      className: "font-medium",
-    },
-    {
-      key: "siswa.nis",
-      label: "NIS",
-      className: "font-mono",
-    },
-    {
-      key: "siswa.kelas.nama_kelas",
-      label: "Kelas",
-      render: (value, row) => (
-        <div>
-          <div className="font-medium">{value}</div>
-          <div className="text-sm text-muted-foreground">{row.siswa.kelas.tingkatan.nama_tingkatan}</div>
-        </div>
-      ),
-    },
-    {
-      key: "indikator_sikap.indikator",
-      label: "Indikator Sikap",
-    },
+  const columns = [
+    { key: "siswa.nama", label: "Nama Siswa" },
+    { key: "siswa.nis", label: "NIS" },
+    { key: "indikator_sikap.indikator", label: "Indikator Sikap" },
+    { key: "siswa.kelas.nama_kelas", label: "Kelas" },
     {
       key: "nilai",
       label: "Nilai",
-      render: (value) => <span className="font-mono">{value}</span>,
+      render: (value, row) => (
+        <span>{value}</span>
+      ),
     },
-    {
-      key: "keterangan",
-      label: "Keterangan",
-      render: (value) => value || "-",
-    },
+    { key: "periode_ajaran.nama_ajaran", label: "Periode" },
   ]
-
-  const getFormFields = (): FormField[] => [
-    {
-      name: "master_tahun_ajaran_id",
-      label: "Master Tahun Ajaran",
-      type: "select",
-      required: true,
-      options: masterTahunAjaranOptions,
-      onChange: (value) => {
-        setSelectedMasterTahunAjaran(value ? Number(value) : null)
-        setSelectedTingkatan(null)
-        setSelectedKelas(null)
-        setSiswaOptions([])
-      },
-    },
-    {
-      name: "tingkatan_id",
-      label: "Tingkatan",
-      type: "select",
-      required: true,
-      options: tingkatanOptions,
-      disabled: !selectedMasterTahunAjaran,
-      onChange: (value) => {
-        setSelectedTingkatan(value ? Number(value) : null)
-        setSelectedKelas(null)
-        setSiswaOptions([])
-      },
-    },
-    {
-      name: "kelas_id",
-      label: "Kelas",
-      type: "select",
-      required: true,
-      options: kelasOptions,
-      disabled: !selectedTingkatan,
-      onChange: (value) => {
-        setSelectedKelas(value ? Number(value) : null)
-        setSiswaOptions([])
-      },
-    },
-    {
-      name: "siswa_id",
-      label: "Siswa",
-      type: "select",
-      required: true,
-      options: siswaOptions,
-      disabled: !selectedKelas,
-    },
-    {
-      name: "periode_ajaran_id",
-      label: "Periode Ajaran",
-      type: "select",
-      required: true,
-      options: periodeOptions,
-    },
-    {
-      name: "indikator_sikap_id",
-      label: "Indikator Sikap",
-      type: "select",
-      required: true,
-      options: indikatorOptions,
-    },
-    {
-      name: "nilai",
-      label: "Nilai",
-      type: "number",
-      required: true,
-      placeholder: "Masukkan nilai angka (contoh: 85)",
-      min: 0,
-      max: 100,
-    },
-    {
-      name: "keterangan",
-      label: "Keterangan",
-      type: "textarea",
-      placeholder: "Keterangan tambahan (opsional)",
-      rows: 3,
-    },
-  ]
-
-  const fetchData = useCallback(async (page = 1, search = "") => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        per_page: pagination.per_page.toString(),
-        ...(search && { search }),
-      })
-
-      const response = await fetch(`/api/penilaian-sikap?${params}`)
-      const result = await response.json()
-
-      if (result.success) {
-        setData(result.data)
-        setPagination(result.pagination)
-      } else {
-        toast({
-          title: "Error",
-          description: result.error || "Gagal mengambil data penilaian sikap",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat mengambil data",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [pagination.per_page])
-
-  const fetchOptions = async () => {
-    try {
-      // Fetch master tahun ajaran options
-      const masterTahunAjaranResponse = await fetch("/api/master-tahun-ajaran")
-      if (masterTahunAjaranResponse.ok) {
-        const masterTahunAjaranData = await masterTahunAjaranResponse.json()
-        setMasterTahunAjaranOptions(
-          masterTahunAjaranData.data.map((tahun: any) => ({
-            value: tahun.id,
-            label: tahun.nama_ajaran,
-          })),
-        )
-      }
-
-      // Fetch periode options
-      const periodeResponse = await fetch("/api/periode-ajaran")
-      if (periodeResponse.ok) {
-        const periodeData = await periodeResponse.json()
-        setPeriodeOptions(
-          periodeData.data.map((periode: any) => ({
-            value: periode.id,
-            label: `${periode.master_tahun_ajaran.nama_ajaran} - Semester ${periode.semester}`,
-          })),
-        )
-      }
-
-      // Fetch indikator options
-      const indikatorResponse = await fetch("/api/indikator-sikap")
-      if (indikatorResponse.ok) {
-        const indikatorData = await indikatorResponse.json()
-        setIndikatorOptions(
-          indikatorData.data.map((indikator: any) => ({
-            value: indikator.id,
-            label: indikator.indikator,
-          })),
-        )
-      }
-    } catch (error) {
-      console.error("Error fetching options:", error)
-    }
-  }
-
-  const fetchTingkatanOptions = async () => {
-    try {
-      const response = await fetch("/api/tingkatan")
-      if (response.ok) {
-        const data = await response.json()
-        setTingkatanOptions(
-          data.data.map((tingkatan: any) => ({
-            value: tingkatan.id,
-            label: tingkatan.nama_tingkatan,
-          })),
-        )
-      }
-    } catch (error) {
-      console.error("Error fetching tingkatan options:", error)
-    }
-  }
-
-  const fetchKelasOptions = async (tingkatanId: number) => {
-    try {
-      const response = await fetch(`/api/kelas?tingkatan_id=${tingkatanId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setKelasOptions(
-          data.data.map((kelas: any) => ({
-            value: kelas.id,
-            label: kelas.nama_kelas,
-          })),
-        )
-      }
-    } catch (error) {
-      console.error("Error fetching kelas options:", error)
-    }
-  }
-
-  const fetchSiswaOptions = async (kelasId: number) => {
-    try {
-      const response = await fetch(`/api/siswa?kelas_id=${kelasId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setSiswaOptions(
-          data.data.map((siswa: any) => ({
-            value: siswa.id,
-            label: `${siswa.nama} (${siswa.nis})`,
-          })),
-        )
-      }
-    } catch (error) {
-      console.error("Error fetching siswa options:", error)
-    }
-  }
 
   useEffect(() => {
     fetchData()
@@ -322,111 +86,205 @@ export default function PenilaianSikapPage() {
   }, [])
 
   useEffect(() => {
-    if (selectedMasterTahunAjaran) {
-      fetchTingkatanOptions()
-    } else {
-      setTingkatanOptions([])
-      setSelectedTingkatan(null)
-    }
-  }, [selectedMasterTahunAjaran])
+    setFilteredData(data) // No filtering for now
+  }, [data])
 
+  // Set filtered kelas options to all kelas (no filtering by tingkatan)
   useEffect(() => {
-    if (selectedTingkatan) {
-      fetchKelasOptions(selectedTingkatan)
-    } else {
-      setKelasOptions([])
-      setSelectedKelas(null)
-    }
-  }, [selectedTingkatan])
+    setFilteredKelasOptions(kelasOptions)
+  }, [kelasOptions])
 
-  useEffect(() => {
-    if (selectedKelas) {
-      fetchSiswaOptions(selectedKelas)
-    } else {
-      setSiswaOptions([])
-    }
-  }, [selectedKelas])
-
-  const handlePageChange = useCallback((page: number) => {
-    fetchData(page, searchTerm)
-  }, [fetchData, searchTerm])
-
-  const handleSearch = useCallback((search: string) => {
-    setSearchTerm(search)
-    fetchData(1, search)
-  }, [fetchData])
-
-  const handleAdd = () => {
-    setSelectedPenilaian(null)
-    setShowFormModal(true)
-  }
-
-  const handleEdit = (penilaian: PenilaianSikap) => {
-    setSelectedPenilaian(penilaian)
-    setShowFormModal(true)
-  }
-
-  const handleDelete = (penilaian: PenilaianSikap) => {
-    setSelectedPenilaian(penilaian)
-    setShowDeleteDialog(true)
-  }
-
-  const handleFormSubmit = async (formData: Record<string, any>) => {
-    setFormLoading(true)
+  const fetchData = async () => {
     try {
-      const url = selectedPenilaian ? `/api/penilaian-sikap/${selectedPenilaian.id}` : "/api/penilaian-sikap"
-      const method = selectedPenilaian ? "PUT" : "POST"
-
-      // Only send the required fields for the API
-      const apiData = {
-        siswa_id: formData.siswa_id,
-        periode_ajaran_id: formData.periode_ajaran_id,
-        indikator_sikap_id: formData.indikator_sikap_id,
-        nilai: Number(formData.nilai),
-        keterangan: formData.keterangan || null,
-      }
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(apiData),
-      })
-
+      const response = await fetch("/api/penilaian-sikap")
       const result = await response.json()
-
-      if (result.success) {
-        toast({
-          title: "Berhasil",
-          description: result.message || `Penilaian sikap berhasil ${selectedPenilaian ? "diperbarui" : "ditambahkan"}`,
-        })
-        fetchData(pagination.page, searchTerm)
-        setShowFormModal(false)
-      } else {
-        toast({
-          title: "Error",
-          description: result.error || "Terjadi kesalahan",
-          variant: "destructive",
-        })
-      }
+      setData(result.data || result)
     } catch (error) {
       toast({
         title: "Error",
-        description: "Terjadi kesalahan saat menyimpan data",
+        description: "Gagal memuat data penilaian sikap",
         variant: "destructive",
       })
     } finally {
-      setFormLoading(false)
+      setLoading(false)
     }
   }
 
-  const handleDeleteConfirm = async () => {
-    if (!selectedPenilaian) return
+  const fetchOptions = async () => {
+    try {
+      const [siswaRes, indikatorRes, kelasRes, periodeRes] = await Promise.all([
+        fetch("/api/siswa"),
+        fetch("/api/indikator-sikap"),
+        fetch("/api/kelas"),
+        fetch("/api/periode-ajaran"),
+      ])
+
+      const [siswa, indikator, kelas, periode] = await Promise.all([
+        siswaRes.json(),
+        indikatorRes.json(),
+        kelasRes.json(),
+        periodeRes.json(),
+      ])
+
+      setSiswaOptions(siswa.success ? (siswa.data || []) : [])
+      setIndikatorSikapOptions(indikator.success ? (indikator.data || []) : [])
+      setKelasOptions(kelas.success ? (kelas.data || []) : [])
+      setPeriodeOptions(periode.success ? (periode.data || []) : [])
+    } catch (error) {
+      console.error("Error fetching options:", error)
+      setSiswaOptions([])
+      setIndikatorSikapOptions([])
+      setKelasOptions([])
+      setPeriodeOptions([])
+    }
+  }
+
+  const handleSubmit = async (data: Record<string, any>) => {
+    try {
+      const url = editingItem ? `/api/penilaian-sikap/${editingItem.id}` : "/api/penilaian-sikap"
+      const method = editingItem ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Berhasil",
+          description: `Data penilaian sikap berhasil ${editingItem ? "diperbarui" : "ditambahkan"}`,
+        })
+        setIsModalOpen(false)
+        resetForm()
+        fetchData()
+      } else {
+        throw new Error("Failed to save")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal menyimpan data penilaian sikap",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleEdit = (item: PenilaianSikap) => {
+    setEditingItem(item)
+    setFormData({
+      siswa_id: item.siswa_id,
+      indikator_sikap_id: item.indikator_sikap_id,
+      periode_ajaran_id: item.periode_ajaran_id,
+      nilai: item.nilai,
+    })
+    setIsModalOpen(true)
+  }
+
+  const handleDelete = async (item: PenilaianSikap) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus data penilaian sikap ini?")) return
 
     try {
-      const response = await fetch(`/api/penilaian-sikap/${selectedPenilaian.id}`, {
+      const response = await fetch(`/api/penilaian-sikap/${item.id}`, {
         method: "DELETE",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Berhasil",
+          description: "Data penilaian sikap berhasil dihapus",
+        })
+        fetchData()
+      } else {
+        throw new Error("Failed to delete")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal menghapus data penilaian sikap",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      siswa_id: "",
+      indikator_sikap_id: "",
+      periode_ajaran_id: "",
+      nilai: 0,
+    })
+    setEditingItem(null)
+  }
+
+  const handleDownloadTemplate = async () => {
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/export/excel/penilaian-sikap/template/${selectedKelasForTemplate}?periode_ajaran_id=${selectedPeriodeAjaran}`)
+      if (!response.ok) {
+        throw new Error("Failed to download template")
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `template_penilaian_sikap_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Berhasil",
+        description: "Template berhasil diunduh",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal mengunduh template",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleImportExcel = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "Pilih File",
+        description: "Silakan pilih file Excel terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsImporting(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      formData.append("kelas_id", selectedKelasForTemplate)
+      formData.append("periode_ajaran_id", selectedPeriodeAjaran)
+
+      const response = await fetch("/api/upload/excel/penilaian-sikap", {
+        method: "POST",
+        body: formData,
       })
 
       const result = await response.json()
@@ -434,78 +292,152 @@ export default function PenilaianSikapPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: "Penilaian sikap berhasil dihapus",
+          description: result.message,
         })
-        fetchData(pagination.page, searchTerm)
+        setSelectedFile(null)
+        fetchData() // Refresh data
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal menghapus penilaian sikap",
+          description: result.error,
           variant: "destructive",
         })
+        if (result.details) {
+          console.error("Import errors:", result.details)
+        }
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Terjadi kesalahan saat menghapus data",
+        description: "Gagal mengimpor data",
         variant: "destructive",
       })
-    }
-  }
-
-  const getInitialFormData = () => {
-    if (!selectedPenilaian) return {}
-
-    // For editing, we need to set the selected values for cascading
-    if (selectedPenilaian.siswa?.kelas?.tingkatan) {
-      setSelectedTingkatan(selectedPenilaian.siswa.kelas.tingkatan.id)
-      setSelectedKelas(selectedPenilaian.siswa.kelas.id)
-    }
-
-    return {
-      ...selectedPenilaian,
-      master_tahun_ajaran_id: selectedPenilaian.siswa?.master_tahun_ajaran?.id,
-      tingkatan_id: selectedPenilaian.siswa?.kelas?.tingkatan?.id,
-      kelas_id: selectedPenilaian.siswa?.kelas?.id,
+    } finally {
+      setIsImporting(false)
     }
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto p-6 space-y-6">
+      <PageHeader title="Penilaian Sikap" description="Kelola data penilaian sikap siswa" />
+
+      <div className="flex justify-between items-center">
+        <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Select value={selectedPeriodeAjaran} onValueChange={setSelectedPeriodeAjaran}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih Periode Ajaran" />
+              </SelectTrigger>
+              <SelectContent>
+                {periodeOptions?.map((periode: any) => (
+                  <SelectItem key={periode.id} value={periode.id.toString()}>
+                    {periode.nama_ajaran} - Semester {periode.semester === "SATU" ? "1" : "2"}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedPeriodeAjaran}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih Kelas" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredKelasOptions?.map((kelas: any) => (
+                  <SelectItem key={kelas.id} value={kelas.id.toString()}>
+                    Kelas: {kelas.nama_kelas || 'N/A'} - Tingkatan: {kelas.tingkatan?.nama_tingkatan || 'N/A'} {kelas.wali_kelas ? `- Wali: ${kelas.wali_kelas.nama}` : ''}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedPeriodeAjaran || !selectedKelasForTemplate}>
+              <FileDown className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              className="max-w-xs"
+            />
+            <Button
+              variant="outline"
+              onClick={handleImportExcel}
+              disabled={!selectedFile || isImporting}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isImporting ? "Importing..." : "Import Excel"}
+            </Button>
+          </div>
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Tambah Penilaian Sikap
+          </Button>
+        </div>
+      </div>
+
       <DataTable
-        title="Penilaian Sikap"
+        title="Data Penilaian Sikap"
+        data={filteredData}
         columns={columns}
-        data={data}
         loading={loading}
-        pagination={pagination}
-        onPageChange={handlePageChange}
-        onSearch={handleSearch}
-        onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        searchPlaceholder="Cari nama atau NIS siswa..."
-        addButtonText="Tambah Penilaian"
-        emptyMessage="Belum ada data penilaian sikap"
       />
 
       <FormModal
-        title={selectedPenilaian ? "Edit Penilaian Sikap" : "Tambah Penilaian Sikap"}
-        fields={getFormFields()}
-        initialData={getInitialFormData()}
-        open={showFormModal}
-        onClose={() => setShowFormModal(false)}
-        onSubmit={handleFormSubmit}
-        loading={formLoading}
-      />
-
-      <ConfirmDialog
-        open={showDeleteDialog}
-        onClose={() => setShowDeleteDialog(false)}
-        onConfirm={handleDeleteConfirm}
-        title="Hapus Penilaian Sikap"
-        description={`Apakah Anda yakin ingin menghapus penilaian sikap siswa "${selectedPenilaian?.siswa.nama}" untuk indikator "${selectedPenilaian?.indikator_sikap.indikator}"?`}
-        confirmText="Hapus"
-        variant="destructive"
+        title={editingItem ? "Edit Penilaian Sikap" : "Tambah Penilaian Sikap"}
+        fields={[
+          {
+            name: "siswa_id",
+            label: "Siswa",
+            type: "select",
+            required: true,
+            options: siswaOptions?.map((siswa: any) => ({
+              value: siswa.id,
+              label: `${siswa.nama} - ${siswa.nis}`
+            })) || []
+          },
+          {
+            name: "indikator_sikap_id",
+            label: "Indikator Sikap",
+            type: "select",
+            required: true,
+            options: indikatorSikapOptions?.map((indikator: any) => ({
+              value: indikator.id,
+              label: indikator.indikator
+            })) || []
+          },
+          {
+            name: "periode_ajaran_id",
+            label: "Periode Ajaran",
+            type: "select",
+            required: true,
+            options: periodeOptions?.map((periode: any) => ({
+              value: periode.id,
+              label: periode.nama_ajaran
+            })) || []
+          },
+          {
+            name: "nilai",
+            label: "Nilai",
+            type: "number",
+            required: true,
+            min: 0
+          }
+        ]}
+        initialData={editingItem ? {
+          siswa_id: editingItem.siswa_id,
+          indikator_sikap_id: editingItem.indikator_sikap_id,
+          periode_ajaran_id: editingItem.periode_ajaran_id,
+          nilai: editingItem.nilai
+        } : {}}
+        open={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          resetForm()
+        }}
+        onSubmit={handleSubmit}
       />
     </div>
   )

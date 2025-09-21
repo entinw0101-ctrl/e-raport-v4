@@ -1,177 +1,99 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import { toast } from "@/hooks/use-toast"
-import { SaveIcon } from "lucide-react"
+import type React from "react"
 
-interface StudentData {
-  siswa_id: number
-  nama: string
-  nis: string
-  kelas: string
-  [key: string]: any // For dynamic indicator columns
+// Force dynamic rendering to avoid build-time data fetching issues
+export const dynamic = 'force-dynamic'
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { DataTable } from "@/src/components/DataTable"
+import { FormModal } from "@/src/components/FormModal"
+import { PageHeader } from "@/src/components/PageHeader"
+import { useToast } from "@/hooks/use-toast"
+import { Plus, FileDown, Upload } from "lucide-react"
+
+interface Kehadiran {
+  id: string
+  siswa_id: string
+  indikator_kehadiran_id: string
+  periode_ajaran_id: string
+  sakit: number
+  izin: number
+  alpha: number
+  created_at: string
+  siswa: { nama: string; nis: string; kelas: { nama_kelas: string } }
+  indikator_kehadiran: { nama_indikator: string }
+  periode_ajaran: { nama_ajaran: string }
 }
 
-interface Indicator {
-  id: number
-  nama_indikator: string
+interface FormData {
+  siswa_id: string
+  indikator_kehadiran_id: string
+  periode_ajaran_id: string
+  sakit: number
+  izin: number
+  alpha: number
 }
 
 export default function KehadiranPage() {
-  const [data, setData] = useState<StudentData[]>([])
-  const [indicators, setIndicators] = useState<Indicator[]>([])
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [data, setData] = useState<Kehadiran[]>([])
+  const [filteredData, setFilteredData] = useState<Kehadiran[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<Kehadiran | null>(null)
+  const [formData, setFormData] = useState<FormData>({
+    siswa_id: "",
+    indikator_kehadiran_id: "",
+    periode_ajaran_id: "",
+    sakit: 0,
+    izin: 0,
+    alpha: 0,
+  })
 
-  // Hierarchical filter states
-  const [selectedMasterTahunAjaran, setSelectedMasterTahunAjaran] = useState("")
-  const [selectedSemester, setSelectedSemester] = useState("")
-  const [selectedTingkatan, setSelectedTingkatan] = useState("")
-  const [selectedKelas, setSelectedKelas] = useState("")
+  // Options for dropdowns
+  const [siswaOptions, setSiswaOptions] = useState<any[]>([])
+  const [indikatorKehadiranOptions, setIndikatorKehadiranOptions] = useState<any[]>([])
+  const [kelasOptions, setKelasOptions] = useState<any[]>([])
+  const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
+  const [filteredKelasOptions, setFilteredKelasOptions] = useState<any[]>([])
 
-  // Options for selects
-  const [masterTahunAjaranOptions, setMasterTahunAjaranOptions] = useState<{ value: number; label: string }[]>([])
-  const [tingkatanOptions, setTingkatanOptions] = useState<{ value: number; label: string }[]>([])
-  const [kelasOptions, setKelasOptions] = useState<{ value: number; label: string }[]>([])
+  // Template selection states
+  const [selectedPeriodeAjaran, setSelectedPeriodeAjaran] = useState<string>("")
+  const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
 
-  // Fetch options on mount
+  const { toast } = useToast()
+
   useEffect(() => {
-    fetchInitialOptions()
+    fetchData()
+    fetchOptions()
   }, [])
 
-  // Fetch tingkatan when master tahun ajaran and semester are selected
   useEffect(() => {
-    if (selectedMasterTahunAjaran && selectedSemester) {
-      fetchTingkatanOptions()
-      setSelectedTingkatan("")
-      setSelectedKelas("")
-    }
-  }, [selectedMasterTahunAjaran, selectedSemester])
+    setFilteredData(data) // No filtering for now
+  }, [data])
 
-  // Fetch kelas when tingkatan changes
+  // Set filtered kelas options to all kelas (no filtering by tingkatan)
   useEffect(() => {
-    if (selectedTingkatan) {
-      fetchKelasOptions()
-      setSelectedKelas("")
-    }
-  }, [selectedTingkatan])
+    setFilteredKelasOptions(kelasOptions)
+  }, [kelasOptions])
 
-  // Fetch student data when all filters are selected
-  useEffect(() => {
-    if (selectedMasterTahunAjaran && selectedSemester && selectedTingkatan && selectedKelas) {
-      fetchStudentData()
-    } else {
-      setData([])
-    }
-  }, [selectedMasterTahunAjaran, selectedSemester, selectedTingkatan, selectedKelas])
-
-  const fetchInitialOptions = async () => {
+  const fetchData = async () => {
     try {
-      // Fetch master tahun ajaran options
-      const masterTahunAjaranResponse = await fetch("/api/master-tahun-ajaran")
-      if (masterTahunAjaranResponse.ok) {
-        const masterTahunAjaranData = await masterTahunAjaranResponse.json()
-        setMasterTahunAjaranOptions(
-          masterTahunAjaranData.data.map((master: any) => ({
-            value: master.id,
-            label: master.nama_ajaran,
-          }))
-        )
-      }
+      const response = await fetch("/api/kehadiran")
+      const result = await response.json()
+      setData(result.data || result)
     } catch (error) {
-      console.error("Error fetching initial options:", error)
-    }
-  }
-
-  const fetchTingkatanOptions = async () => {
-    try {
-      const response = await fetch("/api/tingkatan")
-      if (response.ok) {
-        const data = await response.json()
-        setTingkatanOptions(
-          data.data.map((tingkatan: any) => ({
-            value: tingkatan.id,
-            label: tingkatan.nama_tingkatan,
-          }))
-        )
-      }
-    } catch (error) {
-      console.error("Error fetching tingkatan options:", error)
-    }
-  }
-
-  const fetchKelasOptions = async () => {
-    try {
-      const response = await fetch(`/api/kelas?tingkatan_id=${selectedTingkatan}`)
-      if (response.ok) {
-        const data = await response.json()
-        setKelasOptions(
-          data.data.map((kelas: any) => ({
-            value: kelas.id,
-            label: kelas.nama_kelas,
-          }))
-        )
-      }
-    } catch (error) {
-      console.error("Error fetching kelas options:", error)
-    }
-  }
-
-  const fetchStudentData = async () => {
-    setLoading(true)
-    try {
-      // First, find the Periode Ajaran ID based on Master Tahun Ajaran and Semester
-      const periodeResponse = await fetch(
-        `/api/periode-ajaran?master_tahun_ajaran_id=${selectedMasterTahunAjaran}&semester=${selectedSemester}`
-      )
-
-      if (!periodeResponse.ok) {
-        toast({
-          title: "Error",
-          description: "Gagal menemukan periode ajaran",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const periodeData = await periodeResponse.json()
-      if (periodeData.data.length === 0) {
-        toast({
-          title: "Error",
-          description: "Periode ajaran tidak ditemukan",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const periodeAjaranId = periodeData.data[0].id
-
-      // Fetch student attendance data
-      const response = await fetch(
-        `/api/kehadiran?periode_ajaran_id=${periodeAjaranId}&kelas_id=${selectedKelas}`
-      )
-
-      if (response.ok) {
-        const result = await response.json()
-        setData(result.data)
-        setIndicators(result.indicators)
-      } else {
-        toast({
-          title: "Error",
-          description: "Gagal mengambil data kehadiran",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error fetching student data:", error)
       toast({
         title: "Error",
-        description: "Terjadi kesalahan saat mengambil data",
+        description: "Gagal memuat data kehadiran",
         variant: "destructive",
       })
     } finally {
@@ -179,76 +101,214 @@ export default function KehadiranPage() {
     }
   }
 
-  const handleValueChange = (siswaId: number, indicatorId: number, field: 'sakit' | 'izin' | 'alpha', value: string) => {
-    const numValue = value === "" ? 0 : Math.max(0, parseInt(value) || 0)
+  const fetchOptions = async () => {
+    try {
+      const [siswaRes, indikatorRes, kelasRes, periodeRes] = await Promise.all([
+        fetch("/api/siswa"),
+        fetch("/api/indikator-kehadiran"),
+        fetch("/api/kelas"),
+        fetch("/api/periode-ajaran"),
+      ])
 
-    setData(prev =>
-      prev.map(student =>
-        student.siswa_id === siswaId
-          ? { ...student, [`indikator_${indicatorId}_${field}`]: numValue }
-          : student
-      )
-    )
+      const [siswa, indikator, kelas, periode] = await Promise.all([
+        siswaRes.json(),
+        indikatorRes.json(),
+        kelasRes.json(),
+        periodeRes.json(),
+      ])
+
+      setSiswaOptions(siswa.success ? (siswa.data || []) : [])
+      setIndikatorKehadiranOptions(indikator.success ? (indikator.data || []) : [])
+      setKelasOptions(kelas.success ? (kelas.data || []) : [])
+      setPeriodeOptions(periode.success ? (periode.data || []) : [])
+    } catch (error) {
+      console.error("Error fetching options:", error)
+      setSiswaOptions([])
+      setIndikatorKehadiranOptions([])
+      setKelasOptions([])
+      setPeriodeOptions([])
+    }
   }
 
-  const handleSave = async () => {
-    if (!selectedMasterTahunAjaran || !selectedSemester || !selectedTingkatan || !selectedKelas) {
+  const columns = [
+    { key: "siswa.nama", label: "Nama Siswa" },
+    { key: "siswa.nis", label: "NIS" },
+    { key: "indikator_kehadiran.nama_indikator", label: "Indikator Kehadiran" },
+    { key: "siswa.kelas.nama_kelas", label: "Kelas" },
+    {
+      key: "sakit",
+      label: "Sakit",
+      render: (value, row) => (
+        <span>{value}</span>
+      ),
+    },
+    {
+      key: "izin",
+      label: "Izin",
+      render: (value, row) => (
+        <span>{value}</span>
+      ),
+    },
+    {
+      key: "alpha",
+      label: "Alpha",
+      render: (value, row) => (
+        <span>{value}</span>
+      ),
+    },
+    { key: "periode_ajaran.nama_ajaran", label: "Periode" },
+  ]
+
+  const handleSubmit = async (data: Record<string, any>) => {
+    try {
+      const url = editingItem ? `/api/kehadiran/${editingItem.id}` : "/api/kehadiran"
+      const method = editingItem ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Berhasil",
+          description: `Data kehadiran berhasil ${editingItem ? "diperbarui" : "ditambahkan"}`,
+        })
+        setIsModalOpen(false)
+        resetForm()
+        fetchData()
+      } else {
+        throw new Error("Failed to save")
+      }
+    } catch (error) {
       toast({
         title: "Error",
-        description: "Pilih master tahun ajaran, semester, tingkatan, dan kelas terlebih dahulu",
+        description: "Gagal menyimpan data kehadiran",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleEdit = (item: Kehadiran) => {
+    setEditingItem(item)
+    setFormData({
+      siswa_id: item.siswa_id,
+      indikator_kehadiran_id: item.indikator_kehadiran_id,
+      periode_ajaran_id: item.periode_ajaran_id,
+      sakit: item.sakit,
+      izin: item.izin,
+      alpha: item.alpha,
+    })
+    setIsModalOpen(true)
+  }
+
+  const handleDelete = async (item: Kehadiran) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus data kehadiran ini?")) return
+
+    try {
+      const response = await fetch(`/api/kehadiran/${item.id}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Berhasil",
+          description: "Data kehadiran berhasil dihapus",
+        })
+        fetchData()
+      } else {
+        throw new Error("Failed to delete")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal menghapus data kehadiran",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      siswa_id: "",
+      indikator_kehadiran_id: "",
+      periode_ajaran_id: "",
+      sakit: 0,
+      izin: 0,
+      alpha: 0,
+    })
+    setEditingItem(null)
+  }
+
+  const handleDownloadTemplate = async () => {
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
         variant: "destructive",
       })
       return
     }
 
-    setSaving(true)
     try {
-      // Find the Periode Ajaran ID
-      const periodeResponse = await fetch(
-        `/api/periode-ajaran?master_tahun_ajaran_id=${selectedMasterTahunAjaran}&semester=${selectedSemester}`
-      )
-
-      if (!periodeResponse.ok) {
-        toast({
-          title: "Error",
-          description: "Gagal menemukan periode ajaran",
-          variant: "destructive",
-        })
-        return
+      const response = await fetch(`/api/export/excel/kehadiran/template/${selectedKelasForTemplate}?periode_ajaran_id=${selectedPeriodeAjaran}`)
+      if (!response.ok) {
+        throw new Error("Failed to download template")
       }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `template_kehadiran_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
 
-      const periodeData = await periodeResponse.json()
-      if (periodeData.data.length === 0) {
-        toast({
-          title: "Error",
-          description: "Periode ajaran tidak ditemukan",
-          variant: "destructive",
-        })
-        return
-      }
+      toast({
+        title: "Berhasil",
+        description: "Template berhasil diunduh",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal mengunduh template",
+        variant: "destructive",
+      })
+    }
+  }
 
-      const periodeAjaranId = periodeData.data[0].id
+  const handleImportExcel = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "Pilih File",
+        description: "Silakan pilih file Excel terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
 
-      const attendanceData = data.map(student => ({
-        siswa_id: student.siswa_id,
-        ...indicators.reduce((acc, indicator) => ({
-          ...acc,
-          [`indikator_${indicator.id}_sakit`]: student[`indikator_${indicator.id}_sakit`] || 0,
-          [`indikator_${indicator.id}_izin`]: student[`indikator_${indicator.id}_izin`] || 0,
-          [`indikator_${indicator.id}_alpha`]: student[`indikator_${indicator.id}_alpha`] || 0,
-          [`indikator_${indicator.id}_id`]: student[`indikator_${indicator.id}_id`] || null,
-        }), {}),
-      }))
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
 
-      const response = await fetch("/api/kehadiran/batch", {
+    setIsImporting(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      formData.append("kelas_id", selectedKelasForTemplate)
+      formData.append("periode_ajaran_id", selectedPeriodeAjaran)
+
+      const response = await fetch("/api/upload/excel/kehadiran", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          attendance: attendanceData,
-          periode_ajaran_id: periodeAjaranId
-        }),
+        body: formData,
       })
 
       const result = await response.json()
@@ -256,205 +316,169 @@ export default function KehadiranPage() {
       if (result.success) {
         toast({
           title: "Berhasil",
-          description: "Data kehadiran berhasil disimpan",
+          description: result.message,
         })
-        // Refresh data
-        fetchStudentData()
+        setSelectedFile(null)
+        fetchData() // Refresh data
       } else {
         toast({
           title: "Error",
-          description: result.error || "Gagal menyimpan data kehadiran",
+          description: result.error,
           variant: "destructive",
         })
+        if (result.details) {
+          console.error("Import errors:", result.details)
+        }
       }
     } catch (error) {
-      console.error("Error saving attendance:", error)
       toast({
         title: "Error",
-        description: "Terjadi kesalahan saat menyimpan data",
+        description: "Gagal mengimpor data",
         variant: "destructive",
       })
     } finally {
-      setSaving(false)
+      setIsImporting(false)
     }
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Rekapitulasi Kehadiran Siswa</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Hierarchical Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Master Tahun Ajaran</label>
-              <Select value={selectedMasterTahunAjaran} onValueChange={setSelectedMasterTahunAjaran}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih tahun ajaran..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {masterTahunAjaranOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value.toString()}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+    <div className="container mx-auto p-6 space-y-6">
+      <PageHeader title="Kehadiran" description="Kelola data kehadiran siswa" />
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Semester</label>
-              <Select
-                value={selectedSemester}
-                onValueChange={setSelectedSemester}
-                disabled={!selectedMasterTahunAjaran}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih semester..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SATU">Semester 1</SelectItem>
-                  <SelectItem value="DUA">Semester 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Tingkatan</label>
-              <Select
-                value={selectedTingkatan}
-                onValueChange={setSelectedTingkatan}
-                disabled={!selectedMasterTahunAjaran || !selectedSemester}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih tingkatan..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {tingkatanOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value.toString()}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Kelas</label>
-              <Select
-                value={selectedKelas}
-                onValueChange={setSelectedKelas}
-                disabled={!selectedTingkatan}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih kelas..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {kelasOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value.toString()}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <div className="flex justify-between items-center">
+        <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Select value={selectedPeriodeAjaran} onValueChange={setSelectedPeriodeAjaran}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih Periode Ajaran" />
+              </SelectTrigger>
+              <SelectContent>
+                {periodeOptions?.map((periode: any) => (
+                  <SelectItem key={periode.id} value={periode.id.toString()}>
+                    {periode.nama_ajaran} - Semester {periode.semester === "SATU" ? "1" : "2"}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedPeriodeAjaran}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih Kelas" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredKelasOptions?.map((kelas: any) => (
+                  <SelectItem key={kelas.id} value={kelas.id.toString()}>
+                    Kelas: {kelas.nama_kelas || 'N/A'} - Tingkatan: {kelas.tingkatan?.nama_tingkatan || 'N/A'} {kelas.wali_kelas ? `- Wali: ${kelas.wali_kelas.nama}` : ''}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedPeriodeAjaran || !selectedKelasForTemplate}>
+              <FileDown className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
           </div>
+          <div className="flex items-center gap-2">
+            <Input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              className="max-w-xs"
+            />
+            <Button
+              variant="outline"
+              onClick={handleImportExcel}
+              disabled={!selectedFile || isImporting}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isImporting ? "Importing..." : "Import Excel"}
+            </Button>
+          </div>
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Tambah Kehadiran
+          </Button>
+        </div>
+      </div>
 
-          {/* Save Button */}
-          {data.length > 0 && (
-            <div className="flex justify-end">
-              <Button onClick={handleSave} disabled={saving}>
-                <SaveIcon className="w-4 h-4 mr-2" />
-                {saving ? "Menyimpan..." : "Simpan Semua"}
-              </Button>
-            </div>
-          )}
+      <DataTable
+        title="Data Kehadiran"
+        data={filteredData}
+        columns={columns}
+        loading={loading}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+      />
 
-          {/* Student Attendance Table */}
-          {loading ? (
-            <div className="text-center py-8">Memuat data...</div>
-          ) : data.length > 0 ? (
-            <div className="border rounded-lg overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[100px]">NIS</TableHead>
-                    <TableHead className="min-w-[200px]">Nama Siswa</TableHead>
-                    <TableHead className="min-w-[150px]">Kelas</TableHead>
-                    {indicators.map((indicator) => (
-                      <TableHead key={indicator.id} className="text-center min-w-[300px]" colSpan={3}>
-                        {indicator.nama_indikator}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                  <TableRow>
-                    <TableHead></TableHead>
-                    <TableHead></TableHead>
-                    <TableHead></TableHead>
-                    {indicators.map((indicator) => (
-                      <React.Fragment key={`header-${indicator.id}`}>
-                        <TableHead className="text-center min-w-[100px]">Sakit</TableHead>
-                        <TableHead className="text-center min-w-[100px]">Izin</TableHead>
-                        <TableHead className="text-center min-w-[100px]">Alpha</TableHead>
-                      </React.Fragment>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.map((student) => (
-                    <TableRow key={student.siswa_id}>
-                      <TableCell className="font-mono">{student.nis}</TableCell>
-                      <TableCell className="font-medium">{student.nama}</TableCell>
-                      <TableCell>{student.kelas}</TableCell>
-                      {indicators.map((indicator) => (
-                        <React.Fragment key={`inputs-${student.siswa_id}-${indicator.id}`}>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              value={student[`indikator_${indicator.id}_sakit`] || 0}
-                              onChange={(e) => handleValueChange(student.siswa_id, indicator.id, 'sakit', e.target.value)}
-                              className="w-full text-center"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              value={student[`indikator_${indicator.id}_izin`] || 0}
-                              onChange={(e) => handleValueChange(student.siswa_id, indicator.id, 'izin', e.target.value)}
-                              className="w-full text-center"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              value={student[`indikator_${indicator.id}_alpha`] || 0}
-                              onChange={(e) => handleValueChange(student.siswa_id, indicator.id, 'alpha', e.target.value)}
-                              className="w-full text-center"
-                            />
-                          </TableCell>
-                        </React.Fragment>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : selectedMasterTahunAjaran && selectedSemester && selectedTingkatan && selectedKelas ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Tidak ada data siswa untuk ditampilkan
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              Pilih master tahun ajaran, semester, tingkatan, dan kelas untuk menampilkan data kehadiran
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <FormModal
+        title={editingItem ? "Edit Kehadiran" : "Tambah Kehadiran"}
+        fields={[
+          {
+            name: "siswa_id",
+            label: "Siswa",
+            type: "select",
+            required: true,
+            options: siswaOptions?.map((siswa: any) => ({
+              value: siswa.id,
+              label: `${siswa.nama} - ${siswa.nis}`
+            })) || []
+          },
+          {
+            name: "indikator_kehadiran_id",
+            label: "Indikator Kehadiran",
+            type: "select",
+            required: true,
+            options: indikatorKehadiranOptions?.map((indikator: any) => ({
+              value: indikator.id,
+              label: indikator.nama_indikator
+            })) || []
+          },
+          {
+            name: "periode_ajaran_id",
+            label: "Periode Ajaran",
+            type: "select",
+            required: true,
+            options: periodeOptions?.map((periode: any) => ({
+              value: periode.id,
+              label: periode.nama_ajaran
+            })) || []
+          },
+          {
+            name: "sakit",
+            label: "Sakit",
+            type: "number",
+            required: true,
+            min: 0
+          },
+          {
+            name: "izin",
+            label: "Izin",
+            type: "number",
+            required: true,
+            min: 0
+          },
+          {
+            name: "alpha",
+            label: "Alpha",
+            type: "number",
+            required: true,
+            min: 0
+          }
+        ]}
+        initialData={editingItem ? {
+          siswa_id: editingItem.siswa_id,
+          indikator_kehadiran_id: editingItem.indikator_kehadiran_id,
+          periode_ajaran_id: editingItem.periode_ajaran_id,
+          sakit: editingItem.sakit,
+          izin: editingItem.izin,
+          alpha: editingItem.alpha
+        } : {}}
+        open={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          resetForm()
+        }}
+        onSubmit={handleSubmit}
+      />
     </div>
   )
 }
