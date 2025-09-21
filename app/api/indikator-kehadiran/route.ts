@@ -11,22 +11,46 @@ export async function GET(request: NextRequest) {
 
     // Check if Prisma client is properly initialized
     if (!prisma) {
-      console.error("Prisma client is not initialized")
+      console.error("❌ Prisma client is not initialized")
       return NextResponse.json({
         success: false,
         error: "Database client not initialized",
-        details: "Prisma client is undefined"
+        details: "Prisma client is undefined",
+        troubleshooting: [
+          "Check if DATABASE_URL environment variable is set",
+          "Verify database connection string format",
+          "Ensure database server is accessible"
+        ]
       }, { status: 500 })
     }
 
-    if (!prisma.indikatorKehadiran) {
-      console.error("Prisma indikatorKehadiran model is not available")
+    // Check if all required Prisma models are available
+    const requiredModels = [
+      'indikatorKehadiran',
+      'mataPelajaran',
+      'kelas',
+      'siswa',
+      'periodeAjaran'
+    ]
+
+    const missingModels = requiredModels.filter(model => !prisma[model as keyof typeof prisma])
+
+    if (missingModels.length > 0) {
+      console.error("❌ Missing Prisma models:", missingModels)
       return NextResponse.json({
         success: false,
-        error: "Database model not available",
-        details: "indikatorKehadiran model is undefined"
+        error: "Database schema not synchronized",
+        details: `Missing Prisma models: ${missingModels.join(', ')}`,
+        troubleshooting: [
+          "Run database migrations: npx prisma migrate deploy",
+          "Generate Prisma client: npx prisma generate",
+          "Check if database schema matches Prisma schema",
+          "Verify DATABASE_URL points to correct database"
+        ]
       }, { status: 500 })
     }
+
+    console.log("✅ All required Prisma models are available")
 
     // Test database connection
     try {
