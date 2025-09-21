@@ -168,21 +168,21 @@ export default function KurikulumPage() {
   const fetchOptions = async () => {
     try {
       // Fetch tingkatan options
-      const tingkatanResponse = await fetch("/api/tingkatan")
+      const tingkatanResponse = await fetch("/api/tingkatan?per_page=1000")
       const tingkatanResult = await tingkatanResponse.json()
       if (tingkatanResult.success) {
         setTingkatanOptions(tingkatanResult.data)
       }
 
       // Fetch mapel options
-      const mapelResponse = await fetch("/api/mata-pelajaran")
+      const mapelResponse = await fetch("/api/mata-pelajaran?per_page=1000")
       const mapelResult = await mapelResponse.json()
       if (mapelResult.success) {
         setMapelOptions(mapelResult.data)
       }
 
       // Fetch kitab options
-      const kitabResponse = await fetch("/api/kitab")
+      const kitabResponse = await fetch("/api/kitab?per_page=1000")
       const kitabResult = await kitabResponse.json()
       if (kitabResult.success) {
         setKitabOptions(kitabResult.data)

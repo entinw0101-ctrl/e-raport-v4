@@ -89,10 +89,10 @@ export default function NilaiUjianPage() {
     {
       key: "nilai_angka",
       label: "Nilai",
-      render: (item: NilaiUjian) => (
+      render: (value, row) => (
         <div className="flex items-center gap-2">
-          <span className="font-medium">{item.nilai_angka}</span>
-          <Badge variant={getGradeBadgeVariant(item.predikat)}>{item.predikat}</Badge>
+          <span className="font-medium">{value}</span>
+          <Badge variant={getGradeBadgeVariant(row.predikat)}>{row.predikat}</Badge>
         </div>
       ),
     },
@@ -135,7 +135,15 @@ export default function NilaiUjianPage() {
     try {
       const response = await fetch("/api/nilai-ujian")
       const result = await response.json()
-      setData(result.data || result) // Handle API response format
+      // Ensure nilai_angka is always a number
+      const rawData = result.data || result
+      const mappedData = Array.isArray(rawData)
+        ? rawData.map((item: any) => ({
+            ...item,
+            nilai_angka: typeof item.nilai_angka === "string" ? Number(item.nilai_angka) : item.nilai_angka,
+          }))
+        : rawData
+      setData(mappedData)
     } catch (error) {
       toast({
         title: "Error",

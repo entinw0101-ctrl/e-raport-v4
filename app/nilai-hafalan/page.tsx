@@ -2,6 +2,9 @@
 
 import type React from "react"
 
+// Force dynamic rendering to avoid build-time data fetching issues
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,10 +24,8 @@ interface NilaiHafalan {
   kitab_id: string
   kelas_id: string
   periode_id: string
-  jenis_hafalan: string
-  jumlah_halaman: number
-  nilai: number
-  grade: string
+  target_hafalan: string
+  predikat: string
   created_at: string
   siswa: { nama: string; nis: string }
   kitab: { nama: string }
@@ -37,9 +38,7 @@ interface FormData {
   kitab_id: string
   kelas_id: string
   periode_id: string
-  jenis_hafalan: string
-  jumlah_halaman: number
-  nilai: number
+  target_hafalan: string
 }
 
 export default function NilaiHafalanPage() {
@@ -53,75 +52,36 @@ export default function NilaiHafalanPage() {
     kitab_id: "",
     kelas_id: "",
     periode_id: "",
-    jenis_hafalan: "",
-    jumlah_halaman: 0,
-    nilai: 0,
+    target_hafalan: "",
   })
-
-  // Filter states (removed for now to fix build)
-  // const [filters, setFilters] = useState({
-  //   kelas_id: "",
-  //   kitab_id: "",
-  //   periode_id: "",
-  //   jenis_hafalan: "",
-  // })
 
   // Options for dropdowns
   const [siswaOptions, setSiswaOptions] = useState<any[]>([])
   const [kitabOptions, setKitabOptions] = useState<any[]>([])
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
+  const [tahunAjaranOptions, setTahunAjaranOptions] = useState<any[]>([])
+  const [filteredKelasOptions, setFilteredKelasOptions] = useState<any[]>([])
+
+  // Template selection states
+  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<string>("")
+  const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
 
   const { toast } = useToast()
-
-  const jenisHafalanOptions = [
-    { value: "Hafalan Baru", label: "Hafalan Baru" },
-    { value: "Muraja'ah", label: "Muraja'ah" },
-    { value: "Tasmi'", label: "Tasmi'" },
-    { value: "Imtihan", label: "Imtihan" },
-  ]
 
   const columns = [
     { key: "siswa.nama", label: "Nama Siswa" },
     { key: "siswa.nis", label: "NIS" },
     { key: "kitab.nama", label: "Kitab" },
-    { key: "kelas.nama_kelas", label: "Kelas" },
-    { key: "jenis_hafalan", label: "Jenis Hafalan" },
-    { key: "jumlah_halaman", label: "Jumlah Halaman" },
+    { key: "kelas.nama", label: "Kelas" },
     {
-      key: "nilai",
-      label: "Nilai",
+      key: "predikat",
+      label: "Predikat",
       render: (item: NilaiHafalan) => (
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{item.nilai}</span>
-          <Badge variant={getGradeBadgeVariant(item.grade)}>{item.grade}</Badge>
-        </div>
+        <Badge variant={getGradeBadgeVariant(item.predikat)}>{item.predikat}</Badge>
       ),
     },
     { key: "periode.nama", label: "Periode" },
-  ]
-
-  const filterOptions = [
-    {
-      key: "kelas_id",
-      label: "Kelas",
-      options: kelasOptions?.map((k: any) => ({ value: k.id, label: k.nama_kelas })) || [],
-    },
-    {
-      key: "kitab_id",
-      label: "Kitab",
-      options: kitabOptions?.map((k: any) => ({ value: k.id, label: k.nama })) || [],
-    },
-    {
-      key: "periode_id",
-      label: "Periode",
-      options: periodeOptions?.map((p: any) => ({ value: p.id, label: p.nama })) || [],
-    },
-    {
-      key: "jenis_hafalan",
-      label: "Jenis Hafalan",
-      options: jenisHafalanOptions,
-    },
   ]
 
   useEffect(() => {
@@ -132,6 +92,11 @@ export default function NilaiHafalanPage() {
   useEffect(() => {
     setFilteredData(data) // No filtering for now
   }, [data])
+
+  // Filter kelas options to all kelas (no filtering by tingkatan)
+  useEffect(() => {
+    setFilteredKelasOptions(kelasOptions)
+  }, [kelasOptions])
 
   const fetchData = async () => {
     try {
@@ -151,38 +116,43 @@ export default function NilaiHafalanPage() {
 
   const fetchOptions = async () => {
     try {
-      const [siswaRes, kitabRes, kelasRes, periodeRes] = await Promise.all([
+      const [siswaRes, kitabRes, kelasRes, periodeRes, tahunAjaranRes] = await Promise.all([
         fetch("/api/siswa"),
         fetch("/api/kitab"),
-        fetch("/api/kelas"),
+        fetch("/api/kelas?include=tingkatan,wali_kelas"),
         fetch("/api/periode-ajaran"),
+        fetch("/api/master-tahun-ajaran"),
       ])
 
-      const [siswa, kitab, kelas, periode] = await Promise.all([
+      const [siswa, kitab, kelas, periode, tahunAjaran] = await Promise.all([
         siswaRes.json(),
         kitabRes.json(),
         kelasRes.json(),
         periodeRes.json(),
+        tahunAjaranRes.json(),
       ])
 
-      setSiswaOptions(siswa.data || siswa)
-      setKitabOptions(kitab.data || kitab)
-      setKelasOptions(kelas.data || kelas)
-      setPeriodeOptions(periode.data || periode)
+      setSiswaOptions(siswa.success ? (siswa.data || []) : [])
+      setKitabOptions(kitab.success ? (kitab.data || []) : [])
+      setKelasOptions(kelas.success ? (kelas.data || []) : [])
+      setPeriodeOptions(periode.success ? (periode.data || []) : [])
+      setTahunAjaranOptions(tahunAjaran.success ? (tahunAjaran.data || []) : [])
     } catch (error) {
       console.error("Error fetching options:", error)
+      // Set empty arrays on error
+      setSiswaOptions([])
+      setKitabOptions([])
+      setKelasOptions([])
+      setPeriodeOptions([])
+      setTahunAjaranOptions([])
     }
   }
 
-  const getGradeBadgeVariant = (grade: string) => {
-    switch (grade) {
-      case "A":
+  const getGradeBadgeVariant = (predikat: string) => {
+    switch (predikat) {
+      case "Tercapai":
         return "default"
-      case "B":
-        return "secondary"
-      case "C":
-        return "outline"
-      case "D":
+      case "Tidak Tercapai":
         return "destructive"
       default:
         return "secondary"
@@ -227,9 +197,7 @@ export default function NilaiHafalanPage() {
       kitab_id: item.kitab_id,
       kelas_id: item.kelas_id,
       periode_id: item.periode_id,
-      jenis_hafalan: item.jenis_hafalan,
-      jumlah_halaman: item.jumlah_halaman,
-      nilai: item.nilai,
+      target_hafalan: item.target_hafalan,
     })
     setIsModalOpen(true)
   }
@@ -266,9 +234,7 @@ export default function NilaiHafalanPage() {
       kitab_id: "",
       kelas_id: "",
       periode_id: "",
-      jenis_hafalan: "",
-      jumlah_halaman: 0,
-      nilai: 0,
+      target_hafalan: "",
     })
     setEditingItem(null)
   }
@@ -295,12 +261,80 @@ export default function NilaiHafalanPage() {
     }
   }
 
+  const handleDownloadTemplate = async () => {
+    if (!selectedTahunAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih tahun ajaran dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/export/excel/nilai-hafalan/template/${selectedKelasForTemplate}?tahun_ajaran_id=${selectedTahunAjaran}`)
+      if (!response.ok) {
+        throw new Error("Failed to download template")
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `template_nilai_hafalan_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Berhasil",
+        description: "Template berhasil diunduh",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal mengunduh template",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <PageHeader title="Nilai Hafalan" description="Kelola nilai hafalan siswa" />
 
       <div className="flex justify-between items-center">
         <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Select value={selectedTahunAjaran} onValueChange={setSelectedTahunAjaran}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Pilih Tahun Ajaran" />
+              </SelectTrigger>
+              <SelectContent>
+                {tahunAjaranOptions?.map((ta: any) => (
+                  <SelectItem key={ta.id} value={ta.id.toString()}>
+                    {ta.nama_ajaran}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedTahunAjaran}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Pilih Kelas" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredKelasOptions?.map((kelas: any) => (
+                  <SelectItem key={kelas.id} value={kelas.id.toString()}>
+                    Kelas: {kelas.nama_kelas || 'N/A'} - Tingkatan: {kelas.tingkatan?.nama_tingkatan || 'N/A'} {kelas.wali_kelas ? `- Wali: ${kelas.wali_kelas.nama}` : ''}
+                  </SelectItem>
+                )) || []}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedTahunAjaran || !selectedKelasForTemplate}>
+              <FileDown className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
+          </div>
           <Button variant="outline" onClick={handleExport}>
             <FileDown className="w-4 h-4 mr-2" />
             Export Excel
@@ -365,26 +399,11 @@ export default function NilaiHafalanPage() {
             })) || []
           },
           {
-            name: "jenis_hafalan",
-            label: "Jenis Hafalan",
-            type: "select",
+            name: "target_hafalan",
+            label: "Target Hafalan",
+            type: "text",
             required: true,
-            options: jenisHafalanOptions
-          },
-          {
-            name: "jumlah_halaman",
-            label: "Jumlah Halaman",
-            type: "number",
-            required: true,
-            min: 0
-          },
-          {
-            name: "nilai",
-            label: "Nilai",
-            type: "number",
-            required: true,
-            min: 0,
-            max: 100
+            placeholder: "Contoh: Juz 1, Surat Al-Fatihah"
           }
         ]}
         initialData={editingItem ? {
@@ -392,9 +411,7 @@ export default function NilaiHafalanPage() {
           kitab_id: editingItem.kitab_id,
           kelas_id: editingItem.kelas_id,
           periode_id: editingItem.periode_id,
-          jenis_hafalan: editingItem.jenis_hafalan,
-          jumlah_halaman: editingItem.jumlah_halaman,
-          nilai: editingItem.nilai
+          target_hafalan: editingItem.target_hafalan
         } : {}}
         open={isModalOpen}
         onClose={() => {

@@ -157,7 +157,7 @@ export function FormModal({
             <SelectTrigger className={field.className}>
               <SelectValue placeholder={field.placeholder || `Pilih ${field.label}`} />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-60 overflow-y-auto">
               {field.options?.map((option) => (
                 <SelectItem key={option.value} value={option.value.toString()}>
                   {option.label}
