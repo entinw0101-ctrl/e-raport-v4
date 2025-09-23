@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const data = await prisma.indikatorSikap.findMany({
       where,
-      orderBy: { indikator: "asc" },
+      orderBy: { jenis_sikap: "asc" },
       skip,
       take: per_page,
     })
