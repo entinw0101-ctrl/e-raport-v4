@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon } from "lucide-react"
-import { format } from "date-fns"
+import { format, setYear, setMonth } from "date-fns"
 import { id } from "date-fns/locale"
 
 export interface FormField {
@@ -57,13 +57,27 @@ export function FormModal({
 }: FormModalProps) {
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
 
   useEffect(() => {
     if (open) {
       setFormData(initialData)
       setErrors({})
+
+      // Set calendar month to selected date or current date
+      // Find any date field in the form
+      const currentFields = typeof fields === "function" ? fields(initialData) : fields
+      const dateFields = currentFields.filter(f => f.type === 'date')
+      const dateFieldName = dateFields.length > 0 ? dateFields[0].name : null
+      const dateValue = dateFieldName ? initialData[dateFieldName] : null
+
+      if (dateValue) {
+        setCalendarMonth(new Date(dateValue))
+      } else {
+        setCalendarMonth(new Date())
+      }
     }
-  }, [open, initialData])
+  }, [open, initialData, fields])
 
   const handleInputChange = (name: string, value: any) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -168,27 +182,84 @@ export function FormModal({
         )
 
       case "date":
+        const selectedDate = value ? new Date(value) : undefined
+        const currentYear = new Date().getFullYear()
+        const years: number[] = Array.from({ length: 100 }, (_, i) => currentYear - i) // Last 100 years
+        const months = [
+          "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+          "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ]
+
         return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={`w-full justify-start text-left font-normal ${field.className} ${!value && "text-muted-foreground"}`}
-                disabled={field.disabled || loading}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {value ? format(new Date(value), "dd MMMM yyyy", { locale: id }) : field.placeholder || "Pilih tanggal"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={value ? new Date(value) : undefined}
-                onSelect={(date) => handleInputChange(field.name, date?.toISOString())}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <div className="space-y-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={`w-full justify-start text-left font-normal ${field.className} ${!value && "text-muted-foreground"}`}
+                  disabled={field.disabled || loading}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {value ? format(new Date(value), "dd MMMM yyyy", { locale: id }) : field.placeholder || "Pilih tanggal"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <div className="p-3 border-b">
+                  <div className="flex gap-2">
+                    <Select
+                      value={calendarMonth.getFullYear().toString()}
+                      onValueChange={(year) => {
+                        const newDate = setYear(calendarMonth, parseInt(year))
+                        setCalendarMonth(newDate)
+                      }}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {years.map((year) => (
+                          <SelectItem key={year} value={year.toString()}>
+                            {year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={calendarMonth.getMonth().toString()}
+                      onValueChange={(month) => {
+                        const newDate = setMonth(calendarMonth, parseInt(month))
+                        setCalendarMonth(newDate)
+                      }}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {months.map((month, index) => (
+                          <SelectItem key={index} value={index.toString()}>
+                            {month}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    handleInputChange(field.name, date?.toISOString())
+                    if (date) {
+                      setCalendarMonth(date)
+                    }
+                  }}
+                  month={calendarMonth}
+                  onMonthChange={setCalendarMonth}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
         )
 
       case "file":
