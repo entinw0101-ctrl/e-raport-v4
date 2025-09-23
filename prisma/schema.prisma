@@ -497,6 +497,28 @@ model SuratKeluar {
 }
 
 // =====================================================
+// TABEL TEMPLATE DOKUMEN
+// =====================================================
+
+// Tabel Template Dokumen
+model TemplateDokumen {
+  id              Int           @id @default(autoincrement())
+  nama_template   String        @db.VarChar(255)
+  jenis_template  JenisTemplate
+  file_path       String        @db.VarChar(500) // Path ke file template di storage
+  file_name       String        @db.VarChar(255) // Nama file asli
+  file_size       Int?          // Ukuran file dalam bytes
+  is_active       Boolean       @default(true)
+  dibuat_pada     DateTime      @default(now())
+  diperbarui_pada DateTime      @updatedAt
+
+  @@unique([jenis_template, is_active])
+  @@index([jenis_template])
+  @@index([is_active])
+  @@map("template_dokumen")
+}
+
+// =====================================================
 // ENUMS
 // =====================================================
 
@@ -551,5 +573,12 @@ enum JenisKelaminTarget {
 enum StatusPejabat {
   aktif
   nonaktif
+}
+
+enum JenisTemplate {
+  IDENTITAS
+  NILAI
+  SIKAP
+  SURAT_KELUAR
 }
 

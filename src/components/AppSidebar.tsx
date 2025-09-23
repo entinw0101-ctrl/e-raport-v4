@@ -158,6 +158,11 @@ const data = {
       title: "Sistem",
       items: [
         {
+          title: "Template Dokumen",
+          url: "/template-dokumen",
+          icon: FileText,
+        },
+        {
           title: "Promosi Kelas",
           url: "/promosi-kelas",
           icon: ClipboardList,

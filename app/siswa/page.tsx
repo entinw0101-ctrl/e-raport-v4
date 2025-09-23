@@ -129,16 +129,13 @@ export default function SiswaPage() {
       },
     ]
 
-    // Only show Tahun Ajaran Masuk for new siswa
-    if (!selectedSiswa) {
-      fields.push({
-        name: "master_tahun_ajaran_id",
-        label: "Tahun Ajaran Masuk",
-        type: "select",
-        required: true,
-        options: tahunAjaranOptions,
-      })
-    }
+    fields.push({
+      name: "master_tahun_ajaran_id",
+      label: "Tahun Ajaran Masuk",
+      type: "select",
+      required: true,
+      options: tahunAjaranOptions,
+    })
 
     fields.push(
       {
