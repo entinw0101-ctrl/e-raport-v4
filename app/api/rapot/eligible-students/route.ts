@@ -54,8 +54,8 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Filter berdasarkan kelas jika disediakan
-    if (kelasId) {
+    // Filter berdasarkan kelas jika disediakan dan bukan "all"
+    if (kelasId && kelasId !== "all") {
       whereCondition.AND.push({
         kelas_id: parseInt(kelasId)
       })

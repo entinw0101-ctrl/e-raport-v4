@@ -20,13 +20,6 @@ export default function HomePage() {
       color: "bg-green-500",
     },
     {
-      title: "Generate Rapot",
-      description: "Buat rapot siswa semester ini",
-      icon: BarChart3,
-      href: "/rapot",
-      color: "bg-purple-500",
-    },
-    {
       title: "Data Siswa",
       description: "Kelola informasi siswa",
       icon: Users,

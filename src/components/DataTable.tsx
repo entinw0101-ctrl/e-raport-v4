@@ -38,6 +38,7 @@ export interface DataTableProps<T> {
   addButtonText?: string
   emptyMessage?: string
   actions?: boolean
+  maxHeight?: string
 }
 
 export function DataTable<T extends { id: number | string }>({
@@ -55,6 +56,7 @@ export function DataTable<T extends { id: number | string }>({
   addButtonText = "Tambah Data",
   emptyMessage = "Tidak ada data yang ditemukan",
   actions = true,
+  maxHeight,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState("")
   const debouncedSearchTerm = useDebounce(searchTerm, 300)
@@ -141,7 +143,7 @@ export function DataTable<T extends { id: number | string }>({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border">
+        <div className={`rounded-md border ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`}>
           <Table>
             <TableHeader>
               <TableRow>

@@ -40,7 +40,7 @@ export default function PeriodeAjaranPage() {
   const [loading, setLoading] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
-    per_page: 10,
+    per_page: 1000,
     total: 0,
     total_pages: 0,
   })
@@ -300,6 +300,7 @@ export default function PeriodeAjaranPage() {
         searchPlaceholder="Cari nama ajaran..."
         addButtonText="Tambah Periode Ajaran"
         emptyMessage="Belum ada data periode ajaran"
+        maxHeight="max-h-96"
       />
 
       <FormModal

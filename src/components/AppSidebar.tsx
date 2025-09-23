@@ -143,13 +143,8 @@ const data = {
       title: "Laporan",
       items: [
         {
-          title: "Rapot Siswa",
-          url: "/rapot",
-          icon: BarChart3,
-        },
-        {
-          title: "Ringkasan Rapot",
-          url: "/ringkasan-rapot",
+          title: "Generate Raport",
+          url: "/raport",
           icon: BarChart3,
         },
         {

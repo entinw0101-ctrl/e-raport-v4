@@ -29,7 +29,7 @@ export default function RaportPage() {
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [selectedPeriode, setSelectedPeriode] = useState<string>("")
-  const [selectedKelas, setSelectedKelas] = useState<string>("all")
+  const [selectedKelas, setSelectedKelas] = useState<string>("")
 
   const { toast } = useToast()
   const router = useRouter()
@@ -53,8 +53,8 @@ export default function RaportPage() {
   const fetchOptions = async () => {
     try {
       const [periodeRes, kelasRes] = await Promise.all([
-        fetch("/api/periode-ajaran"),
-        fetch("/api/kelas"),
+        fetch("/api/periode-ajaran?per_page=1000"),
+        fetch("/api/kelas?per_page=1000"),
       ])
 
       const [periode, kelas] = await Promise.all([

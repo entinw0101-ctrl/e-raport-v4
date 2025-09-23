@@ -9,13 +9,21 @@ let prisma: PrismaClient
 try {
   prisma = globalForPrisma.prisma ??
     new PrismaClient({
-      log: process.env.NODE_ENV === "production" ? ["error", "warn"] : ["query", "error", "warn"],
+      log: process.env.NODE_ENV === "production" ? ["error"] : ["query", "error", "warn"],
       datasources: {
         db: {
           url: process.env.DATABASE_URL,
         },
       },
     })
+
+  // For serverless environments, add connection management
+  if (process.env.VERCEL_ENV) {
+    // Disconnect on process exit to prevent connection leaks
+    process.on('beforeExit', async () => {
+      await prisma.$disconnect()
+    })
+  }
 
   if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
