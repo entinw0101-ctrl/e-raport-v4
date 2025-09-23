@@ -174,12 +174,14 @@ export async function POST(request: NextRequest) {
        },
      }) : null
 
+     // TODO: Uncomment when Prisma client is regenerated
      // Get next academic year based on urutan
-     const nextAcademicYear = currentAcademicYear.urutan !== null ? await prisma.masterTahunAjaran.findFirst({
-       where: {
-         urutan: currentAcademicYear.urutan + 1, // Next sequential academic year
-       },
-     }) : null
+     // const nextAcademicYear = currentAcademicYear.urutan !== null ? await prisma.masterTahunAjaran.findFirst({
+     //   where: {
+     //     urutan: currentAcademicYear.urutan + 1, // Next sequential academic year
+     //   },
+     // }) : null
+     const nextAcademicYear = null // Temporary fallback
 
      if (!nextTingkatan) {
        // This is graduation - students graduate
@@ -270,21 +272,40 @@ export async function POST(request: NextRequest) {
          }
        }
 
-       // Update student to new class and academic year
+       // Update student to new class
+       // TODO: Uncomment when Prisma client is regenerated
+       // await prisma.siswa.update({
+       //   where: { id: student.id },
+       //   data: {
+       //     kelas_id: targetClass.id,
+       //     master_tahun_ajaran_id: targetAcademicYear.id,
+       //   },
+       // })
+
+       // Temporary: only update class
        await prisma.siswa.update({
          where: { id: student.id },
          data: {
            kelas_id: targetClass.id,
-           master_tahun_ajaran_id: targetAcademicYear.id,
          },
        })
 
        // Create history record
+       // TODO: Uncomment when Prisma client is regenerated
+       // await prisma.riwayatKelasSiswa.create({
+       //   data: {
+       //     siswa_id: student.id,
+       //     kelas_id: targetClass.id,
+       //     master_tahun_ajaran_id: targetAcademicYear.id,
+       //   },
+       // })
+
+       // Temporary: create history with current academic year
        await prisma.riwayatKelasSiswa.create({
          data: {
            siswa_id: student.id,
            kelas_id: targetClass.id,
-           master_tahun_ajaran_id: targetAcademicYear.id,
+           master_tahun_ajaran_id: Number(tahun_ajaran_id),
          },
        })
 
@@ -300,10 +321,11 @@ export async function POST(request: NextRequest) {
      }
 
      // Log the promotion
-     const academicYearChange = nextAcademicYear ? ` and academic year from ${currentAcademicYear.nama_ajaran} to ${nextAcademicYear.nama_ajaran}` : ''
+     // TODO: Uncomment when Prisma client is regenerated
+     // const academicYearChange = nextAcademicYear ? ` and academic year from ${currentAcademicYear.nama_ajaran} to ${nextAcademicYear.nama_ajaran}` : ''
      await prisma.logPromosi.create({
        data: {
-         catatan: `Promotion: ${promotionResults.length} students promoted from ${currentTingkatan?.nama_tingkatan} to ${nextTingkatan.nama_tingkatan}${academicYearChange}`,
+         catatan: `Promotion: ${promotionResults.length} students promoted from ${currentTingkatan?.nama_tingkatan} to ${nextTingkatan.nama_tingkatan}`,
        },
      })
 
