@@ -6,7 +6,7 @@ import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Upload } from "lucide-react"
+import { Upload, Trash2, FileImage } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
@@ -101,65 +101,85 @@ export default function GuruPage() {
     },
   ]
 
-  const formFields: FormField[] = [
-    {
-      name: "nama",
-      label: "Nama Lengkap",
-      type: "text",
-      required: true,
-      placeholder: "Masukkan nama lengkap guru",
-    },
-    {
-      name: "nip",
-      label: "NIP",
-      type: "text",
-      placeholder: "Nomor Induk Pegawai (opsional)",
-    },
-    {
-      name: "jenis_kelamin",
-      label: "Jenis Kelamin",
-      type: "select",
-      required: true,
-      options: [
-        { value: "LAKI_LAKI", label: "Laki-laki" },
-        { value: "PEREMPUAN", label: "Perempuan" },
-      ],
-    },
-    {
-      name: "tempat_lahir",
-      label: "Tempat Lahir",
-      type: "text",
-      placeholder: "Kota tempat lahir",
-    },
-    {
-      name: "tanggal_lahir",
-      label: "Tanggal Lahir",
-      type: "date",
-    },
-    {
-      name: "telepon",
-      label: "Nomor Telepon",
-      type: "text",
-      placeholder: "Nomor telepon/HP",
-    },
-    {
-      name: "alamat",
-      label: "Alamat",
-      type: "textarea",
-      placeholder: "Alamat lengkap guru",
-      rows: 3,
-    },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "aktif", label: "Aktif" },
-        { value: "nonaktif", label: "Non-aktif" },
-      ],
-    },
-  ]
+  const getFormFields = (formData: Record<string, any>): FormField[] => {
+    return [
+      {
+        name: "nama",
+        label: "Nama Lengkap",
+        type: "text",
+        required: true,
+        placeholder: "Masukkan nama lengkap guru",
+      },
+      {
+        name: "nip",
+        label: "NIP",
+        type: "text",
+        placeholder: "Nomor Induk Pegawai (opsional)",
+      },
+      {
+        name: "jenis_kelamin",
+        label: "Jenis Kelamin",
+        type: "select",
+        required: true,
+        options: [
+          { value: "LAKI_LAKI", label: "Laki-laki" },
+          { value: "PEREMPUAN", label: "Perempuan" },
+        ],
+      },
+      {
+        name: "tempat_lahir",
+        label: "Tempat Lahir",
+        type: "text",
+        placeholder: "Kota tempat lahir",
+      },
+      {
+        name: "tanggal_lahir",
+        label: "Tanggal Lahir",
+        type: "date",
+      },
+      {
+        name: "telepon",
+        label: "Nomor Telepon",
+        type: "text",
+        placeholder: "Nomor telepon/HP",
+      },
+      {
+        name: "alamat",
+        label: "Alamat",
+        type: "textarea",
+        placeholder: "Alamat lengkap guru",
+        rows: 3,
+      },
+      {
+        name: "status",
+        label: "Status",
+        type: "select",
+        required: true,
+        options: [
+          { value: "aktif", label: "Aktif" },
+          { value: "nonaktif", label: "Non-aktif" },
+        ],
+      },
+      {
+        name: "signature_file",
+        label: "Tanda Tangan",
+        type: "signature",
+        accept: "image/jpeg,image/jpg,image/png",
+        signatureUrl: selectedGuru?.tanda_tangan || undefined,
+        onViewSignature: () => {
+          if (selectedGuru?.tanda_tangan) {
+            setSelectedGuru(selectedGuru) // Trigger signature preview modal
+          }
+        },
+        onDeleteSignature: () => {
+          if (selectedGuru) {
+            handleDeleteSignature(selectedGuru.id)
+          }
+        },
+        required: !selectedGuru?.tanda_tangan,
+      },
+    ]
+  }
 
   const fetchData = async (page = 1, search = "") => {
     setLoading(true)
@@ -253,14 +273,59 @@ export default function GuruPage() {
     input.click()
   }
 
+  const handleDeleteSignature = async (guruId: number) => {
+    try {
+      const result = await guruService.deleteSignature(guruId)
+      if (result.success) {
+        toast({
+          title: "Berhasil",
+          description: "Tanda tangan berhasil dihapus",
+        })
+        fetchData(pagination.page, searchTerm)
+        setShowFormModal(false) // Close modal after deletion
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Gagal menghapus tanda tangan",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat menghapus tanda tangan",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
+      // Handle signature upload separately
+      const signatureFile = formData.signature_file
+      delete formData.signature_file // Remove from form data as it's handled separately
+
       const result = selectedGuru
         ? await guruService.update(selectedGuru.id, formData)
         : await guruService.create(formData as any)
 
       if (result.success) {
+        // If there's a signature file to upload, upload it after creating/updating the guru
+        if (signatureFile && signatureFile.length > 0) {
+          const guruId = selectedGuru ? selectedGuru.id : result.data?.id
+          if (guruId) {
+            const uploadResult = await guruService.uploadSignature(guruId, signatureFile[0])
+            if (!uploadResult.success) {
+              toast({
+                title: "Peringatan",
+                description: "Guru berhasil disimpan, tetapi upload tanda tangan gagal",
+                variant: "destructive",
+              })
+            }
+          }
+        }
+
         toast({
           title: "Berhasil",
           description: result.message || `Guru berhasil ${selectedGuru ? "diperbarui" : "ditambahkan"}`,
@@ -342,7 +407,7 @@ export default function GuruPage() {
 
       <FormModal
         title={selectedGuru ? "Edit Guru" : "Tambah Guru"}
-        fields={formFields}
+        fields={getFormFields}
         initialData={getInitialFormData()}
         open={showFormModal}
         onClose={() => setShowFormModal(false)}

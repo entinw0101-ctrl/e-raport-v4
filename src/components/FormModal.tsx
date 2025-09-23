@@ -11,26 +11,30 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon } from "lucide-react"
+import { CalendarIcon, Trash2 } from "lucide-react"
 import { format, setYear, setMonth } from "date-fns"
 import { id } from "date-fns/locale"
 
 export interface FormField {
-   name: string
-   label: string
-   type: "text" | "email" | "number" | "textarea" | "select" | "date" | "file"
-   required?: boolean
-   placeholder?: string
-   options?: { value: string | number; label: string }[]
-   accept?: string // untuk file input
-   multiple?: boolean // untuk file input
-   rows?: number // untuk textarea
-   min?: number // untuk number input
-   max?: number // untuk number input
-   disabled?: boolean
-   className?: string
-   onChange?: (value: any) => void
- }
+    name: string
+    label: string
+    type: "text" | "email" | "number" | "textarea" | "select" | "date" | "file" | "signature"
+    required?: boolean
+    placeholder?: string
+    options?: { value: string | number; label: string }[]
+    accept?: string // untuk file input
+    multiple?: boolean // untuk file input
+    rows?: number // untuk textarea
+    min?: number // untuk number input
+    max?: number // untuk number input
+    disabled?: boolean
+    className?: string
+    onChange?: (value: any) => void
+    // untuk signature type
+    signatureUrl?: string
+    onDeleteSignature?: () => void
+    onViewSignature?: () => void
+  }
 
 export interface FormModalProps {
   title: string
@@ -273,6 +277,59 @@ export function FormModal({
             disabled={field.disabled || loading}
             className={field.className}
           />
+        )
+
+      case "signature":
+        return (
+          <div className="space-y-3">
+            {field.signatureUrl && (
+              <div className="p-3 border rounded-lg bg-muted/50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Tanda Tangan Saat Ini:</span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={field.onViewSignature}
+                      disabled={loading}
+                    >
+                      Lihat
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={field.onDeleteSignature}
+                      disabled={loading}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Hapus
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex justify-center">
+                  <img
+                    src={field.signatureUrl}
+                    alt="Tanda tangan"
+                    className="max-w-full max-h-20 object-contain border rounded"
+                  />
+                </div>
+              </div>
+            )}
+            <Input
+              id={field.name}
+              type="file"
+              onChange={(e) => handleInputChange(field.name, e.target.files)}
+              accept={field.accept}
+              multiple={field.multiple}
+              disabled={field.disabled || loading}
+              className={field.className}
+            />
+            <p className="text-xs text-muted-foreground">
+              {field.signatureUrl ? "Upload file baru untuk mengganti tanda tangan (opsional)" : "Pilih file tanda tangan (JPG, PNG, maks 2MB)"}
+            </p>
+          </div>
         )
 
       default:

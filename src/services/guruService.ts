@@ -120,10 +120,20 @@ class GuruService {
 
   async uploadSignature(id: number, file: File): Promise<GuruResponse> {
     const formData = new FormData()
-    formData.append("signature", file)
+    formData.append("file", file)
     formData.append("guru_id", id.toString())
 
-    const response = await httpService.post<Guru>("/api/upload/signature", formData)
+    const response = await httpService.upload<Guru>("/upload/signature", formData)
+    return {
+      success: response.success,
+      data: response.data,
+      message: response.message,
+      error: response.error,
+    }
+  }
+
+  async deleteSignature(id: number): Promise<GuruResponse> {
+    const response = await httpService.delete<Guru>(`/upload/signature?guru_id=${id}`)
     return {
       success: response.success,
       data: response.data,
