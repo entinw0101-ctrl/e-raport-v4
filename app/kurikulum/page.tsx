@@ -75,6 +75,18 @@ export default function KurikulumPage() {
       render: (value) => value ? value.nama_mapel : "-",
     },
     {
+      key: "mata_pelajaran.jenis",
+      label: "Jenis",
+      render: (value, row) => {
+        const jenis = row.mata_pelajaran?.jenis
+        return jenis ? (
+          <Badge variant={jenis === "Ujian" ? "default" : "secondary"}>
+            {jenis}
+          </Badge>
+        ) : "-"
+      },
+    },
+    {
       key: "kitab",
       label: "Kitab",
       render: (value) => value ? value.nama_kitab : "-",

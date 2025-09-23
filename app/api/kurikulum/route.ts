@@ -32,7 +32,11 @@ export async function GET(request: NextRequest) {
         kitab: true,
         tingkatan: true,
       },
-      orderBy: [{ tingkatan: { urutan: "asc" } }, { mata_pelajaran: { nama_mapel: "asc" } }],
+      orderBy: [
+        { tingkatan: { urutan: "asc" } },
+        { mata_pelajaran: { jenis: "asc" } },
+        { mata_pelajaran: { nama_mapel: "asc" } }
+      ],
       skip,
       take: per_page,
     })
