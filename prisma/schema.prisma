@@ -18,6 +18,7 @@ datasource db {
 model MasterTahunAjaran {
   id           Int      @id @default(autoincrement())
   nama_ajaran  String   @unique @db.VarChar(255)
+  urutan       Int?
   status       Status   @default(nonaktif)
   dibuat_pada  DateTime @default(now())
   diperbarui_pada DateTime @updatedAt
@@ -30,6 +31,7 @@ model MasterTahunAjaran {
 
   @@index([status])
   @@index([nama_ajaran])
+  @@index([urutan])
   @@map("master_tahun_ajaran")
 }
 

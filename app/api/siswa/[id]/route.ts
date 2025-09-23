@@ -62,14 +62,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const { kamar, kelas, master_tahun_ajaran, tahun_ajaran_masuk, ...bodyWithoutRelations } = body
 
     // Convert date strings to Date objects
-    const masterTahunAjaranId = body.master_tahun_ajaran_id ? Number.parseInt(body.master_tahun_ajaran_id) : null
     const data = {
       ...bodyWithoutRelations,
       tanggal_lahir: body.tanggal_lahir ? new Date(body.tanggal_lahir) : null,
       kelas_id: body.kelas_id ? Number.parseInt(body.kelas_id) : null,
       kamar_id: body.kamar_id ? Number.parseInt(body.kamar_id) : null,
-      master_tahun_ajaran_id: masterTahunAjaranId,
-      tahun_ajaran_masuk_id: masterTahunAjaranId, // Update entry year as well
+      master_tahun_ajaran_id: body.master_tahun_ajaran_id ? Number.parseInt(body.master_tahun_ajaran_id) : null,
+      tahun_ajaran_masuk_id: body.tahun_ajaran_masuk_id ? Number.parseInt(body.tahun_ajaran_masuk_id) : null,
     }
 
     const siswa = await prisma.siswa.update({

@@ -155,10 +155,29 @@ export async function POST(request: NextRequest) {
        )
      }
 
+     // Get current academic year
+     const currentAcademicYear = await prisma.masterTahunAjaran.findUnique({
+       where: { id: Number(tahun_ajaran_id) },
+     })
+
+     if (!currentAcademicYear) {
+       return NextResponse.json(
+         { success: false, error: "Tahun ajaran tidak ditemukan" },
+         { status: 400 }
+       )
+     }
+
      // Get next tingkatan based on urutan
      const nextTingkatan = currentTingkatan.urutan !== null ? await prisma.tingkatan.findFirst({
        where: {
          urutan: currentTingkatan.urutan + 1, // Next sequential grade
+       },
+     }) : null
+
+     // Get next academic year based on urutan
+     const nextAcademicYear = currentAcademicYear.urutan !== null ? await prisma.masterTahunAjaran.findFirst({
+       where: {
+         urutan: currentAcademicYear.urutan + 1, // Next sequential academic year
        },
      }) : null
 
@@ -189,6 +208,9 @@ export async function POST(request: NextRequest) {
          message: `${graduationResult.count} siswa berhasil diluluskan`,
        })
      }
+
+     // Determine target academic year (next year for end-of-year promotion)
+     const targetAcademicYear = nextAcademicYear || currentAcademicYear
 
      // Get all classes in the next tingkatan with current student counts
      const nextClasses = await prisma.kelas.findMany({
@@ -248,11 +270,12 @@ export async function POST(request: NextRequest) {
          }
        }
 
-       // Update student to new class
+       // Update student to new class and academic year
        await prisma.siswa.update({
          where: { id: student.id },
          data: {
            kelas_id: targetClass.id,
+           master_tahun_ajaran_id: targetAcademicYear.id,
          },
        })
 
@@ -261,7 +284,7 @@ export async function POST(request: NextRequest) {
          data: {
            siswa_id: student.id,
            kelas_id: targetClass.id,
-           master_tahun_ajaran_id: Number(tahun_ajaran_id),
+           master_tahun_ajaran_id: targetAcademicYear.id,
          },
        })
 
@@ -277,9 +300,10 @@ export async function POST(request: NextRequest) {
      }
 
      // Log the promotion
+     const academicYearChange = nextAcademicYear ? ` and academic year from ${currentAcademicYear.nama_ajaran} to ${nextAcademicYear.nama_ajaran}` : ''
      await prisma.logPromosi.create({
        data: {
-         catatan: `Promotion: ${promotionResults.length} students promoted from ${currentTingkatan?.nama_tingkatan} to ${nextTingkatan.nama_tingkatan}`,
+         catatan: `Promotion: ${promotionResults.length} students promoted from ${currentTingkatan?.nama_tingkatan} to ${nextTingkatan.nama_tingkatan}${academicYearChange}`,
        },
      })
 

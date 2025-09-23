@@ -130,8 +130,15 @@ export default function SiswaPage() {
     ]
 
     fields.push({
-      name: "master_tahun_ajaran_id",
+      name: "tahun_ajaran_masuk_id",
       label: "Tahun Ajaran Masuk",
+      type: "select",
+      required: true,
+      options: tahunAjaranOptions,
+    },
+    {
+      name: "master_tahun_ajaran_id",
+      label: "Tahun Ajaran Saat Ini",
       type: "select",
       required: true,
       options: tahunAjaranOptions,
@@ -387,6 +394,7 @@ export default function SiswaPage() {
         ...formData,
         kelas_id: formData.kelas_id ? Number(formData.kelas_id) : undefined,
         kamar_id: formData.kamar_id ? Number(formData.kamar_id) : undefined,
+        tahun_ajaran_masuk_id: formData.tahun_ajaran_masuk_id ? Number(formData.tahun_ajaran_masuk_id) : undefined,
         master_tahun_ajaran_id: formData.master_tahun_ajaran_id ? Number(formData.master_tahun_ajaran_id) : undefined,
       }
 
@@ -476,7 +484,8 @@ export default function SiswaPage() {
         : "",
       kelas_id: selectedSiswa.kelas_id || "",
       kamar_id: selectedSiswa.kamar_id || "",
-      master_tahun_ajaran_id: selectedSiswa.tahun_ajaran_masuk_id || "", // For edit, show the entry year, but it's readonly
+      tahun_ajaran_masuk_id: selectedSiswa.tahun_ajaran_masuk_id || "",
+      master_tahun_ajaran_id: selectedSiswa.master_tahun_ajaran_id || "",
     }
   }
 

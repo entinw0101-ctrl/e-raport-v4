@@ -92,13 +92,14 @@ export async function POST(request: NextRequest) {
 
     // Convert date strings to Date objects
     const masterTahunAjaranId = body.master_tahun_ajaran_id ? Number.parseInt(body.master_tahun_ajaran_id) : null
+    const tahunAjaranMasukId = body.tahun_ajaran_masuk_id ? Number.parseInt(body.tahun_ajaran_masuk_id) : masterTahunAjaranId
     const data = {
       ...body,
       tanggal_lahir: body.tanggal_lahir ? new Date(body.tanggal_lahir) : null,
       kelas_id: body.kelas_id ? Number.parseInt(body.kelas_id) : null,
       kamar_id: body.kamar_id ? Number.parseInt(body.kamar_id) : null,
       master_tahun_ajaran_id: masterTahunAjaranId,
-      tahun_ajaran_masuk_id: masterTahunAjaranId, // Set tahun ajaran masuk sama dengan aktif saat create
+      tahun_ajaran_masuk_id: tahunAjaranMasukId,
     }
 
     const siswa = await prisma.siswa.create({

@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast"
 interface MasterTahunAjaran {
   id: number
   nama_ajaran: string
+  urutan: number | null
   status: "aktif" | "nonaktif"
   dibuat_pada: string
   diperbarui_pada: string
@@ -46,6 +47,11 @@ export default function MasterTahunAjaranPage() {
       className: "font-medium",
     },
     {
+      key: "urutan",
+      label: "Urutan",
+      render: (value) => value || "-",
+    },
+    {
       key: "status",
       label: "Status",
       render: (value) => (
@@ -79,6 +85,13 @@ export default function MasterTahunAjaranPage() {
       type: "text",
       required: true,
       placeholder: "Contoh: 2024/2025, 2025/2026",
+    },
+    {
+      name: "urutan",
+      label: "Urutan",
+      type: "number",
+      required: true,
+      placeholder: "Contoh: 1, 2, 3 (untuk mengurutkan tahun ajaran)",
     },
     {
       name: "status",
@@ -230,6 +243,7 @@ export default function MasterTahunAjaranPage() {
     if (!selectedMasterTahunAjaran) return { status: "nonaktif" }
     return {
       nama_ajaran: selectedMasterTahunAjaran.nama_ajaran,
+      urutan: selectedMasterTahunAjaran.urutan,
       status: selectedMasterTahunAjaran.status,
     }
   }
