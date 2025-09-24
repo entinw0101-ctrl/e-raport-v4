@@ -23,6 +23,27 @@ export async function GET(request: NextRequest) {
     const total = await prisma.masterTahunAjaran.count({ where })
 
     // Get data with pagination
+    // TODO: Uncomment when Prisma client is regenerated
+    // const data = await prisma.masterTahunAjaran.findMany({
+    //   where,
+    //   include: {
+    //     _count: {
+    //       select: {
+    //         siswa: true,
+    //         periode_ajaran: true,
+    //         riwayat_kelas_siswa: true,
+    //       },
+    //     },
+    //   },
+    //   orderBy: [
+    //     { urutan: "asc" },
+    //     { dibuat_pada: "desc" }
+    //   ],
+    //   skip,
+    //   take: per_page,
+    // })
+
+    // Temporary: fetch without sorting by urutan
     const data = await prisma.masterTahunAjaran.findMany({
       where,
       include: {
@@ -37,6 +58,17 @@ export async function GET(request: NextRequest) {
       orderBy: { dibuat_pada: "desc" },
       skip,
       take: per_page,
+    })
+
+    // Sort by urutan in JavaScript (temporary workaround)
+    data.sort((a: any, b: any) => {
+      const aUrutan = a.urutan || 999
+      const bUrutan = b.urutan || 999
+      if (aUrutan !== bUrutan) {
+        return aUrutan - bUrutan
+      }
+      // If urutan is same, sort by dibuat_pada desc
+      return new Date(b.dibuat_pada).getTime() - new Date(a.dibuat_pada).getTime()
     })
 
     return NextResponse.json({
