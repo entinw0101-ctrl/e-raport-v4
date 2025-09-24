@@ -151,6 +151,41 @@ export default function MasterTahunAjaranPage() {
     fetchData(1, search)
   }, [fetchData])
 
+  const handlePerPageChange = useCallback(async (perPage: number) => {
+    setPagination(prev => ({ ...prev, per_page: perPage }))
+    // Fetch data with new per_page
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: "1",
+        per_page: perPage.toString(),
+        ...(searchTerm && { search: searchTerm }),
+      })
+
+      const response = await fetch(`/api/master-tahun-ajaran?${params}`)
+      const result = await response.json()
+
+      if (result.success) {
+        setData(result.data)
+        setPagination(result.pagination)
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Gagal mengambil data master tahun ajaran",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat mengambil data",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [searchTerm])
+
   const handleAdd = () => {
     setSelectedMasterTahunAjaran(null)
     setShowFormModal(true)
@@ -257,6 +292,7 @@ export default function MasterTahunAjaranPage() {
         loading={loading}
         pagination={pagination}
         onPageChange={handlePageChange}
+        onPerPageChange={handlePerPageChange}
         onSearch={handleSearch}
         onAdd={handleAdd}
         onEdit={handleEdit}

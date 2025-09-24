@@ -371,6 +371,56 @@ export default function SiswaPage() {
     fetchData(1, search)
   }, [fetchData])
 
+  const handlePerPageChange = useCallback(async (perPage: number) => {
+    setPagination(prev => ({ ...prev, per_page: perPage }))
+    // Fetch data with new per_page
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: "1",
+        per_page: perPage.toString(),
+        ...(searchTerm && { search: searchTerm }),
+      })
+
+      const response = await siswaService.getAll({
+        page: 1,
+        per_page: perPage,
+        search: searchTerm || undefined,
+      })
+
+      if (response.success && response.data) {
+        setData(response.data.data || [])
+        setPagination(response.data.pagination || {
+          page: 1,
+          per_page: perPage,
+          total: 0,
+          total_pages: 0,
+        })
+      } else {
+        setData([])
+        setPagination({
+          page: 1,
+          per_page: perPage,
+          total: 0,
+          total_pages: 0,
+        })
+        toast({
+          title: "Error",
+          description: response.error || "Gagal mengambil data siswa",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat mengambil data",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [searchTerm])
+
   const handleAdd = () => {
     setSelectedSiswa(null)
     setShowFormModal(true)
@@ -498,6 +548,7 @@ export default function SiswaPage() {
         loading={loading}
         pagination={pagination}
         onPageChange={handlePageChange}
+        onPerPageChange={handlePerPageChange}
         onSearch={handleSearch}
         onAdd={handleAdd}
         onEdit={handleEdit}

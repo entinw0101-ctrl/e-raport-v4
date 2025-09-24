@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChevronLeft, ChevronRight, Search, Plus, Edit, Trash2 } from "lucide-react"
 import { useDebounce } from "@/src/hooks/useDebounce"
 
@@ -30,6 +31,7 @@ export interface DataTableProps<T> {
     total_pages: number
   }
   onPageChange?: (page: number) => void
+  onPerPageChange?: (perPage: number) => void
   onSearch?: (search: string) => void
   onAdd?: () => void
   onEdit?: (row: T) => void
@@ -48,6 +50,7 @@ export function DataTable<T extends { id: number | string }>({
   loading = false,
   pagination,
   onPageChange,
+  onPerPageChange,
   onSearch,
   onAdd,
   onEdit,
@@ -79,14 +82,36 @@ export function DataTable<T extends { id: number | string }>({
   const renderPagination = () => {
     if (!pagination) return null
 
-    const { page, total_pages, total } = pagination
-    const startItem = (page - 1) * pagination.per_page + 1
-    const endItem = Math.min(page * pagination.per_page, total)
+    const { page, per_page, total_pages, total } = pagination
+    const startItem = (page - 1) * per_page + 1
+    const endItem = Math.min(page * per_page, total)
 
     return (
       <div className="flex items-center justify-between px-2">
-        <div className="text-sm text-muted-foreground">
-          Menampilkan {startItem}-{endItem} dari {total} data
+        <div className="flex items-center space-x-4">
+          <div className="text-sm text-muted-foreground">
+            Menampilkan {startItem}-{endItem} dari {total} data
+          </div>
+          {onPerPageChange && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-muted-foreground">Tampilkan:</span>
+              <Select
+                value={per_page.toString()}
+                onValueChange={(value) => onPerPageChange?.(Number.parseInt(value))}
+              >
+                <SelectTrigger className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <div className="flex items-center space-x-2">
           <Button variant="outline" size="sm" onClick={() => onPageChange?.(page - 1)} disabled={page <= 1}>
