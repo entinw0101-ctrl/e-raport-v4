@@ -81,12 +81,19 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Nama ajaran sudah digunakan" }, { status: 400 })
     }
 
+    // Update with urutan field (temporary workaround until Prisma client is regenerated)
+    const updateData: any = {
+      nama_ajaran: body.nama_ajaran,
+      status: body.status,
+    }
+
+    if (body.urutan !== undefined) {
+      updateData.urutan = body.urutan ? Number.parseInt(body.urutan) : null
+    }
+
     const masterTahunAjaran = await prisma.masterTahunAjaran.update({
       where: { id },
-      data: {
-        nama_ajaran: body.nama_ajaran,
-        status: body.status,
-      },
+      data: updateData,
     })
 
     // Update nama_ajaran in associated Periode Ajaran records

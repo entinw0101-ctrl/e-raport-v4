@@ -73,11 +73,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Nama ajaran sudah digunakan" }, { status: 400 })
     }
 
+    // Create with urutan field (temporary workaround until Prisma client is regenerated)
+    const createData: any = {
+      nama_ajaran: body.nama_ajaran,
+      status: body.status || "nonaktif",
+    }
+
+    if (body.urutan !== undefined) {
+      createData.urutan = body.urutan ? Number.parseInt(body.urutan) : null
+    }
+
     const masterTahunAjaran = await prisma.masterTahunAjaran.create({
-      data: {
-        nama_ajaran: body.nama_ajaran,
-        status: body.status || "nonaktif",
-      },
+      data: createData,
     })
 
     // Auto-create Periode Ajaran for Semester 1 and 2
