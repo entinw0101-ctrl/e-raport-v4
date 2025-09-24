@@ -55,11 +55,23 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
-    // Convert date strings to Date objects
-    const data = {
-      ...body,
+    // Extract relations and files to handle separately
+    const { kelas_wali, tanda_tangan, ...guruData } = body
+
+    const data: any = {
+      ...guruData,
       tanggal_lahir: body.tanggal_lahir ? new Date(body.tanggal_lahir) : null,
     }
+
+    // Handle kelas_wali relation
+    if (kelas_wali && Array.isArray(kelas_wali)) {
+      data.kelas_wali = {
+        set: kelas_wali.map((kelas: any) => ({ id: kelas.id })),
+      }
+    }
+
+    // Note: tanda_tangan should be handled via separate /api/upload/signature endpoint
+    // Similar to data table upload functionality
 
     const guru = await prisma.guru.update({
       where: { id },
