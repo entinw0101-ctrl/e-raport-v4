@@ -45,10 +45,8 @@ export default function RaportPage() {
   }, [])
 
   useEffect(() => {
-    if (selectedPeriode) {
-      fetchEligibleStudents()
-    }
-  }, [selectedPeriode, selectedKelas])
+    fetchStudents()
+  }, [selectedKelas])
 
   const fetchOptions = async () => {
     try {
@@ -74,18 +72,16 @@ export default function RaportPage() {
     }
   }
 
-  const fetchEligibleStudents = async () => {
-    if (!selectedPeriode) return
-
+  const fetchStudents = async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      params.append("periode_ajaran_id", selectedPeriode)
+      params.append("status", "Aktif") // Only active students
       if (selectedKelas && selectedKelas !== "all") {
         params.append("kelas_id", selectedKelas)
       }
 
-      const response = await fetch(`/api/rapot/eligible-students?${params}`)
+      const response = await fetch(`/api/siswa?${params}`)
       const result = await response.json()
 
       if (result.success) {
@@ -94,10 +90,10 @@ export default function RaportPage() {
         throw new Error(result.message || "Gagal memuat data siswa")
       }
     } catch (error) {
-      console.error("Error fetching eligible students:", error)
+      console.error("Error fetching students:", error)
       toast({
         title: "Error",
-        description: "Gagal memuat data siswa siap raport",
+        description: "Gagal memuat data siswa",
         variant: "destructive",
       })
       setData([])
@@ -107,6 +103,14 @@ export default function RaportPage() {
   }
 
   const handleViewData = (student: EligibleStudent) => {
+    if (!selectedPeriode) {
+      toast({
+        title: "Error",
+        description: "Pilih periode ajaran terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
     router.push(`/raport/${student.id}?periode_ajaran_id=${selectedPeriode}`)
   }
 
@@ -115,7 +119,6 @@ export default function RaportPage() {
       variant="ghost"
       size="sm"
       onClick={() => handleViewData(row)}
-      disabled={!selectedPeriode}
     >
       <Eye className="h-4 w-4 mr-2" />
       Lihat Data
@@ -126,7 +129,7 @@ export default function RaportPage() {
     <div className="container mx-auto p-6 space-y-6">
       <PageHeader
         title="Generate Raport"
-        description="Daftar siswa yang siap untuk generate raport"
+        description="Daftar semua siswa aktif"
       />
 
       <div className="flex gap-4 items-end">
@@ -165,7 +168,7 @@ export default function RaportPage() {
       </div>
 
       <DataTable
-        title="Siswa Siap Generate Raport"
+        title="Daftar Siswa"
         data={data}
         columns={[
           ...columns,
@@ -176,7 +179,7 @@ export default function RaportPage() {
           }
         ]}
         loading={loading}
-        emptyMessage={selectedPeriode ? "Tidak ada siswa yang memenuhi syarat untuk periode ajaran ini" : "Pilih periode ajaran terlebih dahulu"}
+        emptyMessage="Tidak ada data siswa"
         actions={false}
         onEdit={undefined}
         onDelete={undefined}

@@ -7,7 +7,7 @@ import { id } from "date-fns/locale"
 
 export async function POST(request: NextRequest) {
   try {
-    const { siswaId, periodeAjaranId, format = 'docx' } = await request.json()
+    const { siswaId, periodeAjaranId, format: outputFormat = 'docx' } = await request.json()
 
     if (!siswaId || !periodeAjaranId) {
       return NextResponse.json(
@@ -34,7 +34,24 @@ export async function POST(request: NextRequest) {
     // Fetch student data
     const siswa = await prisma.siswa.findUnique({
       where: { id: parseInt(siswaId) },
-      include: {
+      select: {
+        nama: true,
+        nis: true,
+        tempat_lahir: true,
+        tanggal_lahir: true,
+        jenis_kelamin: true,
+        agama: true,
+        alamat: true,
+        nama_ayah: true,
+        pekerjaan_ayah: true,
+        alamat_ayah: true,
+        nama_ibu: true,
+        pekerjaan_ibu: true,
+        alamat_ibu: true,
+        nama_wali: true,
+        pekerjaan_wali: true,
+        alamat_wali: true,
+        kota_asal: true,
         kelas: {
           include: {
             wali_kelas: true,
@@ -42,6 +59,14 @@ export async function POST(request: NextRequest) {
           },
         },
         kamar: true,
+      },
+    })
+
+    // Fetch kepala pesantren (assuming there's a guru with role kepala)
+    const kepalaPesantren = await prisma.guru.findFirst({
+      where: {
+        // Add condition for kepala pesantren role if exists
+        // For now, fetch first active guru or adjust as needed
       },
     })
 
@@ -93,31 +118,39 @@ export async function POST(request: NextRequest) {
       linebreaks: true,
     })
 
+    // Helper function to format date
+    const formatTanggal = (date: Date | string | null) => {
+      if (!date) return '-'
+      return format(new Date(date), "dd MMMM yyyy", { locale: id })
+    }
+
     // Prepare data for template
     const data = {
-      nama_siswa: siswa.nama || "",
-      nis: siswa.nis,
-      tempat_lahir: siswa.tempat_lahir || "",
-      tanggal_lahir: siswa.tanggal_lahir
-        ? format(new Date(siswa.tanggal_lahir), "dd MMMM yyyy", { locale: id })
-        : "",
-      ttl: siswa.tempat_lahir && siswa.tanggal_lahir
-        ? `${siswa.tempat_lahir}, ${format(new Date(siswa.tanggal_lahir), "dd MMMM yyyy", { locale: id })}`
-        : "",
-      jenis_kelamin: siswa.jenis_kelamin === 'LAKI_LAKI' ? 'Laki-laki' : 'Perempuan',
-      agama: siswa.agama || "",
-      alamat: siswa.alamat || "",
-      kelas: siswa.kelas?.nama_kelas || "",
-      tingkatan: siswa.kelas?.tingkatan?.nama_tingkatan || "",
-      kelas_lengkap: siswa.kelas
-        ? `${siswa.kelas.nama_kelas}${siswa.kelas.tingkatan ? ` (${siswa.kelas.tingkatan.nama_tingkatan})` : ''}`
-        : "",
-      wali_kelas: siswa.kelas?.wali_kelas?.nama || "",
-      nip_wali_kelas: siswa.kelas?.wali_kelas?.nip || "",
-      kamar: siswa.kamar?.nama_kamar || "",
-      periode_ajaran: periodeAjaran.nama_ajaran,
-      semester: periodeAjaran.semester === 'SATU' ? '1' : '2',
-      tahun_ajaran: periodeAjaran.nama_ajaran,
+      nama: siswa.nama || '-',
+      no_induk: siswa.nis || '-',
+      ttl: `${siswa.tempat_lahir || ''}, ${formatTanggal(siswa.tanggal_lahir)}`,
+      jk: siswa.jenis_kelamin === 'LAKI_LAKI' ? 'Laki-laki' : siswa.jenis_kelamin === 'PEREMPUAN' ? 'Perempuan' : '-',
+      agama: siswa.agama || '-',
+      alamat: siswa.alamat || '-',
+      nama_ayah: siswa.nama_ayah || '-',
+      kerja_ayah: siswa.pekerjaan_ayah || '-',
+      alamat_ayah: siswa.alamat_ayah || '-',
+      nama_ibu: siswa.nama_ibu || '-',
+      kerja_ibu: siswa.pekerjaan_ibu || '-',
+      alamat_ibu: siswa.alamat_ibu || '-',
+      nama_wali: siswa.nama_wali || '-',
+      kerja_wali: siswa.pekerjaan_wali || '-',
+      alamat_wali: siswa.alamat_wali || '-',
+      kelas: siswa.kelas?.nama_kelas || '-',
+      wali_kelas: siswa.kelas?.wali_kelas?.nama || '-',
+
+      // Placeholder disamakan dengan rapor nilai & sikap
+      kepala_pesantren: kepalaPesantren?.nama || '-',
+      nip_kepala_pesantren: kepalaPesantren?.nip || '-',
+
+      tgl_raport: formatTanggal(new Date()),
+      kamar: siswa.kamar?.nama_kamar || '-',
+      kota_asal: siswa.kota_asal || '-'
     }
 
     // Set data in template

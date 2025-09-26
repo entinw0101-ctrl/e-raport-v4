@@ -194,7 +194,7 @@ export default function TemplateDokumenPage() {
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
-      const templateFile = formData.template_file
+      const templateFile = formData.template_file?.[0] // Get the first file from FileList
       delete formData.template_file // Remove from form data as it's handled separately
 
       const result = selectedTemplate

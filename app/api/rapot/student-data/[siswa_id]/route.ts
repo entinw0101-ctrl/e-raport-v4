@@ -27,18 +27,76 @@ export async function GET(
       )
     }
 
-    // Fetch student data with all related information
-    const siswa = await prisma.siswa.findUnique({
-      where: { id: siswaId },
-      include: {
-        kelas: {
-          include: {
-            wali_kelas: true,
+    // Run all queries in parallel for better performance
+    const [
+      siswa,
+      nilaiUjian,
+      nilaiHafalan,
+      kehadiran,
+      penilaianSikap,
+      periodeAjaran
+    ] = await Promise.all([
+      // Fetch student data with all related information
+      prisma.siswa.findUnique({
+        where: { id: siswaId },
+        include: {
+          kelas: {
+            include: {
+              wali_kelas: true,
+            },
           },
+          kamar: true,
         },
-        kamar: true,
-      },
-    })
+      }),
+      // Fetch nilai ujian
+      prisma.nilaiUjian.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId,
+        },
+        include: {
+          mata_pelajaran: true,
+        },
+      }),
+      // Fetch nilai hafalan
+      prisma.nilaiHafalan.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId,
+        },
+        include: {
+          mata_pelajaran: true,
+        },
+      }),
+      // Fetch kehadiran
+      prisma.kehadiran.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId,
+        },
+        include: {
+          indikator_kehadiran: true,
+        },
+      }),
+      // Fetch penilaian sikap
+      prisma.penilaianSikap.findMany({
+        where: {
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId,
+        },
+        include: {
+          indikator_sikap: true,
+        },
+      }),
+      // Fetch periode ajaran
+      prisma.periodeAjaran.findUnique({
+        where: { id: periodeAjaranId },
+        select: {
+          nama_ajaran: true,
+          semester: true,
+        },
+      })
+    ])
 
     if (!siswa) {
       return NextResponse.json(
@@ -47,70 +105,21 @@ export async function GET(
       )
     }
 
-    // Fetch nilai ujian
-    const nilaiUjian = await prisma.nilaiUjian.findMany({
-      where: {
-        siswa_id: siswaId,
-        periode_ajaran_id: periodeAjaranId,
-      },
-      include: {
-        mata_pelajaran: true,
-      },
-    })
 
-    // Fetch nilai hafalan with kurikulum data
-    const nilaiHafalan = await prisma.nilaiHafalan.findMany({
-      where: {
-        siswa_id: siswaId,
-        periode_ajaran_id: periodeAjaranId,
-      },
-      include: {
-        mata_pelajaran: true,
-      },
-    })
-
-    // Get kurikulum data for hafalan
-    const kurikulumData = await prisma.kurikulum.findMany({
-      where: {
-        mapel_id: {
-          in: nilaiHafalan.map(n => n.mapel_id)
-        }
-      },
-      include: {
-        kitab: true,
-      },
-    })
-
-    // Fetch kehadiran
-    const kehadiran = await prisma.kehadiran.findMany({
-      where: {
-        siswa_id: siswaId,
-        periode_ajaran_id: periodeAjaranId,
-      },
-      include: {
-        indikator_kehadiran: true,
-      },
-    })
-
-    // Fetch penilaian sikap
-    const penilaianSikap = await prisma.penilaianSikap.findMany({
-      where: {
-        siswa_id: siswaId,
-        periode_ajaran_id: periodeAjaranId,
-      },
-      include: {
-        indikator_sikap: true,
-      },
-    })
-
-    // Fetch periode ajaran
-    const periodeAjaran = await prisma.periodeAjaran.findUnique({
-      where: { id: periodeAjaranId },
-      select: {
-        nama_ajaran: true,
-        semester: true,
-      },
-    })
+    // Get kurikulum data for hafalan (only if there are hafalan records)
+    let kurikulumData: any[] = []
+    if (nilaiHafalan.length > 0) {
+      kurikulumData = await prisma.kurikulum.findMany({
+        where: {
+          mapel_id: {
+            in: nilaiHafalan.map(n => n.mapel_id)
+          }
+        },
+        include: {
+          kitab: true,
+        },
+      })
+    }
 
     if (!periodeAjaran) {
       return NextResponse.json(

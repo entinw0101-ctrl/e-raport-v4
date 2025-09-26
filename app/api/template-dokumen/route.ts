@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const jenis_template = formData.get("jenis_template") as string
     const file = formData.get("file") as File
 
-    if (!nama_template || !jenis_template || !file) {
+    if (!nama_template || !jenis_template || !file || !(file instanceof File)) {
       return NextResponse.json(
         { success: false, error: "Semua field wajib diisi" },
         { status: 400 }
@@ -63,8 +63,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file type
+    if (!file.name) {
+      return NextResponse.json(
+        { success: false, error: "File tidak valid" },
+        { status: 400 }
+      )
+    }
+
     const allowedTypes = ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
-    if (!allowedTypes.includes(file.type)) {
+    const originalFileName = file.name.toLowerCase()
+    const isDocxExtension = originalFileName.endsWith('.docx')
+    if (!allowedTypes.includes(file.type) && !isDocxExtension) {
       return NextResponse.json(
         { success: false, error: "Format file harus DOCX" },
         { status: 400 }
