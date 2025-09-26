@@ -118,6 +118,11 @@ const data = {
       title: "Penilaian",
       items: [
         {
+          title: "Template Lengkap",
+          url: "/template-lengkap",
+          icon: FileText,
+        },
+        {
           title: "Nilai Ujian",
           url: "/nilai-ujian",
           icon: FileText,
@@ -136,6 +141,11 @@ const data = {
           title: "Penilaian Sikap",
           url: "/penilaian-sikap",
           icon: Heart,
+        },
+        {
+          title: "Catatan Siswa",
+          url: "/catatan-siswa",
+          icon: ClipboardList,
         },
       ],
     },
@@ -176,6 +186,11 @@ const data = {
           title: "Surat Keluar",
           url: "/surat-keluar",
           icon: ClipboardList,
+        },
+        {
+          title: "Template Lengkap",
+          url: "/template-lengkap",
+          icon: FileText,
         },
         {
           title: "Pengaturan",

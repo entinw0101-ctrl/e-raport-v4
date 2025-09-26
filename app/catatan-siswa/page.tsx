@@ -24,7 +24,7 @@ interface Siswa {
   }
 }
 
-export default function NilaiUjianPage() {
+export default function CatatanSiswaPage() {
   const [data, setData] = useState<Siswa[]>([])
   const [loading, setLoading] = useState(true)
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
@@ -136,7 +136,6 @@ export default function NilaiUjianPage() {
     fetchData(1) // Reset to first page
   }
 
-
   const handleViewData = (student: Siswa) => {
     if (!selectedPeriodeForTable) {
       toast({
@@ -146,7 +145,7 @@ export default function NilaiUjianPage() {
       })
       return
     }
-    router.push(`/nilai-ujian/${student.id}?periode_ajaran_id=${selectedPeriodeForTable}`)
+    router.push(`/catatan-siswa/${student.id}?periode_ajaran_id=${selectedPeriodeForTable}`)
   }
 
   const handleDownloadTemplate = async () => {
@@ -160,7 +159,7 @@ export default function NilaiUjianPage() {
     }
 
     try {
-      const response = await fetch(`/api/export/excel/nilai-ujian/template/${selectedKelasForTemplate}?periode_ajaran_id=${selectedPeriodeAjaran}`)
+      const response = await fetch(`/api/export/excel/catatan-siswa/template/${selectedKelasForTemplate}?periode_ajaran_id=${selectedPeriodeAjaran}`)
       if (!response.ok) {
         throw new Error("Failed to download template")
       }
@@ -168,7 +167,7 @@ export default function NilaiUjianPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `template_nilai_ujian_${new Date().toISOString().split("T")[0]}.xlsx`
+      a.download = `template_catatan_siswa_${new Date().toISOString().split("T")[0]}.xlsx`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -187,7 +186,6 @@ export default function NilaiUjianPage() {
     }
   }
 
-
   const handleImportExcel = async () => {
     if (!selectedFile) {
       toast({
@@ -198,7 +196,7 @@ export default function NilaiUjianPage() {
       return
     }
 
-    if (!selectedPeriodeForTable || !selectedKelasForTemplate) {
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
       toast({
         title: "Pilih Lengkap",
         description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
@@ -212,10 +210,9 @@ export default function NilaiUjianPage() {
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
-      formData.append("kelas_id", selectedKelasForTemplate)
-      formData.append("periode_ajaran_id", selectedPeriodeForTable)
+      formData.append("periode_ajaran_id", selectedPeriodeAjaran)
 
-      const response = await fetch("/api/upload/excel/nilai-ujian", {
+      const response = await fetch("/api/upload/excel/catatan-siswa", {
         method: "POST",
         body: formData,
       })
@@ -290,7 +287,7 @@ export default function NilaiUjianPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <PageHeader title="Nilai Ujian" description="Daftar siswa untuk melihat nilai ujian" />
+      <PageHeader title="Catatan Siswa" description="Daftar siswa untuk melihat catatan sikap dan akademik" />
 
       {/* Excel Import/Export Section - At the top */}
       <div className="flex items-center gap-4">

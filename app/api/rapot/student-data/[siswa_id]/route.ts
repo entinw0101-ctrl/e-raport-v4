@@ -128,6 +128,14 @@ export async function GET(
       )
     }
 
+    // Get catatan siswa
+    const catatanSiswa = await prisma.catatanSiswa.findFirst({
+      where: {
+        siswa_id: siswaId,
+        periode_ajaran_id: periodeAjaranId,
+      },
+    })
+
     // Transform data to match the expected interface
     const transformedData = {
       siswa: {
@@ -192,6 +200,10 @@ export async function GET(
           indikator: p.indikator_sikap.indikator || "",
         },
       })),
+      catatanSiswa: catatanSiswa ? {
+        catatan_sikap: catatanSiswa.catatan_sikap,
+        catatan_akademik: catatanSiswa.catatan_akademik,
+      } : null,
       periodeAjaran,
     }
 

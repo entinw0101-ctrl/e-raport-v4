@@ -53,6 +53,7 @@ model PeriodeAjaran {
   ringkasan_rapot    RingkasanRapot[]
   log_promosi_dari   LogPromosi[] @relation("PromosiDari")
   log_promosi_ke     LogPromosi[] @relation("PromosiKe")
+  catatan_siswa      CatatanSiswa[]
 
   @@unique([nama_ajaran, semester])
   @@index([semester])
@@ -179,6 +180,7 @@ model Siswa {
   ringkasan_rapot     RingkasanRapot[]
   riwayat_kelas_siswa RiwayatKelasSiswa[]
   surat_keluar        SuratKeluar[]
+  catatan_siswa       CatatanSiswa[]
 
   @@index([nis])
   @@index([nama])
@@ -502,6 +504,26 @@ model SuratKeluar {
 // =====================================================
 // TABEL TEMPLATE DOKUMEN
 // =====================================================
+
+// Tabel Catatan Siswa
+model CatatanSiswa {
+  id                Int      @id @default(autoincrement())
+  siswa_id          Int
+  periode_ajaran_id Int
+  catatan_sikap     String?  @db.Text
+  catatan_akademik  String?  @db.Text
+  dibuat_pada       DateTime @default(now())
+  diperbarui_pada   DateTime @updatedAt
+
+  // Relasi
+  siswa          Siswa         @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
+  periode_ajaran PeriodeAjaran @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
+
+  @@unique([siswa_id, periode_ajaran_id])
+  @@index([siswa_id])
+  @@index([periode_ajaran_id])
+  @@map("catatan_siswa")
+}
 
 // Tabel Template Dokumen
 model TemplateDokumen {
