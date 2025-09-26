@@ -5,6 +5,8 @@ import { DataTable, type Column } from "@/src/components/DataTable"
 import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Upload, Trash2, FileImage } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface PenanggungJawabRapot {
@@ -80,6 +82,18 @@ export default function PenanggungJawabRapotPage() {
       ),
     },
     {
+      key: "tanda_tangan",
+      label: "Tanda Tangan",
+      render: (value, row) => (
+        <div className="flex items-center gap-2">
+          {value ? <Badge variant="default">Ada</Badge> : <Badge variant="secondary">Belum</Badge>}
+          <Button size="sm" variant="outline" onClick={() => handleUploadSignature(row)}>
+            <Upload className="h-3 w-3" />
+          </Button>
+        </div>
+      ),
+    },
+    {
       key: "dibuat_pada",
       label: "Dibuat Pada",
       render: (value) => new Date(value).toLocaleDateString("id-ID"),
@@ -108,12 +122,6 @@ export default function PenanggungJawabRapotPage() {
       placeholder: "Nomor Induk Pegawai (opsional)",
     },
     {
-      name: "tanda_tangan",
-      label: "Path Tanda Tangan",
-      type: "text",
-      placeholder: "Path ke file tanda tangan (opsional)",
-    },
-    {
       name: "jenis_kelamin_target",
       label: "Target Jenis Kelamin",
       type: "select",
@@ -133,6 +141,24 @@ export default function PenanggungJawabRapotPage() {
         { value: "aktif", label: "Aktif" },
         { value: "nonaktif", label: "Non-aktif" },
       ],
+    },
+    {
+      name: "signature_file",
+      label: "Tanda Tangan",
+      type: "signature",
+      accept: "image/jpeg,image/jpg,image/png",
+      signatureUrl: selectedPenanggungJawabRapot?.tanda_tangan || undefined,
+      onViewSignature: () => {
+        if (selectedPenanggungJawabRapot?.tanda_tangan) {
+          setSelectedPenanggungJawabRapot(selectedPenanggungJawabRapot) // Trigger signature preview modal
+        }
+      },
+      onDeleteSignature: () => {
+        if (selectedPenanggungJawabRapot) {
+          handleDeleteSignature(selectedPenanggungJawabRapot.id)
+        }
+      },
+      required: !selectedPenanggungJawabRapot?.tanda_tangan,
     },
   ]
 
@@ -197,9 +223,87 @@ export default function PenanggungJawabRapotPage() {
     setShowDeleteDialog(true)
   }
 
+  const handleUploadSignature = (penanggungJawabRapot: PenanggungJawabRapot) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = "image/*"
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      try {
+        const formData = new FormData()
+        formData.append("signature", file)
+
+        const response = await fetch(`/api/penanggung-jawab-rapot/${penanggungJawabRapot.id}/signature`, {
+          method: "POST",
+          body: formData,
+        })
+
+        const result = await response.json()
+
+        if (result.success) {
+          toast({
+            title: "Berhasil",
+            description: "Tanda tangan berhasil diupload",
+          })
+          fetchData(pagination.page, searchTerm)
+        } else {
+          toast({
+            title: "Error",
+            description: result.error || "Gagal upload tanda tangan",
+            variant: "destructive",
+          })
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Terjadi kesalahan saat upload",
+          variant: "destructive",
+        })
+      }
+    }
+    input.click()
+  }
+
+  const handleDeleteSignature = async (id: number) => {
+    try {
+      const response = await fetch(`/api/penanggung-jawab-rapot/${id}/signature`, {
+        method: "DELETE",
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Berhasil",
+          description: "Tanda tangan berhasil dihapus",
+        })
+        fetchData(pagination.page, searchTerm)
+        setShowFormModal(false) // Close modal after deletion
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Gagal menghapus tanda tangan",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat menghapus tanda tangan",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleFormSubmit = async (formData: Record<string, any>) => {
     setFormLoading(true)
     try {
+      // Handle signature upload separately
+      const signatureFile = formData.signature_file
+      delete formData.signature_file // Remove from form data as it's handled separately
+
       const url = selectedPenanggungJawabRapot ? `/api/penanggung-jawab-rapot/${selectedPenanggungJawabRapot.id}` : "/api/penanggung-jawab-rapot"
       const method = selectedPenanggungJawabRapot ? "PUT" : "POST"
 
@@ -214,6 +318,21 @@ export default function PenanggungJawabRapotPage() {
       const result = await response.json()
 
       if (result.success) {
+        // If there's a signature file to upload, upload it after creating/updating
+        if (signatureFile && signatureFile.length > 0) {
+          const penanggungJawabRapotId = selectedPenanggungJawabRapot ? selectedPenanggungJawabRapot.id : result.data?.id
+          if (penanggungJawabRapotId) {
+            const uploadResult = await uploadSignature(penanggungJawabRapotId, signatureFile[0])
+            if (!uploadResult.success) {
+              toast({
+                title: "Peringatan",
+                description: "Data berhasil disimpan, tetapi upload tanda tangan gagal",
+                variant: "destructive",
+              })
+            }
+          }
+        }
+
         toast({
           title: "Berhasil",
           description: result.message || `Penanggung jawab rapot berhasil ${selectedPenanggungJawabRapot ? "diperbarui" : "ditambahkan"}`,
@@ -236,6 +355,18 @@ export default function PenanggungJawabRapotPage() {
     } finally {
       setFormLoading(false)
     }
+  }
+
+  const uploadSignature = async (id: number, file: File) => {
+    const formData = new FormData()
+    formData.append("signature", file)
+
+    const response = await fetch(`/api/penanggung-jawab-rapot/${id}/signature`, {
+      method: "POST",
+      body: formData,
+    })
+
+    return response.json()
   }
 
   const handleDeleteConfirm = async () => {
@@ -269,18 +400,17 @@ export default function PenanggungJawabRapotPage() {
       })
     }
   }
+const getInitialFormData = () => {
+  if (!selectedPenanggungJawabRapot) return { status: "aktif", jenis_kelamin_target: "Semua" }
 
-  const getInitialFormData = () => {
-    if (!selectedPenanggungJawabRapot) return { status: "aktif", jenis_kelamin_target: "Semua" }
-    return {
-      jabatan: selectedPenanggungJawabRapot.jabatan,
-      nama_pejabat: selectedPenanggungJawabRapot.nama_pejabat,
-      nip: selectedPenanggungJawabRapot.nip || "",
-      tanda_tangan: selectedPenanggungJawabRapot.tanda_tangan || "",
-      jenis_kelamin_target: selectedPenanggungJawabRapot.jenis_kelamin_target,
-      status: selectedPenanggungJawabRapot.status,
-    }
+  return {
+    jabatan: selectedPenanggungJawabRapot.jabatan,
+    nama_pejabat: selectedPenanggungJawabRapot.nama_pejabat,
+    nip: selectedPenanggungJawabRapot.nip || "",
+    jenis_kelamin_target: selectedPenanggungJawabRapot.jenis_kelamin_target,
+    status: selectedPenanggungJawabRapot.status,
   }
+}
 
   return (
     <div className="container mx-auto px-4 py-8">
