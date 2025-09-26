@@ -7,297 +7,146 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { DataTable } from "@/src/components/DataTable"
-import { FormModal } from "@/src/components/FormModal"
 import { PageHeader } from "@/src/components/PageHeader"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, FileDown, Upload } from "lucide-react"
+import { Eye, FileDown, Upload } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Input } from "@/components/ui/input"
 
-interface NilaiUjian {
+interface Siswa {
   id: string
-  siswa_id: string
-  mapel_id: string
-  periode_ajaran_id: string
-  nilai_angka: number
-  predikat: string
-  created_at: string
-  siswa: { nama: string; nis: string; kelas: { nama_kelas: string } }
-  mata_pelajaran: { nama_mapel: string }
-  periode_ajaran: { nama_ajaran: string }
-}
-
-interface FormData {
-  siswa_id: string
-  mapel_id: string
-  periode_ajaran_id: string
-  nilai_angka: number
+  nama: string
+  nis: string
+  kelas: {
+    nama_kelas: string
+  }
 }
 
 export default function NilaiUjianPage() {
-  const [data, setData] = useState<NilaiUjian[]>([])
-  const [filteredData, setFilteredData] = useState<NilaiUjian[]>([])
+  const [data, setData] = useState<Siswa[]>([])
   const [loading, setLoading] = useState(true)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<NilaiUjian | null>(null)
-  const [formData, setFormData] = useState<FormData>({
-    siswa_id: "",
-    mapel_id: "",
-    periode_ajaran_id: "",
-    nilai_angka: 0,
-  })
-
-  // Filter states (removed for now to fix build)
-  // const [filters, setFilters] = useState({
-  //   kelas_id: "",
-  //   mata_pelajaran_id: "",
-  //   periode_id: "",
-  //   jenis_ujian: "",
-  // })
-
-  // Options for dropdowns
-  const [siswaOptions, setSiswaOptions] = useState<any[]>([])
-  const [mataPelajaranOptions, setMataPelajaranOptions] = useState<any[]>([])
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
-  const [filteredKelasOptions, setFilteredKelasOptions] = useState<any[]>([])
 
-  // Template selection states
-  const [selectedPeriodeAjaran, setSelectedPeriodeAjaran] = useState<string>("")
+  // Pagination state
+  const [pagination, setPagination] = useState({
+    page: 1,
+    per_page: 10,
+    total: 0,
+    total_pages: 0,
+  })
+
+  // Table filter states
+  const [selectedKelas, setSelectedKelas] = useState<string>("")
+  const [selectedPeriodeForTable, setSelectedPeriodeForTable] = useState<string>("")
+
+  // Excel template states (synced with table filters)
+  const selectedPeriodeAjaran = selectedPeriodeForTable
   const [selectedKelasForTemplate, setSelectedKelasForTemplate] = useState<string>("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isImporting, setIsImporting] = useState(false)
 
   const { toast } = useToast()
-
-  const jenisUjianOptions = [
-    { value: "UTS", label: "Ujian Tengah Semester" },
-    { value: "UAS", label: "Ujian Akhir Semester" },
-    { value: "Harian", label: "Ulangan Harian" },
-    { value: "Praktik", label: "Ujian Praktik" },
-  ]
+  const router = useRouter()
 
   const columns = [
-    { key: "siswa.nama", label: "Nama Siswa" },
-    { key: "siswa.nis", label: "NIS" },
-    { key: "mata_pelajaran.nama_mapel", label: "Mata Pelajaran" },
-    { key: "siswa.kelas.nama_kelas", label: "Kelas" },
-    {
-      key: "nilai_angka",
-      label: "Nilai",
-      render: (value, row) => (
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{value}</span>
-          <Badge variant={getGradeBadgeVariant(row.predikat)}>{row.predikat}</Badge>
-        </div>
-      ),
-    },
-    { key: "periode_ajaran.nama_ajaran", label: "Periode" },
-  ]
-
-  const filterOptions = [
-    {
-      key: "kelas_id",
-      label: "Kelas",
-      options: kelasOptions?.map((k: any) => ({ value: k.id, label: k.nama_kelas })) || [],
-    },
-    {
-      key: "mapel_id",
-      label: "Mata Pelajaran",
-      options: mataPelajaranOptions?.map((mp: any) => ({ value: mp.id, label: mp.nama })) || [],
-    },
-    {
-      key: "periode_ajaran_id",
-      label: "Periode Ajaran",
-      options: periodeOptions?.map((p: any) => ({ value: p.id, label: p.nama_ajaran })) || [],
-    },
+    { key: "nis", label: "NIS" },
+    { key: "nama", label: "Nama Siswa" },
+    { key: "kelas.nama_kelas", label: "Kelas" },
   ]
 
   useEffect(() => {
     fetchData()
-    fetchOptions()
+    fetchKelasOptions()
+    fetchPeriodeOptions()
   }, [])
 
   useEffect(() => {
-    setFilteredData(data) // No filtering for now
-  }, [data])
+    fetchData()
+  }, [selectedKelas, selectedPeriodeForTable])
 
-  // Set filtered kelas options to all kelas (no filtering by tingkatan)
-  useEffect(() => {
-    setFilteredKelasOptions(kelasOptions)
-  }, [kelasOptions])
-
-  const fetchData = async () => {
+  const fetchData = async (page = 1) => {
+    setLoading(true)
     try {
-      const response = await fetch("/api/nilai-ujian")
+      const params = new URLSearchParams()
+      params.append("status", "Aktif") // Only active students
+      params.append("page", page.toString())
+      params.append("per_page", pagination.per_page.toString())
+      if (selectedKelas && selectedKelas !== "all") {
+        params.append("kelas_id", selectedKelas)
+      }
+
+      const response = await fetch(`/api/siswa?${params}`)
       const result = await response.json()
-      // Ensure nilai_angka is always a number
-      const rawData = result.data || result
-      const mappedData = Array.isArray(rawData)
-        ? rawData.map((item: any) => ({
-            ...item,
-            nilai_angka: typeof item.nilai_angka === "string" ? Number(item.nilai_angka) : item.nilai_angka,
-          }))
-        : rawData
-      setData(mappedData)
+
+      if (result.success) {
+        setData(result.data || [])
+        setPagination(result.pagination || {
+          page: 1,
+          per_page: 10,
+          total: 0,
+          total_pages: 0,
+        })
+      } else {
+        throw new Error(result.message || "Gagal memuat data siswa")
+      }
     } catch (error) {
+      console.error("Error fetching students:", error)
       toast({
         title: "Error",
-        description: "Gagal memuat data nilai ujian",
+        description: "Gagal memuat data siswa",
         variant: "destructive",
       })
+      setData([])
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchOptions = async () => {
+  const fetchKelasOptions = async () => {
     try {
-      const [siswaRes, mataPelajaranRes, kelasRes, periodeRes] = await Promise.all([
-        fetch("/api/siswa"),
-        fetch("/api/mata-pelajaran"),
-        fetch("/api/kelas"),
-        fetch("/api/periode-ajaran"),
-      ])
-
-      const [siswa, mataPelajaran, kelas, periode] = await Promise.all([
-        siswaRes.json(),
-        mataPelajaranRes.json(),
-        kelasRes.json(),
-        periodeRes.json(),
-      ])
-
-      setSiswaOptions(siswa.success ? (siswa.data || []) : [])
-      setMataPelajaranOptions(mataPelajaran.success ? (mataPelajaran.data || []) : [])
-      setKelasOptions(kelas.success ? (kelas.data || []) : [])
-      setPeriodeOptions(periode.success ? (periode.data || []) : [])
+      const response = await fetch("/api/kelas")
+      const result = await response.json()
+      setKelasOptions(result.success ? (result.data || []) : [])
     } catch (error) {
-      console.error("Error fetching options:", error)
-      // Set empty arrays on error
-      setSiswaOptions([])
-      setMataPelajaranOptions([])
+      console.error("Error fetching kelas options:", error)
       setKelasOptions([])
+    }
+  }
+
+  const fetchPeriodeOptions = async () => {
+    try {
+      const response = await fetch("/api/periode-ajaran?per_page=1000")
+      const result = await response.json()
+      setPeriodeOptions(result.success ? (result.data || []) : [])
+    } catch (error) {
+      console.error("Error fetching periode options:", error)
       setPeriodeOptions([])
     }
   }
 
-  const getGradeBadgeVariant = (grade: string) => {
-    switch (grade) {
-      case "A":
-        return "default"
-      case "B":
-        return "secondary"
-      case "C":
-        return "outline"
-      case "D":
-        return "destructive"
-      default:
-        return "secondary"
-    }
+  const handlePageChange = (page: number) => {
+    fetchData(page)
   }
 
-  const handleSubmit = async (data: Record<string, any>) => {
-    try {
-      const url = editingItem ? `/api/nilai-ujian/${editingItem.id}` : "/api/nilai-ujian"
-      const method = editingItem ? "PUT" : "POST"
+  const handlePerPageChange = (perPage: number) => {
+    setPagination(prev => ({ ...prev, per_page: perPage }))
+    fetchData(1) // Reset to first page
+  }
 
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      })
 
-      if (response.ok) {
-        toast({
-          title: "Berhasil",
-          description: `Nilai ujian berhasil ${editingItem ? "diperbarui" : "ditambahkan"}`,
-        })
-        setIsModalOpen(false)
-        resetForm()
-        fetchData()
-      } else {
-        throw new Error("Failed to save")
-      }
-    } catch (error) {
+  const handleViewData = (student: Siswa) => {
+    if (!selectedPeriodeForTable) {
       toast({
-        title: "Error",
-        description: "Gagal menyimpan nilai ujian",
+        title: "Pilih Periode Ajaran",
+        description: "Silakan pilih periode ajaran terlebih dahulu untuk melihat data siswa",
         variant: "destructive",
       })
+      return
     }
-  }
-
-  const handleEdit = (item: NilaiUjian) => {
-    setEditingItem(item)
-    setFormData({
-      siswa_id: item.siswa_id,
-      mapel_id: item.mapel_id,
-      periode_ajaran_id: item.periode_ajaran_id,
-      nilai_angka: item.nilai_angka,
-    })
-    setIsModalOpen(true)
-  }
-
-  const handleDelete = async (item: NilaiUjian) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus nilai ujian ini?")) return
-
-    try {
-      const response = await fetch(`/api/nilai-ujian/${item.id}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        toast({
-          title: "Berhasil",
-          description: "Nilai ujian berhasil dihapus",
-        })
-        fetchData()
-      } else {
-        throw new Error("Failed to delete")
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Gagal menghapus nilai ujian",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const resetForm = () => {
-    setFormData({
-      siswa_id: "",
-      mapel_id: "",
-      periode_ajaran_id: "",
-      nilai_angka: 0,
-    })
-    setEditingItem(null)
-  }
-
-  const handleExport = async () => {
-    try {
-      // Export all data without filters for now
-      const response = await fetch(`/api/nilai-ujian/export`)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `nilai-ujian-${new Date().toISOString().split("T")[0]}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Gagal mengekspor data",
-        variant: "destructive",
-      })
-    }
+    router.push(`/nilai-ujian/${student.id}?periode_ajaran_id=${selectedPeriodeForTable}`)
   }
 
   const handleDownloadTemplate = async () => {
@@ -348,7 +197,7 @@ export default function NilaiUjianPage() {
       return
     }
 
-    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
+    if (!selectedPeriodeForTable || !selectedKelasForTemplate) {
       toast({
         title: "Pilih Lengkap",
         description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
@@ -363,7 +212,7 @@ export default function NilaiUjianPage() {
       const formData = new FormData()
       formData.append("file", selectedFile)
       formData.append("kelas_id", selectedKelasForTemplate)
-      formData.append("periode_ajaran_id", selectedPeriodeAjaran)
+      formData.append("periode_ajaran_id", selectedPeriodeForTable)
 
       const response = await fetch("/api/upload/excel/nilai-ujian", {
         method: "POST",
@@ -400,128 +249,141 @@ export default function NilaiUjianPage() {
     }
   }
 
+  // Custom header for table filters
+  const tableFilters = (
+    <div className="flex gap-4 items-center">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Periode Ajaran</label>
+        <Select value={selectedPeriodeForTable} onValueChange={setSelectedPeriodeForTable}>
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="Pilih Periode Ajaran" />
+          </SelectTrigger>
+          <SelectContent>
+            {periodeOptions?.map((periode: any) => (
+              <SelectItem key={periode.id} value={periode.id.toString()}>
+                {periode.nama_ajaran} - Semester {periode.semester === "SATU" ? "1" : "2"}
+              </SelectItem>
+            )) || []}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Kelas</label>
+        <Select value={selectedKelas} onValueChange={setSelectedKelas}>
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="Semua Kelas" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Kelas</SelectItem>
+            {kelasOptions?.map((kelas: any) => (
+              <SelectItem key={kelas.id} value={kelas.id.toString()}>
+                {kelas.nama_kelas}
+              </SelectItem>
+            )) || []}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <PageHeader title="Nilai Ujian" description="Kelola nilai ujian siswa" />
+      <PageHeader title="Nilai Ujian" description="Daftar siswa untuk melihat nilai ujian" />
 
-      <div className="flex justify-between items-center">
-        <div className="flex gap-2">
-          <div className="flex items-center gap-2">
-            <Select value={selectedPeriodeAjaran} onValueChange={setSelectedPeriodeAjaran}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Pilih Periode Ajaran" />
-              </SelectTrigger>
-              <SelectContent>
-                {periodeOptions?.map((periode: any) => (
-                  <SelectItem key={periode.id} value={periode.id.toString()}>
-                    {periode.nama_ajaran} - Semester {periode.semester === "SATU" ? "1" : "2"}
-                  </SelectItem>
-                )) || []}
-              </SelectContent>
-            </Select>
-            <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedPeriodeAjaran}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Pilih Kelas" />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredKelasOptions?.map((kelas: any) => (
-                  <SelectItem key={kelas.id} value={kelas.id.toString()}>
-                    Kelas: {kelas.nama_kelas || 'N/A'} - Tingkatan: {kelas.tingkatan?.nama_tingkatan || 'N/A'} {kelas.wali_kelas ? `- Wali: ${kelas.wali_kelas.nama}` : ''}
-                  </SelectItem>
-                )) || []}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedPeriodeAjaran || !selectedKelasForTemplate}>
-              <FileDown className="w-4 h-4 mr-2" />
-              Download Template
-            </Button>
-          </div>
+      {/* Excel Import/Export Section - At the top */}
+      <div className="flex items-center gap-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Periode Ajaran (Excel)</label>
+          <Select value={selectedPeriodeAjaran} onValueChange={setSelectedPeriodeForTable}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Pilih Periode Ajaran" />
+            </SelectTrigger>
+            <SelectContent>
+              {periodeOptions?.map((periode: any) => (
+                <SelectItem key={periode.id} value={periode.id.toString()}>
+                  {periode.nama_ajaran} - Semester {periode.semester === "SATU" ? "1" : "2"}
+                </SelectItem>
+              )) || []}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Kelas (Excel)</label>
+          <Select value={selectedKelasForTemplate} onValueChange={setSelectedKelasForTemplate} disabled={!selectedPeriodeForTable}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Pilih Kelas" />
+            </SelectTrigger>
+            <SelectContent>
+              {kelasOptions?.map((kelas: any) => (
+                <SelectItem key={kelas.id} value={kelas.id.toString()}>
+                  {kelas.nama_kelas}
+                </SelectItem>
+              )) || []}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-end gap-2">
+          <Button variant="outline" onClick={handleDownloadTemplate} disabled={!selectedPeriodeForTable || !selectedKelasForTemplate}>
+            <FileDown className="w-4 h-4 mr-2" />
+            Download Template
+          </Button>
+
           <div className="flex items-center gap-2">
             <Input
               type="file"
               accept=".xlsx,.xls"
               onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              className="max-w-xs"
+              disabled={isImporting}
+              className="w-64"
             />
             <Button
               variant="outline"
               onClick={handleImportExcel}
-              disabled={!selectedFile || isImporting}
+              disabled={!selectedFile || isImporting || !selectedPeriodeForTable || !selectedKelasForTemplate}
             >
               <Upload className="w-4 h-4 mr-2" />
               {isImporting ? "Importing..." : "Import Excel"}
             </Button>
           </div>
-          <Button onClick={() => setIsModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Tambah Nilai
-          </Button>
         </div>
       </div>
 
       <DataTable
-        title="Data Nilai Ujian"
-        data={filteredData}
-        columns={columns}
-        loading={loading}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-      />
-
-      <FormModal
-        title={editingItem ? "Edit Nilai Ujian" : "Tambah Nilai Ujian"}
-        fields={[
+        title="Daftar Siswa"
+        data={data}
+        columns={[
+          ...columns,
           {
-            name: "siswa_id",
-            label: "Siswa",
-            type: "select",
-            required: true,
-            options: siswaOptions?.map((siswa: any) => ({
-              value: siswa.id,
-              label: `${siswa.nama} - ${siswa.nis}`
-            })) || []
-          },
-          {
-            name: "mapel_id",
-            label: "Mata Pelajaran",
-            type: "select",
-            required: true,
-            options: mataPelajaranOptions?.map((mp: any) => ({
-              value: mp.id,
-              label: mp.nama
-            })) || []
-          },
-          {
-            name: "periode_ajaran_id",
-            label: "Periode Ajaran",
-            type: "select",
-            required: true,
-            options: periodeOptions?.map((periode: any) => ({
-              value: periode.id,
-              label: periode.nama_ajaran
-            })) || []
-          },
-          {
-            name: "nilai_angka",
-            label: "Nilai",
-            type: "number",
-            required: true,
-            min: 0,
-            max: 100
+            key: "actions",
+            label: "Aksi",
+            render: (_, row) => (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleViewData(row)}
+                disabled={!selectedPeriodeForTable}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Lihat Data
+              </Button>
+            )
           }
         ]}
-        initialData={editingItem ? {
-          siswa_id: editingItem.siswa_id,
-          mapel_id: editingItem.mapel_id,
-          periode_ajaran_id: editingItem.periode_ajaran_id,
-          nilai_angka: editingItem.nilai_angka
-        } : {}}
-        open={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false)
-          resetForm()
-        }}
-        onSubmit={handleSubmit}
+        loading={loading}
+        pagination={pagination}
+        onPageChange={handlePageChange}
+        onPerPageChange={handlePerPageChange}
+        selectable={false}
+        onSelectionChange={undefined}
+        onBulkDelete={undefined}
+        customHeader={tableFilters}
+        emptyMessage={selectedPeriodeForTable ? "Tidak ada data siswa" : "Pilih periode ajaran terlebih dahulu"}
+        actions={true}
+        onEdit={undefined}
+        onDelete={undefined}
       />
     </div>
   )

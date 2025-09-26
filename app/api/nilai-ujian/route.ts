@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { generatePredikat } from "@/lib/utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -114,13 +115,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Nilai harus berupa angka antara 0-100" }, { status: 400 })
     }
 
-    // Determine predikat based on nilai_angka
-    let predikat = ""
-    if (nilai_angka >= 90) predikat = "A"
-    else if (nilai_angka >= 80) predikat = "B"
-    else if (nilai_angka >= 70) predikat = "C"
-    else if (nilai_angka >= 60) predikat = "D"
-    else predikat = "E"
+    // Generate predikat using standardized function
+    const predikat = generatePredikat(nilai_angka)
 
     const data = {
       siswa_id: Number.parseInt(body.siswa_id),

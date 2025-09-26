@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
 
+// Helper function to generate predikat based on nilai_angka
+function generatePredikat(nilai: number): string {
+  if (isNaN(nilai)) return '-';
+  if (nilai === 100) return 'Sempurna';
+  if (nilai >= 90) return 'Sangat Baik';
+  if (nilai >= 80) return 'Baik';
+  if (nilai >= 70) return 'Cukup';
+  return 'Kurang';
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -100,6 +110,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Create mapping for subject headers (handle both original and modified headers)
+    const subjectHeaderMap: { [header: string]: number } = {}
+    validKurikulum.forEach((item) => {
+      const originalName = item.mata_pelajaran!.nama_mapel
+      const modifiedName = `${originalName} (ID: ${item.mata_pelajaran!.id})`
+
+      // Map both possible header formats to mata_pelajaran_id
+      subjectHeaderMap[originalName] = item.mata_pelajaran!.id
+      subjectHeaderMap[modifiedName] = item.mata_pelajaran!.id
+    })
+
     // Process data rows
     const importData: any[] = []
     const errors: string[] = []
@@ -120,21 +141,24 @@ export async function POST(request: NextRequest) {
 
       // Process subject scores
       const subjectScores: any[] = []
-      validKurikulum.forEach((item) => {
-        const subjectName = item.mata_pelajaran!.nama_mapel
-        const score = rowData[subjectName]
+      headers.forEach((header) => {
+        // Check if this header corresponds to a subject
+        const mataPelajaranId = subjectHeaderMap[header]
+        if (mataPelajaranId) {
+          const score = rowData[header]
 
-        if (score && score.trim() !== "") {
-          const scoreValue = parseFloat(score)
-          if (isNaN(scoreValue) || scoreValue < 0 || scoreValue > 100) {
-            errors.push(`Baris ${rowNumber}: Nilai untuk ${subjectName} harus antara 0-100`)
-            return
+          if (score && score.trim() !== "") {
+            const scoreValue = parseFloat(score)
+            if (isNaN(scoreValue) || scoreValue < 0 || scoreValue > 100) {
+              errors.push(`Baris ${rowNumber}: Nilai untuk ${header} harus antara 0-100`)
+              return
+            }
+
+            subjectScores.push({
+              mata_pelajaran_id: mataPelajaranId,
+              nilai: scoreValue,
+            })
           }
-
-          subjectScores.push({
-            mata_pelajaran_id: item.mata_pelajaran!.id,
-            nilai: scoreValue,
-          })
         }
       })
 
@@ -181,26 +205,35 @@ export async function POST(request: NextRequest) {
             continue
           }
 
-          // Insert nilai ujian for each subject
+          // Upsert nilai ujian for each subject (update if exists, create if not)
           for (const subjectScore of data.subjectScores) {
-            await tx.nilaiUjian.create({
-              data: {
+            const predikatValue = generatePredikat(subjectScore.nilai)
+
+            await tx.nilaiUjian.upsert({
+              where: {
+                siswa_id_mapel_id_periode_ajaran_id: {
+                  siswa_id: siswa.id,
+                  mapel_id: subjectScore.mata_pelajaran_id,
+                  periode_ajaran_id: periodeAjaran.id,
+                }
+              },
+              update: {
+                nilai_angka: subjectScore.nilai,
+                predikat: predikatValue,
+              },
+              create: {
                 siswa_id: siswa.id,
                 mapel_id: subjectScore.mata_pelajaran_id,
                 periode_ajaran_id: periodeAjaran.id,
                 nilai_angka: subjectScore.nilai,
-                predikat: null, // Will be calculated later if needed
+                predikat: predikatValue,
               },
             })
           }
 
           successCount++
         } catch (error: any) {
-          if (error.code === 'P2002') {
-            errorDetails.push(`Baris ${data.rowNumber}: Data nilai ujian sudah ada untuk siswa ${data.nis}`)
-          } else {
-            errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
-          }
+          errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
         }
       }
 

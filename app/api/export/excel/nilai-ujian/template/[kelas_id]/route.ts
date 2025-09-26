@@ -120,9 +120,40 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       })
     })
 
+    // Check for duplicate headers and make them unique
+    const headerCounts: { [key: string]: number } = {}
+    columns.forEach((col, index) => {
+      if (index < 4) return // Skip NIS, Nama, Periode, Semester columns
+
+      if (headerCounts[col.header]) {
+        // If duplicate header found, append ID to make it unique
+        col.header = `${col.header} (ID: ${col.key.split('_')[1]})`
+        headerCounts[col.header] = 1
+      } else {
+        headerCounts[col.header] = 1
+      }
+    })
+
     worksheet.columns = columns
 
     // Style headers
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF0066CC" }, // Blue color
+      }
+      cell.font = {
+        color: { argb: "FFFFFFFF" }, // White text
+        bold: true,
+      }
+      cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+      }
+    })
+
+    // Style headers first
     worksheet.getRow(1).eachCell((cell) => {
       cell.fill = {
         type: "pattern",
@@ -146,7 +177,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     })
 
     // Add data rows for each student
-    siswaInKelas.forEach((siswa) => {
+    siswaInKelas.forEach((siswa, index) => {
       const row: any = {
         nis: siswa.nis,
         nama: siswa.nama,
@@ -161,7 +192,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
       const addedRow = worksheet.addRow(row)
 
-      // Add borders to all cells in the data row
+      // Apply borders to all cells in this data row
       addedRow.eachCell((cell) => {
         cell.border = {
           top: { style: 'thin' },
@@ -171,6 +202,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       })
     })
+
+    // Ensure all cells in the used range have borders (safety check)
+    const totalRows = siswaInKelas.length + 1 // +1 for header
+    const totalCols = columns.length
+
+    for (let rowIndex = 1; rowIndex <= totalRows; rowIndex++) {
+      for (let colIndex = 1; colIndex <= totalCols; colIndex++) {
+        const cell = worksheet.getCell(rowIndex, colIndex)
+        if (!cell.border || !cell.border.top) {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          }
+        }
+      }
+    }
 
     // Set response headers
     const buffer = await workbook.xlsx.writeBuffer()

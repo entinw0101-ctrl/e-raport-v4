@@ -367,6 +367,7 @@ model PenilaianSikap {
   indikator_id      Int
   periode_ajaran_id Int
   nilai             Int           @db.SmallInt
+  predikat          String?       @db.VarChar(50)
   dibuat_pada       DateTime      @default(now())
   diperbarui_pada   DateTime      @updatedAt
 

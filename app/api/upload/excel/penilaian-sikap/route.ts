@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
+import { generatePredikat } from "@/lib/utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -176,6 +177,9 @@ export async function POST(request: NextRequest) {
 
           // Insert assessment data for each indicator
           for (const assessment of data.assessments) {
+            // Generate predikat from nilai
+            const predikat = generatePredikat(assessment.nilai)
+
             await tx.penilaianSikap.upsert({
               where: {
                 siswa_id_indikator_id_periode_ajaran_id: {
@@ -186,12 +190,14 @@ export async function POST(request: NextRequest) {
               },
               update: {
                 nilai: assessment.nilai,
+                predikat: predikat,
               },
               create: {
                 siswa_id: siswa.id,
                 indikator_id: assessment.indikator_sikap_id,
                 periode_ajaran_id: periodeAjaran.id,
                 nilai: assessment.nilai,
+                predikat: predikat,
               },
             })
           }

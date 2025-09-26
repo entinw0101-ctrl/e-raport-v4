@@ -36,6 +36,13 @@ export interface DataTableProps<T> {
   onAdd?: () => void
   onEdit?: (row: T) => void
   onDelete?: (row: T) => void
+  // Selection props
+  selectable?: boolean
+  onSelectionChange?: (selectedIds: (number | string)[]) => void
+  onBulkDelete?: (selectedIds: (number | string)[]) => void
+  onDeleteAll?: () => void
+  // Custom header content (for integrated filters)
+  customHeader?: React.ReactNode
   searchPlaceholder?: string
   addButtonText?: string
   emptyMessage?: string
@@ -55,6 +62,11 @@ export function DataTable<T extends { id: number | string }>({
   onAdd,
   onEdit,
   onDelete,
+  selectable = false,
+  onSelectionChange,
+  onBulkDelete,
+  onDeleteAll,
+  customHeader,
   searchPlaceholder = "Cari data...",
   addButtonText = "Tambah Data",
   emptyMessage = "Tidak ada data yang ditemukan",
@@ -62,6 +74,7 @@ export function DataTable<T extends { id: number | string }>({
   maxHeight,
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedIds, setSelectedIds] = useState<(number | string)[]>([])
   const debouncedSearchTerm = useDebounce(searchTerm, 300)
 
   // ✅ FIXED: Remove useEffect that causes infinite loop
@@ -72,6 +85,33 @@ export function DataTable<T extends { id: number | string }>({
     // ✅ FIXED: Call onSearch immediately when user types
     if (onSearch) {
       onSearch(value)
+    }
+  }
+
+  // Selection handlers
+  const handleSelectAll = (checked: boolean) => {
+    const newSelectedIds = checked ? data.map(item => item.id) : []
+    setSelectedIds(newSelectedIds)
+    onSelectionChange?.(newSelectedIds)
+  }
+
+  const handleSelectItem = (id: number | string, checked: boolean) => {
+    const newSelectedIds = checked
+      ? [...selectedIds, id]
+      : selectedIds.filter(selectedId => selectedId !== id)
+    setSelectedIds(newSelectedIds)
+    onSelectionChange?.(newSelectedIds)
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length > 0 && onBulkDelete) {
+      onBulkDelete(selectedIds)
+    }
+  }
+
+  const handleDeleteAll = () => {
+    if (onDeleteAll) {
+      onDeleteAll()
     }
   }
 
@@ -149,6 +189,25 @@ export function DataTable<T extends { id: number | string }>({
         <div className="flex items-center justify-between">
           <CardTitle>{title}</CardTitle>
           <div className="flex items-center space-x-2">
+            {selectable && selectedIds.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.length} dipilih
+                </span>
+                {onBulkDelete && (
+                  <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Hapus yang Dipilih
+                  </Button>
+                )}
+                {onDeleteAll && (
+                  <Button variant="destructive" size="sm" onClick={handleDeleteAll}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Hapus Semua
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -171,7 +230,26 @@ export function DataTable<T extends { id: number | string }>({
         <div className={`rounded-md border ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`}>
           <Table>
             <TableHeader>
+              {customHeader && (
+                <TableRow>
+                  <TableHead colSpan={columns.length + (selectable ? 1 : 0) + (actions ? 1 : 0)} className="border-b-0 p-4">
+                    <div className="py-2">
+                      {customHeader}
+                    </div>
+                  </TableHead>
+                </TableRow>
+              )}
               <TableRow>
+                {selectable && (
+                  <TableHead className="w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.length === data.length && data.length > 0}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                  </TableHead>
+                )}
                 {columns.map((column, index) => (
                   <TableHead key={index} className={column.className}>
                     {column.label}
@@ -202,6 +280,16 @@ export function DataTable<T extends { id: number | string }>({
               ) : (
                 data.map((row, rowIndex) => (
                   <TableRow key={row.id || rowIndex}>
+                    {selectable && (
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(row.id)}
+                          onChange={(e) => handleSelectItem(row.id, e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                      </TableCell>
+                    )}
                     {columns.map((column, colIndex) => (
                       <TableCell key={colIndex} className={column.className}>
                         {column.render

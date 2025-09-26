@@ -162,7 +162,8 @@ export async function GET(
         const kurikulum = kurikulumData.find(k => k.mapel_id === n.mapel_id)
         return {
           id: n.id.toString(),
-          predikat: n.predikat,
+          target_hafalan: kurikulum?.batas_hafalan || "",
+          predikat: n.predikat === "TERCAPAI" ? "Tercapai" : n.predikat === "TIDAK_TERCAPAI" ? "Tidak Tercapai" : n.predikat,
           mata_pelajaran: {
             nama_mapel: n.mata_pelajaran.nama_mapel,
           },

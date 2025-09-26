@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { generatePredikat } from "@/lib/utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -112,11 +113,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Nilai harus berupa angka positif atau nol" }, { status: 400 })
     }
 
+    // Generate predikat automatically from nilai
+    const predikat = generatePredikat(nilai)
+
     const data = {
       siswa_id: Number.parseInt(body.siswa_id),
       indikator_id: Number.parseInt(body.indikator_sikap_id),
       periode_ajaran_id: Number.parseInt(body.periode_ajaran_id),
       nilai,
+      predikat,
     }
 
     const penilaianSikap = await prisma.penilaianSikap.create({
