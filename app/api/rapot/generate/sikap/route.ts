@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import Docxtemplater from "docxtemplater"
 import PizZip from "pizzip"
+import ImageModule from "docxtemplater-image-module-free"
 import fs from "fs"
 import path from "path"
 import { getPredicate } from "@/lib/raport-utils"
@@ -87,6 +88,18 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Fetch penanggung jawab based on student gender
+    const penanggungJawab = await prisma.penanggungJawabRapot.findFirst({
+      where: {
+        jenis_kelamin_target: siswa.jenis_kelamin === "LAKI_LAKI" ? "LAKI_LAKI" : "PEREMPUAN",
+        status: "aktif"
+      }
+    })
+
+    if (!penanggungJawab) {
+      throw new Error(`Penanggung jawab untuk ${siswa.jenis_kelamin} tidak ditemukan`)
+    }
+
     // Group penilaian sikap by jenis_sikap
     const sikapByJenis = penilaianSikap.reduce((acc, item) => {
       const jenis = item.indikator_sikap.jenis_sikap || 'Spiritual'
@@ -153,8 +166,31 @@ export async function POST(request: NextRequest) {
       // Catatan sikap
       catatan_sikap: catatanSiswa?.catatan_sikap || "",
 
+      // Penanggung jawab
+      jabatan_penanggung_jawab: penanggungJawab.jabatan,
+      nama_penanggung_jawab: penanggungJawab.nama_pejabat,
+      nip_penanggung_jawab: penanggungJawab.nip || "",
+      // Image placeholder - path relative to public folder
+      tanda_tangan_penanggung_jawab: penanggungJawab.tanda_tangan?.replace('/uploads/', 'uploads/') || "",
+
       // Metadata
       tgl_raport: new Date().toLocaleDateString('id-ID')
+    }
+
+    // Setup image module for signature
+    const imageOpts = {
+      getImage: (tagValue: string) => {
+        try {
+          // tagValue should be the path to the signature image
+          const imagePath = path.join(process.cwd(), 'public', tagValue)
+          return fs.readFileSync(imagePath)
+        } catch (error) {
+          console.error('Error loading signature image:', error)
+          // Return empty buffer if image not found
+          return Buffer.alloc(0)
+        }
+      },
+      getSize: () => [150, 75], // width, height in pixels
     }
 
     // Load template
@@ -162,9 +198,11 @@ export async function POST(request: NextRequest) {
     const templateContent = fs.readFileSync(templatePath, 'binary')
 
     const zip = new PizZip(templateContent)
+    // @ts-ignore - Image module doesn't have proper types
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
+      modules: [new ImageModule(imageOpts)],
     })
 
     // Set template data

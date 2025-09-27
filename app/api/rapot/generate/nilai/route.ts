@@ -2,9 +2,12 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import Docxtemplater from "docxtemplater"
 import PizZip from "pizzip"
+import ImageModule from "docxtemplater-image-module-free"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
 import { generateLaporanNilai } from "@/lib/raport-utils"
+import fs from "fs"
+import path from "path"
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,6 +67,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Setup image module for wali kelas signature
+    const imageOpts = {
+      getImage: async (tagValue: string) => {
+        try {
+          // Check if it's a cloud URL (production)
+          if (process.env.NODE_ENV === 'production' && process.env.BLOB_READ_WRITE_TOKEN && tagValue.startsWith('https://')) {
+            const response = await fetch(tagValue)
+            if (!response.ok) {
+              throw new Error(`Failed to fetch signature image from cloud: ${tagValue}`)
+            }
+            const arrayBuffer = await response.arrayBuffer()
+            return Buffer.from(arrayBuffer)
+          }
+          // Local development - convert cloud URL to local path
+          else if (tagValue.startsWith('https://')) {
+            const localPath = tagValue.replace(
+              'https://6uc7tvnigewtrcyh.public.blob.vercel-storage.com/',
+              'uploads/signatures/'
+            )
+            const imagePath = path.join(process.cwd(), 'public', localPath)
+            return fs.readFileSync(imagePath)
+          }
+          // Fallback for other paths
+          else {
+            const imagePath = path.join(process.cwd(), 'public', tagValue.replace(/^\//, ''))
+            return fs.readFileSync(imagePath)
+          }
+        } catch (error) {
+          console.error('Error loading signature image:', error)
+          return Buffer.alloc(0)
+        }
+      },
+      getSize: () => [150, 75], // width, height in pixels
+    }
+
     // Fetch template file
     let templateBuffer: ArrayBuffer
 
@@ -76,17 +114,19 @@ export async function POST(request: NextRequest) {
       templateBuffer = await response.arrayBuffer()
     } else {
       // Fetch from local storage
-      const fs = await import("fs/promises")
-      const path = await import("path")
-      const filePath = path.join(process.cwd(), "public", template.file_path.replace(/^\//, ""))
-      templateBuffer = await fs.readFile(filePath) as any
+      const fsPromises = await import("fs/promises")
+      const pathModule = await import("path")
+      const filePath = pathModule.join(process.cwd(), "public", template.file_path.replace(/^\//, ""))
+      templateBuffer = await fsPromises.readFile(filePath) as any
     }
 
-    // Load template
+    // Load template with image module
     const zip = new PizZip(templateBuffer)
+    // @ts-ignore - Image module doesn't have proper types
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
+      modules: [new ImageModule(imageOpts)],
     })
 
     // Helper function to format date
@@ -154,6 +194,12 @@ export async function POST(request: NextRequest) {
         izin: item.izin,
         alpha: item.alpha
       })),
+
+      // Wali kelas info
+      nama_wali_kelas: siswa.kelas?.wali_kelas?.nama || "",
+      nip_wali_kelas: siswa.kelas?.wali_kelas?.nip || "",
+      // Image placeholder - full URL for cloud, will be handled by image module
+      tanda_tangan_wali_kelas: siswa.kelas?.wali_kelas?.tanda_tangan || "",
 
       // Metadata
       tgl_raport: formatTanggal(new Date()),
