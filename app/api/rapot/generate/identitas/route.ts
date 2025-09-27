@@ -95,11 +95,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Load template file (dynamic path for local and production)
+    // Load template file (detect based on file_path format)
     let templateContent: string
 
-    if (process.env.NODE_ENV === 'production' && process.env.BLOB_READ_WRITE_TOKEN) {
-      // In production, fetch from Vercel Blob Storage
+    if (template.file_path.startsWith('https://')) {
+      // If it's a full URL (Vercel Blob), fetch from cloud storage
       const response = await fetch(template.file_path)
       if (!response.ok) {
         throw new Error("Failed to fetch template from storage")
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       const arrayBuffer = await response.arrayBuffer()
       templateContent = arrayBuffer as any
     } else {
-      // In development/local, read from local file system
+      // If it's a local path, read from file system
       const templatePath = path.join(process.cwd(), 'public', template.file_path.replace(/^\//, ""))
       templateContent = fs.readFileSync(templatePath, 'binary')
     }
