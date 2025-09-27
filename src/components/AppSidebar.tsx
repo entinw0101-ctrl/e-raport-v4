@@ -16,6 +16,7 @@ import {
   Building,
   School,
   BookMarked,
+  LogOut,
 } from "lucide-react"
 
 import {
@@ -32,7 +33,8 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { signOut } from "next-auth/react"
 
 // Menu data
 const data = {
@@ -204,6 +206,11 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: "/auth/login" })
+  }
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -256,6 +263,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ))}
       </SidebarContent>
       <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout}>
+              <LogOut />
+              <span>Logout</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="p-2 text-xs text-muted-foreground">© 2025 Nuurush Sholaah</div>
       </SidebarFooter>
       <SidebarRail />

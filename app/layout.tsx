@@ -16,6 +16,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { Toaster } from "@/components/ui/toaster"
+import { Providers } from "@/components/providers"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -32,7 +33,8 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <SidebarProvider>
+        <Providers>
+          <SidebarProvider>
           <AppSidebar />
           <SidebarInset>
             <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
@@ -56,9 +58,10 @@ export default function RootLayout({
               <Suspense fallback={null}>{children}</Suspense>
             </div>
           </SidebarInset>
-        </SidebarProvider>
-        <Toaster />
-        <Analytics />
+          </SidebarProvider>
+          <Toaster />
+          <Analytics />
+        </Providers>
       </body>
     </html>
   )

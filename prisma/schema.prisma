@@ -11,6 +11,24 @@ datasource db {
 }
 
 // =====================================================
+// TABEL ADMIN & AUTHENTICATION
+// =====================================================
+
+// Tabel Admin
+model Admin {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique @db.VarChar(255)
+  password  String   @db.VarChar(255) // Password yang di-hash
+  name      String?  @db.VarChar(255)
+  role      AdminRole @default(admin)
+  status    AdminStatus @default(active)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin")
+}
+
+// =====================================================
 // TABEL MASTER DATA
 // =====================================================
 
@@ -605,5 +623,15 @@ enum JenisTemplate {
   NILAI
   SIKAP
   SURAT_KELUAR
+}
+
+enum AdminRole {
+  admin
+  developer
+}
+
+enum AdminStatus {
+  active
+  inactive
 }
 
