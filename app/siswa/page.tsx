@@ -317,8 +317,8 @@ export default function SiswaPage() {
         )
       }
 
-      // Fetch kelas options
-      const kelasResponse = await fetch("/api/kelas")
+      // Fetch kelas options - get all classes (no pagination limit)
+      const kelasResponse = await fetch("/api/kelas?per_page=1000")
       if (kelasResponse.ok) {
         const kelasData = await kelasResponse.json()
         setKelasOptions(
@@ -329,8 +329,8 @@ export default function SiswaPage() {
         )
       }
 
-      // Fetch kamar options
-      const kamarResponse = await fetch("/api/kamar")
+      // Fetch kamar options - get all rooms (no pagination limit)
+      const kamarResponse = await fetch("/api/kamar?per_page=1000")
       if (kamarResponse.ok) {
         const kamarData = await kamarResponse.json()
         setKamarOptions(
@@ -341,8 +341,8 @@ export default function SiswaPage() {
         )
       }
 
-      // Fetch tahun ajaran options
-      const tahunResponse = await fetch("/api/master-tahun-ajaran")
+      // Fetch tahun ajaran options - get all years (no pagination limit)
+      const tahunResponse = await fetch("/api/master-tahun-ajaran?per_page=1000")
       if (tahunResponse.ok) {
         const tahunData = await tahunResponse.json()
         setTahunAjaranOptions(

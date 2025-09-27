@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
+import { generatePredikat } from "@/lib/utils"
+import { PredikatHafalan } from "@prisma/client"
 
 interface ValidationResult {
   sheet: string
@@ -82,6 +84,20 @@ export async function POST(request: NextRequest) {
       kehadiran: kehadiranValidation.data || [],
       penilaianSikap: penilaianSikapValidation.data || [],
       catatanSiswa: catatanSiswaValidation.data || []
+    }
+
+    // Debug: Log validated data counts
+    console.log('Validated data counts:', {
+      nilaiUjian: validatedData.nilaiUjian.length,
+      nilaiHafalan: validatedData.nilaiHafalan.length,
+      kehadiran: validatedData.kehadiran.length,
+      penilaianSikap: validatedData.penilaianSikap.length,
+      catatanSiswa: validatedData.catatanSiswa.length
+    })
+
+    // Debug: Log first few nilai hafalan items
+    if (validatedData.nilaiHafalan.length > 0) {
+      console.log('First nilai hafalan item:', validatedData.nilaiHafalan[0])
     }
 
     // Combine all validation results
@@ -216,7 +232,7 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
               },
               data: {
                 nilai_angka: item.nilai,
-                predikat: item.nilai >= 90 ? 'A' : item.nilai >= 80 ? 'B' : item.nilai >= 70 ? 'C' : 'D'
+                predikat: generatePredikat(item.nilai)
               }
             })
             results.nilaiUjian.updated++
@@ -227,7 +243,7 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
                 mapel_id: mapel.id,
                 periode_ajaran_id: parseInt(periodeAjaranId),
                 nilai_angka: item.nilai,
-                predikat: item.nilai >= 90 ? 'A' : item.nilai >= 80 ? 'B' : item.nilai >= 70 ? 'C' : 'D'
+                predikat: generatePredikat(item.nilai)
               }
             })
             results.nilaiUjian.inserted++
@@ -241,12 +257,50 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
     }
 
     // Import Nilai Hafalan
+    console.log(`Processing ${validatedData.nilaiHafalan?.length || 0} nilai hafalan items`)
     for (const item of validatedData.nilaiHafalan || []) {
       try {
-        const siswa = await prisma.siswa.findFirst({ where: { nis: item.nis } })
-        const mapel = await prisma.mataPelajaran.findFirst({ where: { nama_mapel: item.mataPelajaran } })
+        // Trim whitespace from data
+        const trimmedItem = {
+          nis: item.nis?.trim(),
+          nama: item.nama?.trim(),
+          mataPelajaran: item.mataPelajaran?.trim(),
+          kitab: item.kitab?.trim(),
+          targetHafalan: item.targetHafalan?.trim(),
+          predikat: item.predikat?.trim()
+        }
+
+        console.log('Processing nilai hafalan item:', trimmedItem)
+
+        const siswa = await prisma.siswa.findFirst({
+          where: {
+            nis: trimmedItem.nis,
+            status: "Aktif" // Ensure only active students
+          }
+        })
+
+        const mapel = await prisma.mataPelajaran.findFirst({
+          where: {
+            nama_mapel: trimmedItem.mataPelajaran,
+            jenis: "Hafalan" // Ensure it's a Hafalan subject
+          }
+        })
+
+        console.log('Found siswa:', siswa?.id, 'mapel:', mapel?.id)
 
         if (siswa && mapel) {
+          // Map string values to enum values
+          let predikatEnum: PredikatHafalan | null = null
+          if (trimmedItem.predikat === 'Tercapai') {
+            predikatEnum = PredikatHafalan.TERCAPAI
+          } else if (trimmedItem.predikat === 'Tidak Tercapai') {
+            predikatEnum = PredikatHafalan.TIDAK_TERCAPAI
+          } else {
+            console.log('Invalid predikat for nilai hafalan:', trimmedItem.predikat, 'Valid values: Tercapai, Tidak Tercapai')
+            results.nilaiHafalan.errors++
+            continue
+          }
+
           const existing = await prisma.nilaiHafalan.findUnique({
             where: {
               siswa_id_mapel_id_periode_ajaran_id: {
@@ -267,27 +321,44 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
                 }
               },
               data: {
-                target_hafalan: item.targetHafalan,
-                predikat: item.predikat
+                target_hafalan: trimmedItem.targetHafalan,
+                predikat: predikatEnum
               }
             })
             results.nilaiHafalan.updated++
+            console.log('Updated nilai hafalan successfully')
           } else {
             await prisma.nilaiHafalan.create({
               data: {
                 siswa_id: siswa.id,
                 mapel_id: mapel.id,
                 periode_ajaran_id: parseInt(periodeAjaranId),
-                target_hafalan: item.targetHafalan,
-                predikat: item.predikat
+                target_hafalan: trimmedItem.targetHafalan,
+                predikat: predikatEnum
               }
             })
             results.nilaiHafalan.inserted++
+            console.log('Inserted nilai hafalan successfully')
           }
         } else {
+          console.log('Siswa or mapel not found for nilai hafalan:', {
+            siswa: !!siswa,
+            mapel: !!mapel,
+            trimmedItem,
+            siswaDetails: siswa ? { id: siswa.id, nama: siswa.nama } : null,
+            mapelDetails: mapel ? { id: mapel.id, nama: mapel.nama_mapel, jenis: mapel.jenis } : null
+          })
           results.nilaiHafalan.errors++
         }
       } catch (error) {
+        console.error('Error importing nilai hafalan for item:', item, 'Error:', error)
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            message: error.message,
+            name: error.name,
+            stack: error.stack
+          })
+        }
         results.nilaiHafalan.errors++
       }
     }
@@ -444,6 +515,7 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
       }
     }
 
+    console.log('Import results:', results)
     return results
   } catch (error) {
     console.error('Import error:', error)
