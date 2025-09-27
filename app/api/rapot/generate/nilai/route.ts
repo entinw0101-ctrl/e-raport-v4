@@ -84,26 +84,25 @@ export async function POST(request: NextRequest) {
       getSize: () => [150, 75], // width, height in pixels
     }
 
-    // Fetch template file
-    let templateBuffer: ArrayBuffer
+    // Load template file (dynamic path for local and production)
+    let templateContent: string
 
     if (process.env.NODE_ENV === 'production' && process.env.BLOB_READ_WRITE_TOKEN) {
-      // Fetch from Vercel Blob Storage
+      // In production, fetch from Vercel Blob Storage
       const response = await fetch(template.file_path)
       if (!response.ok) {
         throw new Error("Failed to fetch template from storage")
       }
-      templateBuffer = await response.arrayBuffer()
+      const arrayBuffer = await response.arrayBuffer()
+      templateContent = arrayBuffer as any
     } else {
-      // Fetch from local storage
-      const fsPromises = await import("fs/promises")
-      const pathModule = await import("path")
-      const filePath = pathModule.join(process.cwd(), "public", template.file_path.replace(/^\//, ""))
-      templateBuffer = await fsPromises.readFile(filePath) as any
+      // In development/local, read from local file system
+      const templatePath = path.join(process.cwd(), 'public', template.file_path.replace(/^\//, ""))
+      templateContent = fs.readFileSync(templatePath, 'binary')
     }
 
     // Load template with image module
-    const zip = new PizZip(templateBuffer)
+    const zip = new PizZip(templateContent)
     // @ts-ignore - Image module doesn't have proper types
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,

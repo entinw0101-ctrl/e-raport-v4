@@ -4,6 +4,8 @@ import Docxtemplater from "docxtemplater"
 import PizZip from "pizzip"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
+import fs from "fs"
+import path from "path"
 
 export async function POST(request: NextRequest) {
   try {
@@ -93,26 +95,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch template file
-    let templateBuffer: ArrayBuffer
+    // Load template file (dynamic path for local and production)
+    let templateContent: string
 
     if (process.env.NODE_ENV === 'production' && process.env.BLOB_READ_WRITE_TOKEN) {
-      // Fetch from Vercel Blob Storage
+      // In production, fetch from Vercel Blob Storage
       const response = await fetch(template.file_path)
       if (!response.ok) {
         throw new Error("Failed to fetch template from storage")
       }
-      templateBuffer = await response.arrayBuffer()
+      const arrayBuffer = await response.arrayBuffer()
+      templateContent = arrayBuffer as any
     } else {
-      // Fetch from local storage
-      const fs = await import("fs/promises")
-      const path = await import("path")
-      const filePath = path.join(process.cwd(), "public", template.file_path.replace(/^\//, ""))
-      templateBuffer = await fs.readFile(filePath) as any
+      // In development/local, read from local file system
+      const templatePath = path.join(process.cwd(), 'public', template.file_path.replace(/^\//, ""))
+      templateContent = fs.readFileSync(templatePath, 'binary')
     }
 
     // Load template
-    const zip = new PizZip(templateBuffer)
+    const zip = new PizZip(templateContent)
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
