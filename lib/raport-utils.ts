@@ -16,9 +16,17 @@ const getPredicate = (nilai: number | null): string => {
 
 const formatTanggal = (tanggal: Date | string | null): string => {
   if (!tanggal) return '-'
-  const date = new Date(tanggal)
-  const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-  return `${date.getDate()} ${bulan[date.getMonth()]} ${date.getFullYear()}`
+  try {
+    const date = new Date(tanggal)
+    // Check if date is valid
+    if (isNaN(date.getTime())) return '-'
+
+    const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+    return `${date.getDate()} ${bulan[date.getMonth()]} ${date.getFullYear()}`
+  } catch (error) {
+    console.warn('Invalid date format:', tanggal)
+    return '-'
+  }
 }
 
 // Helper function to safely calculate averages
@@ -160,12 +168,16 @@ export function convertToHijriah(masehiYear: number): number {
 // Generate complete nilai rapor data
 export async function generateLaporanNilai(
   siswaId: string,
-  periodeAjaranId: string
+  periodeAjaranId: string,
+  options: {
+    isAdmin?: boolean // For admin mode with flexible validation
+  } = {}
 ): Promise<{
   canGenerate: boolean
   error?: string
   warnings?: string[]
   data?: any
+  reportStatus?: 'ready' | 'partial' | 'not_ready'
 }> {
   const prisma = (await import("@/lib/prisma")).prisma
 
@@ -206,7 +218,7 @@ export async function generateLaporanNilai(
       return { canGenerate: false, error: "Periode ajaran tidak ditemukan" }
     }
 
-    // 4. Validate minimum data requirement (must have exam scores)
+    // 4. Get exam scores (required for basic validation)
     const nilaiUjian = await prisma.nilaiUjian.findMany({
       where: {
         siswa_id: parseInt(siswaId),
@@ -229,13 +241,6 @@ export async function generateLaporanNilai(
         }
       }
     })
-
-    if (nilaiUjian.length === 0) {
-      return {
-        canGenerate: false,
-        error: "Siswa aktif harus memiliki minimal 1 nilai ujian untuk generate laporan"
-      }
-    }
 
     // 5. Get optional data with warnings
     const warnings: string[] = []
@@ -299,7 +304,36 @@ export async function generateLaporanNilai(
       warnings.push("Belum ada catatan akademik")
     }
 
-    // 6. Calculate averages and rankings
+    // 6. Validate data completeness and determine report status
+    let reportStatus: 'ready' | 'partial' | 'not_ready' = 'not_ready'
+    if (nilaiUjian.length > 0) {
+      const hasKehadiran = kehadiran.length > 0
+      const hasHafalan = nilaiHafalan.length > 0
+      const hasCatatan = !!catatanSiswa?.catatan_akademik
+
+      if (hasKehadiran && hasHafalan && hasCatatan) {
+        reportStatus = 'ready'
+      } else {
+        reportStatus = 'partial'
+      }
+    }
+
+    // Flexible validation for admin mode
+    if (!options.isAdmin && nilaiUjian.length === 0) {
+      return {
+        canGenerate: false,
+        error: "Siswa aktif harus memiliki minimal 1 nilai ujian untuk generate laporan",
+        reportStatus
+      }
+    }
+
+    // For admin mode, allow generation even without exam scores
+    if (options.isAdmin && nilaiUjian.length === 0) {
+      warnings.push("Belum ada nilai ujian - rapor akan kosong")
+      reportStatus = 'not_ready'
+    }
+
+    // 7. Calculate averages and rankings
     const totalNilaiUjian = nilaiUjian.reduce((sum, n) => sum + n.nilai_angka.toNumber(), 0)
     const rataRataUjian = nilaiUjian.length > 0 ? totalNilaiUjian / nilaiUjian.length : 0
 
@@ -308,7 +342,7 @@ export async function generateLaporanNilai(
 
     const rankingData = await calculateClassRanking(siswaId, periodeAjaranId)
 
-    // 7. Calculate hafalan status
+    // 8. Calculate hafalan status
     const hafalanStatus = calculateHafalanStatus(nilaiHafalan)
 
     // 8. Calculate attendance summary
@@ -355,7 +389,9 @@ export async function generateLaporanNilai(
       totalNilaiUjian: Math.round(totalNilaiUjian * 100) / 100,
       rataRataUjian: Math.round(rataRataUjian * 100) / 100,
       rataRataPredikatUjian: rataRataPredikatUjian,
-      peringkat: rankingData ? rankingData.rank : null,
+      peringkat: rankingData
+        ? (rankingData.isComplete ? rankingData.rank : `Sementara (${rankingData.rank})`)
+        : (nilaiUjian.length > 0 ? "-" : null),
       totalSiswa: rankingData ? rankingData.totalActiveStudents : 0,
       nilaiHafalan: nilaiHafalan.map(h => ({
         mataPelajaran: h.mata_pelajaran.nama_mapel,
@@ -382,7 +418,8 @@ export async function generateLaporanNilai(
     return {
       canGenerate: true,
       warnings: warnings.length > 0 ? warnings : undefined,
-      data: reportData
+      data: reportData,
+      reportStatus
     }
 
   } catch (error) {
@@ -402,6 +439,7 @@ export async function calculateClassRanking(
   rank: number
   totalActiveStudents: number
   average: number
+  isComplete: boolean // True if all students have exam scores
 } | null> {
   const prisma = (await import("@/lib/prisma")).prisma
 
@@ -414,40 +452,58 @@ export async function calculateClassRanking(
 
     if (!targetSiswa?.kelas_id) return null
 
-    // Get all active students in the same class who have exam scores
-    const rankingData = await prisma.nilaiUjian.groupBy({
+    // 1. Get ALL active students in the class (regardless of exam scores)
+    const allActiveStudents = await prisma.siswa.findMany({
+      where: {
+        kelas_id: targetSiswa.kelas_id,
+        status: "Aktif"
+      },
+      select: { id: true }
+    })
+
+    if (allActiveStudents.length === 0) return null
+
+    // 2. Get exam scores for students who have them
+    const examScores = await prisma.nilaiUjian.groupBy({
       by: ['siswa_id'],
       where: {
         periode_ajaran_id: parseInt(periodeAjaranId),
         siswa: {
           kelas_id: targetSiswa.kelas_id,
-          status: "Aktif"  // Only active students
+          status: "Aktif"
         }
       },
       _avg: { nilai_angka: true }
     })
 
-    if (rankingData.length === 0) return null
+    // 3. Create ranking data for ALL active students
+    const rankingData = allActiveStudents.map(student => {
+      const examData = examScores.find(score => score.siswa_id === student.id)
+      return {
+        siswa_id: student.id,
+        average: examData?._avg.nilai_angka?.toNumber() || 0  // 0 for students without scores
+      }
+    })
 
-    // Filter out students with null averages and sort by average descending
+    // 4. Sort by average descending (higher scores = better rank)
     const sortedByAverage = rankingData
-      .filter(item => item._avg.nilai_angka !== null)
-      .map(item => ({
-        siswa_id: item.siswa_id,
-        average: item._avg.nilai_angka!.toNumber()
-      }))
       .sort((a, b) => b.average - a.average)
 
-    // Find target student's rank
+    // 5. Find target student's rank
     const targetIndex = sortedByAverage.findIndex(item => item.siswa_id === parseInt(siswaId))
     if (targetIndex === -1) return null
 
     const targetStudent = sortedByAverage[targetIndex]
 
+    // 6. Check if ranking is complete (all students have scores)
+    const studentsWithScores = examScores.length
+    const isComplete = studentsWithScores === allActiveStudents.length
+
     return {
       rank: targetIndex + 1,
-      totalActiveStudents: sortedByAverage.length,
-      average: targetStudent.average
+      totalActiveStudents: allActiveStudents.length,
+      average: targetStudent.average,
+      isComplete
     }
 
   } catch (error) {

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DataTable } from "@/src/components/DataTable"
 import { PageHeader } from "@/src/components/PageHeader"
 import { useToast } from "@/hooks/use-toast"
-import { Eye } from "lucide-react"
+import { Eye, BarChart3 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 interface EligibleStudent {
@@ -131,6 +131,17 @@ export default function RaportPage() {
         title="Generate Raport"
         description="Daftar semua siswa aktif"
       />
+
+      <div className="flex gap-2">
+        <Button
+          onClick={() => router.push('/raport/dashboard')}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <BarChart3 className="h-4 w-4" />
+          Dashboard Monitoring Rapor
+        </Button>
+      </div>
 
       <div className="flex gap-4 items-end">
         <div className="space-y-2">

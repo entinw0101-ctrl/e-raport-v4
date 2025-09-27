@@ -11,7 +11,6 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * per_page
 
-    // Build where clause
     const where: any = {}
 
     if (search) {

@@ -7,13 +7,17 @@ export async function GET(request: NextRequest) {
     const page = Number.parseInt(searchParams.get("page") || "1")
     const per_page = Number.parseInt(searchParams.get("per_page") || "10")
     const search = searchParams.get("search") || ""
+    const nama_ajaran = searchParams.get("nama_ajaran") // Exact match for promotion
 
     const skip = (page - 1) * per_page
 
     // Build where clause
     const where: any = {}
 
-    if (search) {
+    if (nama_ajaran) {
+      // Exact match for promotion page
+      where.nama_ajaran = nama_ajaran
+    } else if (search) {
       where.OR = [
         { nama_ajaran: { contains: search, mode: "insensitive" } },
       ]

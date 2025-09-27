@@ -1,96 +1,107 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import { generateLaporanNilai } from "@/lib/raport-utils"
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const periodeAjaranId = searchParams.get('periode_ajaran_id')
-    const kelasId = searchParams.get('kelas_id')
+    const kelasId = searchParams.get("kelas_id")
+    const periodeAjaranId = searchParams.get("periode_ajaran_id")
 
-    if (!periodeAjaranId) {
-      return NextResponse.json({
-        success: false,
-        message: 'periode_ajaran_id diperlukan'
-      }, { status: 400 })
+    if (!kelasId || !periodeAjaranId) {
+      return NextResponse.json(
+        { success: false, error: "kelas_id dan periode_ajaran_id wajib diisi" },
+        { status: 400 }
+      )
     }
 
-    // Query untuk mendapatkan siswa yang memiliki data di semua 4 tabel untuk periode ajaran tertentu
-    const whereCondition: any = {
-      AND: [
-        // Siswa harus memiliki setidaknya satu nilai ujian untuk periode ini
-        {
-          nilai_ujian: {
-            some: {
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          }
-        },
-        // Siswa harus memiliki setidaknya satu nilai hafalan untuk periode ini
-        {
-          nilai_hafalan: {
-            some: {
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          }
-        },
-        // Siswa harus memiliki setidaknya satu data kehadiran untuk periode ini
-        {
-          kehadiran: {
-            some: {
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          }
-        },
-        // Siswa harus memiliki setidaknya satu penilaian sikap untuk periode ini
-        {
-          penilaian_sikap: {
-            some: {
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          }
-        }
-      ]
-    }
-
-    // Filter berdasarkan kelas jika disediakan dan bukan "all"
-    if (kelasId && kelasId !== "all") {
-      whereCondition.AND.push({
-        kelas_id: parseInt(kelasId)
-      })
-    }
-
-    const eligibleStudents = await prisma.siswa.findMany({
-      where: whereCondition,
+    // Get all active students in the class
+    const siswaAktif = await prisma.siswa.findMany({
+      where: {
+        kelas_id: parseInt(kelasId),
+        status: "Aktif"
+      },
       select: {
         id: true,
         nama: true,
-        nis: true,
-        kelas: {
-          select: {
-            nama_kelas: true
+        nis: true
+      },
+      orderBy: {
+        nama: "asc"
+      }
+    })
+
+    if (siswaAktif.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Tidak ada siswa aktif di kelas ini" },
+        { status: 404 }
+      )
+    }
+
+    // Get report status for each student
+    const studentsWithStatus = await Promise.all(
+      siswaAktif.map(async (siswa) => {
+        try {
+          const result = await generateLaporanNilai(
+            siswa.id.toString(),
+            periodeAjaranId,
+            { isAdmin: true }
+          )
+
+          return {
+            id: siswa.id,
+            nama: siswa.nama,
+            nis: siswa.nis,
+            report_status: result.reportStatus || 'not_ready',
+            can_generate: result.canGenerate,
+            peringkat: result.data?.peringkat || null,
+            total_siswa: result.data?.totalSiswa || 0,
+            warnings: result.warnings
+          }
+        } catch (error) {
+          console.error(`Error checking status for student ${siswa.id}:`, error)
+          return {
+            id: siswa.id,
+            nama: siswa.nama,
+            nis: siswa.nis,
+            report_status: 'error' as const,
+            can_generate: false,
+            peringkat: null,
+            total_siswa: 0,
+            warnings: ['Error checking report status']
           }
         }
-      },
-      orderBy: [
-        { kelas: { nama_kelas: 'asc' } },
-        { nama: 'asc' }
-      ]
-    })
+      })
+    )
+
+    // Group students by status for easy filtering
+    const groupedStudents = {
+      ready: studentsWithStatus.filter(s => s.report_status === 'ready'),
+      partial: studentsWithStatus.filter(s => s.report_status === 'partial'),
+      not_ready: studentsWithStatus.filter(s => s.report_status === 'not_ready'),
+      error: studentsWithStatus.filter(s => s.report_status === 'error')
+    }
 
     return NextResponse.json({
       success: true,
-      data: eligibleStudents,
-      message: `Ditemukan ${eligibleStudents.length} siswa siap generate raport`
+      kelas_id: kelasId,
+      periode_ajaran_id: periodeAjaranId,
+      total_students: siswaAktif.length,
+      summary: {
+        ready: groupedStudents.ready.length,
+        partial: groupedStudents.partial.length,
+        not_ready: groupedStudents.not_ready.length,
+        error: groupedStudents.error.length
+      },
+      students: studentsWithStatus,
+      grouped: groupedStudents
     })
 
   } catch (error) {
-    console.error('Error fetching eligible students:', error)
-    return NextResponse.json({
-      success: false,
-      message: 'Terjadi kesalahan saat mengambil data siswa',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    console.error("Error getting eligible students:", error)
+    return NextResponse.json(
+      { success: false, error: "Gagal mengambil data siswa eligible" },
+      { status: 500 }
+    )
   }
 }

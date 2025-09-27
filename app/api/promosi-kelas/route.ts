@@ -4,38 +4,36 @@ import { prisma } from "@/lib/prisma"
 export async function POST(request: NextRequest) {
    try {
      const body = await request.json()
-     const { tahun_ajaran_id, tingkatan_asal_id, preview } = body
+     const { master_tahun_ajaran_lama_id, master_tahun_ajaran_baru_id, kelas_asal_ids, preview } = body
 
      if (preview) {
-       // Handle preview request
-       if (!tahun_ajaran_id || !tingkatan_asal_id) {
+       // Handle preview request - based on selected classes
+       if (!master_tahun_ajaran_lama_id || !kelas_asal_ids || kelas_asal_ids.length === 0) {
          return NextResponse.json(
            {
              success: false,
-             error: "Tahun ajaran dan tingkatan asal harus diisi",
+             error: "Master tahun ajaran lama dan kelas asal harus diisi",
            },
            { status: 400 },
          )
        }
 
-       // Get all periods in this academic year
-       const periodeAjaran = await prisma.periodeAjaran.findMany({
+       // Get all periods in the old academic year for grade calculation
+       const periodeAjaranLama = await prisma.periodeAjaran.findMany({
          where: {
-           master_tahun_ajaran_id: Number(tahun_ajaran_id),
+           master_tahun_ajaran_id: Number(master_tahun_ajaran_lama_id),
          },
          select: { id: true },
        })
 
-       const periodeIds = periodeAjaran.map(p => p.id)
+       const periodeIds = periodeAjaranLama.map(p => p.id)
 
-       // Get students from classes in the source tingkatan with their grades across all periods
+       // Get students from selected classes
        const siswaData = await prisma.siswa.findMany({
          where: {
-           kelas: {
-             tingkatan_id: Number(tingkatan_asal_id),
-           },
+           kelas_id: { in: kelas_asal_ids.map((id: any) => Number(id)) },
            status: "Aktif",
-           master_tahun_ajaran_id: Number(tahun_ajaran_id),
+           master_tahun_ajaran_id: Number(master_tahun_ajaran_lama_id),
          },
          include: {
            kelas: {
@@ -53,37 +51,30 @@ export async function POST(request: NextRequest) {
                mata_pelajaran: true,
              },
            },
-           nilai_hafalan: {
-             where: {
-               periode_ajaran_id: {
-                 in: periodeIds,
-               },
-             },
-             include: {
-               mata_pelajaran: true,
-             },
-           },
          },
        })
 
-       // Calculate average grades and determine promotion status
+       // Get source classes info
+       const sourceClasses = await prisma.kelas.findMany({
+         where: { id: { in: kelas_asal_ids.map((id: any) => Number(id)) } },
+         include: { tingkatan: true }
+       })
+
+       if (!sourceClasses || sourceClasses.length === 0) {
+         return NextResponse.json(
+           { success: false, error: "Kelas asal tidak ditemukan" },
+           { status: 400 }
+         )
+       }
+
+       // Calculate average grades (exam scores only) and determine promotion status
        const siswa = siswaData.map((siswaItem) => {
+         // Only calculate exam grades - hafalan is not numerical
          const ujianGrades = siswaItem.nilai_ujian.map(n => Number(n.nilai_angka))
-         const hafalanGrades = siswaItem.nilai_hafalan.map(n => n.predikat === "TERCAPAI" ? 100 : 0)
+         const rata_rata = ujianGrades.length > 0 ? ujianGrades.reduce((a, b) => a + b, 0) / ujianGrades.length : 0
 
-         const allGrades = [...ujianGrades, ...hafalanGrades]
-         const rata_rata = allGrades.length > 0 ? allGrades.reduce((a, b) => a + b, 0) / allGrades.length : 0
-
-         // Simple promotion logic: >75 naik, 60-75 tinggal, <60 tinggal
-         let status: "naik" | "lulus" | "tinggal" = "tinggal"
-         let kelas_tujuan = siswaItem.kelas?.nama_kelas || ""
-
-         if (rata_rata >= 75) {
-           status = "naik"
-           // For now, just keep same class name (this would need more complex logic)
-         } else if (rata_rata >= 60) {
-           status = "tinggal"
-         }
+         // ALL students promote - no grade validation
+         const status: "naik" = "naik"
 
          return {
            id: siswaItem.id.toString(),
@@ -91,25 +82,22 @@ export async function POST(request: NextRequest) {
            nama: siswaItem.nama || "",
            nis: siswaItem.nis,
            kelas_asal: siswaItem.kelas?.nama_kelas || "",
-           kelas_tujuan,
+           kelas_tujuan: siswaItem.kelas?.nama_kelas || "", // Will be updated during actual promotion
            status,
            rata_rata: Math.round(rata_rata * 100) / 100,
          }
        })
 
-       // Get tingkatan mapping for promotion based on urutan
-       const sourceTingkatan = await prisma.tingkatan.findUnique({
-         where: { id: Number(tingkatan_asal_id) },
-       })
+       // Get next tingkatan for mapping (assume all classes are from same tingkatan)
+       const sourceTingkatan = sourceClasses[0].tingkatan
 
        if (!sourceTingkatan) {
          return NextResponse.json(
-           { success: false, error: "Tingkatan asal tidak ditemukan" },
+           { success: false, error: "Tingkatan kelas asal tidak ditemukan" },
            { status: 400 }
          )
        }
 
-       // Get next tingkatan based on sequential urutan
        const nextTingkatan = sourceTingkatan.urutan !== null ? await prisma.tingkatan.findFirst({
          where: {
            urutan: sourceTingkatan.urutan + 1,
@@ -118,9 +106,8 @@ export async function POST(request: NextRequest) {
 
        const kelasMapping = [
          {
-           tingkatan_asal_id: tingkatan_asal_id,
-           tingkatan_tujuan_id: nextTingkatan?.id || null,
-           tingkatan_asal_nama: sourceTingkatan.nama_tingkatan,
+           kelas_asal_ids: kelas_asal_ids,
+           tingkatan_asal_nama: sourceTingkatan?.nama_tingkatan || "",
            tingkatan_tujuan_nama: nextTingkatan?.nama_tingkatan || "Lulus",
          },
        ]
@@ -132,66 +119,70 @@ export async function POST(request: NextRequest) {
        })
      }
 
-     // Handle execution - promote students to next tingkatan
-     if (!tahun_ajaran_id || !tingkatan_asal_id) {
+     // Handle execution - promote students from selected classes to next tingkatan/year
+     if (!master_tahun_ajaran_lama_id || !master_tahun_ajaran_baru_id || !kelas_asal_ids || kelas_asal_ids.length === 0) {
        return NextResponse.json(
          {
            success: false,
-           error: "Tahun ajaran dan tingkatan asal harus diisi",
+           error: "Master tahun ajaran lama, baru, dan kelas asal harus diisi",
          },
          { status: 400 },
        )
      }
 
-     // Get current tingkatan with urutan
-     const currentTingkatan = await prisma.tingkatan.findUnique({
-       where: { id: Number(tingkatan_asal_id) },
+     // Get source classes info
+     const sourceClasses = await prisma.kelas.findMany({
+       where: { id: { in: kelas_asal_ids.map((id: any) => Number(id)) } },
+       include: { tingkatan: true }
      })
 
-     if (!currentTingkatan) {
+     if (!sourceClasses || sourceClasses.length === 0) {
        return NextResponse.json(
-         { success: false, error: "Tingkatan asal tidak ditemukan" },
+         { success: false, error: "Kelas asal tidak ditemukan" },
          { status: 400 }
        )
      }
 
-     // Get current academic year
-     const currentAcademicYear = await prisma.masterTahunAjaran.findUnique({
-       where: { id: Number(tahun_ajaran_id) },
+     // Assume all classes are from same tingkatan
+     const sourceTingkatan = sourceClasses[0].tingkatan
+
+     if (!sourceTingkatan) {
+       return NextResponse.json(
+         { success: false, error: "Tingkatan kelas asal tidak ditemukan" },
+         { status: 400 }
+       )
+     }
+
+     // Get master tahun ajaran info
+     const oldAcademicYear = await prisma.masterTahunAjaran.findUnique({
+       where: { id: Number(master_tahun_ajaran_lama_id) }
      })
 
-     if (!currentAcademicYear) {
+     const newAcademicYear = await prisma.masterTahunAjaran.findUnique({
+       where: { id: Number(master_tahun_ajaran_baru_id) }
+     })
+
+     if (!oldAcademicYear || !newAcademicYear) {
        return NextResponse.json(
-         { success: false, error: "Tahun ajaran tidak ditemukan" },
+         { success: false, error: "Master tahun ajaran tidak ditemukan" },
          { status: 400 }
        )
      }
 
      // Get next tingkatan based on urutan
-     const nextTingkatan = currentTingkatan.urutan !== null ? await prisma.tingkatan.findFirst({
+     const nextTingkatan = sourceTingkatan.urutan !== null ? await prisma.tingkatan.findFirst({
        where: {
-         urutan: currentTingkatan.urutan + 1, // Next sequential grade
+         urutan: sourceTingkatan.urutan + 1, // Next sequential grade
        },
      }) : null
 
-     // TODO: Uncomment when Prisma client is regenerated
-     // Get next academic year based on urutan
-     // const nextAcademicYear = currentAcademicYear.urutan !== null ? await prisma.masterTahunAjaran.findFirst({
-     //   where: {
-     //     urutan: currentAcademicYear.urutan + 1, // Next sequential academic year
-     //   },
-     // }) : null
-     const nextAcademicYear = null // Temporary fallback
-
      if (!nextTingkatan) {
-       // This is graduation - students graduate
+       // This is graduation - students from selected classes graduate
        const graduationResult = await prisma.siswa.updateMany({
          where: {
-           kelas: {
-             tingkatan_id: Number(tingkatan_asal_id),
-           },
+           kelas_id: { in: kelas_asal_ids.map((id: any) => Number(id)) },
            status: "Aktif",
-           master_tahun_ajaran_id: Number(tahun_ajaran_id),
+           master_tahun_ajaran_id: Number(master_tahun_ajaran_lama_id),
          },
          data: {
            status: "Lulus",
@@ -201,20 +192,17 @@ export async function POST(request: NextRequest) {
        // Log the graduation
        await prisma.logPromosi.create({
          data: {
-           catatan: `Graduation: ${graduationResult.count} students graduated from ${currentTingkatan?.nama_tingkatan}`,
+           catatan: `Graduation: ${graduationResult.count} students graduated from selected classes`,
          },
        })
 
        return NextResponse.json({
          success: true,
-         message: `${graduationResult.count} siswa berhasil diluluskan`,
+         message: `${graduationResult.count} siswa dari kelas terpilih berhasil diluluskan`,
        })
      }
 
-     // Determine target academic year (next year for end-of-year promotion)
-     const targetAcademicYear = nextAcademicYear || currentAcademicYear
-
-     // Get all classes in the next tingkatan with current student counts
+     // Get all classes in the next tingkatan
      const nextClasses = await prisma.kelas.findMany({
        where: {
          tingkatan_id: nextTingkatan.id,
@@ -237,25 +225,20 @@ export async function POST(request: NextRequest) {
        )
      }
 
-     // Get students to promote, grouped by their current class
+     // Get students to promote from selected classes
      const studentsByClass = await prisma.siswa.findMany({
        where: {
-         kelas: {
-           tingkatan_id: Number(tingkatan_asal_id),
-         },
+         kelas_id: { in: kelas_asal_ids.map((id: any) => Number(id)) },
          status: "Aktif",
-         master_tahun_ajaran_id: Number(tahun_ajaran_id),
+         master_tahun_ajaran_id: Number(master_tahun_ajaran_lama_id),
        },
        include: {
          kelas: true,
        },
-       orderBy: [
-         { kelas: { nama_kelas: "asc" } },
-         { nama: "asc" }
-       ],
+       orderBy: { nama: "asc" },
      })
 
-     // Intelligent distribution: maintain class balance
+     // Intelligent distribution: maintain class balance and change academic year
      const promotionResults = []
      let classIndex = 0
 
@@ -272,40 +255,21 @@ export async function POST(request: NextRequest) {
          }
        }
 
-       // Update student to new class
-       // TODO: Uncomment when Prisma client is regenerated
-       // await prisma.siswa.update({
-       //   where: { id: student.id },
-       //   data: {
-       //     kelas_id: targetClass.id,
-       //     master_tahun_ajaran_id: targetAcademicYear.id,
-       //   },
-       // })
-
-       // Temporary: only update class
+       // Update student to new class and new academic year
        await prisma.siswa.update({
          where: { id: student.id },
          data: {
            kelas_id: targetClass.id,
+           master_tahun_ajaran_id: Number(master_tahun_ajaran_baru_id),
          },
        })
 
        // Create history record
-       // TODO: Uncomment when Prisma client is regenerated
-       // await prisma.riwayatKelasSiswa.create({
-       //   data: {
-       //     siswa_id: student.id,
-       //     kelas_id: targetClass.id,
-       //     master_tahun_ajaran_id: targetAcademicYear.id,
-       //   },
-       // })
-
-       // Temporary: create history with current academic year
        await prisma.riwayatKelasSiswa.create({
          data: {
            siswa_id: student.id,
            kelas_id: targetClass.id,
-           master_tahun_ajaran_id: Number(tahun_ajaran_id),
+           master_tahun_ajaran_id: Number(master_tahun_ajaran_baru_id),
          },
        })
 
@@ -321,17 +285,15 @@ export async function POST(request: NextRequest) {
      }
 
      // Log the promotion
-     // TODO: Uncomment when Prisma client is regenerated
-     // const academicYearChange = nextAcademicYear ? ` and academic year from ${currentAcademicYear.nama_ajaran} to ${nextAcademicYear.nama_ajaran}` : ''
      await prisma.logPromosi.create({
        data: {
-         catatan: `Promotion: ${promotionResults.length} students promoted from ${currentTingkatan?.nama_tingkatan} to ${nextTingkatan.nama_tingkatan}`,
+         catatan: `Promotion: ${promotionResults.length} students promoted from ${sourceTingkatan?.nama_tingkatan || 'Unknown'} to ${nextTingkatan?.nama_tingkatan || 'Graduated'} and academic year from ${oldAcademicYear.nama_ajaran} to ${newAcademicYear.nama_ajaran}`,
        },
      })
 
      return NextResponse.json({
        success: true,
-       message: `${promotionResults.length} siswa berhasil dipromosikan ke ${nextTingkatan.nama_tingkatan}`,
+       message: `${promotionResults.length} siswa dari kelas terpilih berhasil dipromosikan ke ${nextTingkatan?.nama_tingkatan || 'lulus'}`,
        data: promotionResults,
      })
 
@@ -352,7 +314,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const tahun_ajaran = searchParams.get("tahun_ajaran")
 
-    // Get promotion preview data
+    // Get promotion preview data - now organized by tingkatan with classes
     const tingkatanData = await prisma.tingkatan.findMany({
       orderBy: { urutan: "asc" },
       include: {
@@ -361,12 +323,13 @@ export async function GET(request: NextRequest) {
             _count: {
               select: { siswa: true }
             }
-          }
+          },
+          orderBy: { nama_kelas: "asc" }
         }
       }
     })
 
-    // Get current active students count by tingkatan and kelas
+    // Get current active students count by kelas
     const siswaCount = await prisma.siswa.findMany({
       where: {
         status: "Aktif",
@@ -380,15 +343,21 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Process data for promotion preview
+    // Process data for promotion preview - organized by tingkatan with detailed class info
     const promosiPreview = tingkatanData.map((tingkatan) => {
-      const siswaCountTingkatan = siswaCount.filter((s) => s.master_tahun_ajaran_id === tingkatan.id).length
+      // Count students in this tingkatan (across all its classes)
+      const siswaInTingkatan = siswaCount.filter((s) =>
+        tingkatan.kelas?.some(kelas => kelas.id === s.kelas_id)
+      ).length
 
       return {
-        ...tingkatan,
-        jumlah_siswa: siswaCountTingkatan,
+        id: tingkatan.id,
+        nama_tingkatan: tingkatan.nama_tingkatan,
+        urutan: tingkatan.urutan,
+        jumlah_siswa: siswaInTingkatan,
         kelas: tingkatan.kelas?.map((kelas) => ({
-          ...kelas,
+          id: kelas.id,
+          nama_kelas: kelas.nama_kelas,
           jumlah_siswa: siswaCount.filter((s) => s.kelas_id === kelas.id).length,
         })),
       }

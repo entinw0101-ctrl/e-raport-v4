@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // First validate and get report data
-    const result = await generateLaporanNilai(siswaId, periodeAjaranId)
+    // First validate and get report data (admin mode for flexible validation)
+    const result = await generateLaporanNilai(siswaId, periodeAjaranId, { isAdmin: true })
 
     if (!result.canGenerate) {
       return NextResponse.json(

@@ -1,102 +1,43 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { generateLaporanNilai } from "@/lib/raport-utils"
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ siswa_id: string }> }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const periodeAjaranIdStr = searchParams.get("periode_ajaran_id")
-
-    if (!periodeAjaranIdStr) {
-      return NextResponse.json(
-        { success: false, error: "periode_ajaran_id is required" },
-        { status: 400 }
-      )
-    }
-
     const resolvedParams = await params
-    const siswaId = parseInt(resolvedParams.siswa_id)
-    const periodeAjaranId = parseInt(periodeAjaranIdStr)
+    const siswaId = resolvedParams.siswa_id
+    const { searchParams } = new URL(request.url)
+    const periodeAjaranId = searchParams.get("periode_ajaran_id")
 
-    if (isNaN(siswaId) || isNaN(periodeAjaranId)) {
+    if (!siswaId) {
       return NextResponse.json(
-        { success: false, error: "Invalid ID format" },
+        { success: false, error: "ID siswa wajib diisi" },
         { status: 400 }
       )
     }
 
-    // Run all queries in parallel for better performance
-    const [
-      siswa,
-      nilaiUjian,
-      nilaiHafalan,
-      kehadiran,
-      penilaianSikap,
-      periodeAjaran
-    ] = await Promise.all([
-      // Fetch student data with all related information
-      prisma.siswa.findUnique({
-        where: { id: siswaId },
-        include: {
-          kelas: {
-            include: {
-              wali_kelas: true,
-            },
-          },
-          kamar: true,
+    if (!periodeAjaranId) {
+      return NextResponse.json(
+        { success: false, error: "ID periode ajaran wajib diisi" },
+        { status: 400 }
+      )
+    }
+
+    // Get complete student data for the report page
+    const siswa = await prisma.siswa.findUnique({
+      where: { id: parseInt(siswaId) },
+      include: {
+        kelas: {
+          include: {
+            wali_kelas: true
+          }
         },
-      }),
-      // Fetch nilai ujian
-      prisma.nilaiUjian.findMany({
-        where: {
-          siswa_id: siswaId,
-          periode_ajaran_id: periodeAjaranId,
-        },
-        include: {
-          mata_pelajaran: true,
-        },
-      }),
-      // Fetch nilai hafalan
-      prisma.nilaiHafalan.findMany({
-        where: {
-          siswa_id: siswaId,
-          periode_ajaran_id: periodeAjaranId,
-        },
-        include: {
-          mata_pelajaran: true,
-        },
-      }),
-      // Fetch kehadiran
-      prisma.kehadiran.findMany({
-        where: {
-          siswa_id: siswaId,
-          periode_ajaran_id: periodeAjaranId,
-        },
-        include: {
-          indikator_kehadiran: true,
-        },
-      }),
-      // Fetch penilaian sikap
-      prisma.penilaianSikap.findMany({
-        where: {
-          siswa_id: siswaId,
-          periode_ajaran_id: periodeAjaranId,
-        },
-        include: {
-          indikator_sikap: true,
-        },
-      }),
-      // Fetch periode ajaran
-      prisma.periodeAjaran.findUnique({
-        where: { id: periodeAjaranId },
-        select: {
-          nama_ajaran: true,
-          semester: true,
-        },
-      })
-    ])
+        kamar: true
+      }
+    })
 
     if (!siswa) {
       return NextResponse.json(
@@ -105,21 +46,10 @@ export async function GET(
       )
     }
 
-
-    // Get kurikulum data for hafalan (only if there are hafalan records)
-    let kurikulumData: any[] = []
-    if (nilaiHafalan.length > 0) {
-      kurikulumData = await prisma.kurikulum.findMany({
-        where: {
-          mapel_id: {
-            in: nilaiHafalan.map(n => n.mapel_id)
-          }
-        },
-        include: {
-          kitab: true,
-        },
-      })
-    }
+    // Get periode ajaran
+    const periodeAjaran = await prisma.periodeAjaran.findUnique({
+      where: { id: parseInt(periodeAjaranId) }
+    })
 
     if (!periodeAjaran) {
       return NextResponse.json(
@@ -128,93 +58,155 @@ export async function GET(
       )
     }
 
-    // Get catatan siswa
-    const catatanSiswa = await prisma.catatanSiswa.findFirst({
-      where: {
-        siswa_id: siswaId,
-        periode_ajaran_id: periodeAjaranId,
-      },
-    })
-
-    // Transform data to match the expected interface
-    const transformedData = {
-      siswa: {
-        id: siswa.id.toString(),
-        nama: siswa.nama || "",
-        nis: siswa.nis,
-        tempat_lahir: siswa.tempat_lahir || "",
-        tanggal_lahir: siswa.tanggal_lahir?.toISOString() || "",
-        jenis_kelamin: siswa.jenis_kelamin || "LAKI_LAKI",
-        agama: siswa.agama || "",
-        alamat: siswa.alamat || "",
-        kelas: {
-          nama_kelas: siswa.kelas?.nama_kelas || "",
-          walikelas: {
-            nama: siswa.kelas?.wali_kelas?.nama || "",
-            nip: siswa.kelas?.wali_kelas?.nip || "",
-          },
+    // Get all related data
+    const [nilaiUjian, nilaiHafalan, kehadiran, penilaianSikap] = await Promise.all([
+      prisma.nilaiUjian.findMany({
+        where: {
+          siswa_id: parseInt(siswaId),
+          periode_ajaran_id: parseInt(periodeAjaranId)
         },
-        kamar: {
-          nama_kamar: siswa.kamar?.nama_kamar || "",
+        include: {
+          mata_pelajaran: true
         },
-      },
-      nilaiUjian: nilaiUjian.map((n) => ({
-        id: n.id.toString(),
-        nilai_angka: Number(n.nilai_angka),
-        predikat: n.predikat || "",
-        mata_pelajaran: {
-          nama_mapel: n.mata_pelajaran.nama_mapel,
-        },
-      })),
-      nilaiHafalan: nilaiHafalan.map((n) => {
-        const kurikulum = kurikulumData.find(k => k.mapel_id === n.mapel_id)
-        return {
-          id: n.id.toString(),
-          target_hafalan: kurikulum?.batas_hafalan || "",
-          predikat: n.predikat === "TERCAPAI" ? "Tercapai" : n.predikat === "TIDAK_TERCAPAI" ? "Tidak Tercapai" : n.predikat,
+        orderBy: {
           mata_pelajaran: {
-            nama_mapel: n.mata_pelajaran.nama_mapel,
-          },
-          kurikulum: {
-            kitab: {
-              nama_kitab: kurikulum?.kitab?.nama_kitab || "",
-            },
-            batas_hafalan: kurikulum?.batas_hafalan || "",
-          },
+            nama_mapel: 'asc'
+          }
         }
       }),
-      kehadiran: kehadiran.map((k) => ({
+      prisma.nilaiHafalan.findMany({
+        where: {
+          siswa_id: parseInt(siswaId),
+          periode_ajaran_id: parseInt(periodeAjaranId)
+        },
+        include: {
+          mata_pelajaran: {
+            include: {
+              kurikulum: {
+                include: {
+                  kitab: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: {
+          mata_pelajaran: {
+            nama_mapel: 'asc'
+          }
+        }
+      }),
+      prisma.kehadiran.findMany({
+        where: {
+          siswa_id: parseInt(siswaId),
+          periode_ajaran_id: parseInt(periodeAjaranId)
+        },
+        include: {
+          indikator_kehadiran: true
+        },
+        orderBy: {
+          indikator_kehadiran: {
+            nama_indikator: 'asc'
+          }
+        }
+      }),
+      prisma.penilaianSikap.findMany({
+        where: {
+          siswa_id: parseInt(siswaId),
+          periode_ajaran_id: parseInt(periodeAjaranId)
+        },
+        include: {
+          indikator_sikap: true
+        },
+        orderBy: {
+          indikator_sikap: {
+            indikator: 'asc'
+          }
+        }
+      })
+    ])
+
+    // Get report status
+    const result = await generateLaporanNilai(siswaId, periodeAjaranId, { isAdmin: true })
+
+    // Return complete student data
+    const studentData = {
+      siswa: {
+        id: siswa.id.toString(),
+        nama: siswa.nama,
+        nis: siswa.nis,
+        tempat_lahir: siswa.tempat_lahir || '',
+        tanggal_lahir: siswa.tanggal_lahir?.toISOString() || '',
+        jenis_kelamin: siswa.jenis_kelamin || '',
+        agama: siswa.agama || '',
+        alamat: siswa.alamat || '',
+        kelas: {
+          nama_kelas: siswa.kelas?.nama_kelas || '',
+          walikelas: siswa.kelas?.wali_kelas ? {
+            nama: siswa.kelas.wali_kelas.nama,
+            nip: siswa.kelas.wali_kelas.nip || ''
+          } : { nama: '', nip: '' }
+        },
+        kamar: {
+          nama_kamar: siswa.kamar?.nama_kamar || ''
+        }
+      },
+      nilaiUjian: nilaiUjian.map(n => ({
+        id: n.id.toString(),
+        nilai_angka: n.nilai_angka.toNumber(),
+        predikat: n.predikat || '',
+        mata_pelajaran: {
+          nama_mapel: n.mata_pelajaran.nama_mapel
+        }
+      })),
+      nilaiHafalan: nilaiHafalan.map(h => ({
+        id: h.id.toString(),
+        predikat: h.predikat || '',
+        mata_pelajaran: {
+          nama_mapel: h.mata_pelajaran.nama_mapel
+        },
+        kurikulum: h.mata_pelajaran.kurikulum?.[0] ? {
+          kitab: {
+            nama_kitab: h.mata_pelajaran.kurikulum[0].kitab?.nama_kitab || ''
+          },
+          batas_hafalan: h.mata_pelajaran.kurikulum[0].batas_hafalan || ''
+        } : null
+      })),
+      kehadiran: kehadiran.map(k => ({
         id: k.id.toString(),
-        sakit: k.sakit,
-        izin: k.izin,
-        alpha: k.alpha,
+        sakit: k.sakit || 0,
+        izin: k.izin || 0,
+        alpha: k.alpha || 0,
         indikator_kehadiran: {
-          nama_indikator: k.indikator_kehadiran.nama_indikator,
-        },
+          nama_indikator: k.indikator_kehadiran.nama_indikator
+        }
       })),
-      penilaianSikap: penilaianSikap.map((p) => ({
-        id: p.id.toString(),
-        nilai: p.nilai,
+      penilaianSikap: penilaianSikap.map(s => ({
+        id: s.id.toString(),
+        nilai: s.nilai || 0,
         indikator_sikap: {
-          jenis_sikap: p.indikator_sikap.jenis_sikap || "Spiritual",
-          indikator: p.indikator_sikap.indikator || "",
-        },
+          jenis_sikap: s.indikator_sikap.jenis_sikap || '',
+          indikator: s.indikator_sikap.indikator
+        }
       })),
-      catatanSiswa: catatanSiswa ? {
-        catatan_sikap: catatanSiswa.catatan_sikap,
-        catatan_akademik: catatanSiswa.catatan_akademik,
-      } : null,
-      periodeAjaran,
+      periodeAjaran: {
+        nama_ajaran: periodeAjaran.nama_ajaran,
+        semester: periodeAjaran.semester
+      }
     }
 
     return NextResponse.json({
       success: true,
-      data: transformedData,
+      data: studentData,
+      report_status: result.reportStatus || 'not_ready',
+      can_generate: result.canGenerate,
+      warnings: result.warnings
     })
+
   } catch (error) {
-    console.error("Error fetching student data:", error)
+    console.error("Error getting student report data:", error)
     return NextResponse.json(
-      { success: false, error: "Gagal mengambil data siswa" },
+      { success: false, error: "Gagal mengambil data rapor siswa" },
       { status: 500 }
     )
   }
