@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
 import { generatePredikat } from "@/lib/utils"
+import { getPredicate } from "@/lib/raport-utils"
 import { PredikatHafalan } from "@prisma/client"
 
 interface ValidationResult {
@@ -434,6 +435,11 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
             }
           })
 
+          // Generate predikat based on nilai
+          const nilaiNum = parseInt(item.nilai)
+          const predikat = getPredicate(nilaiNum)
+          console.log(`Generated predikat for nilai ${nilaiNum}: "${predikat}"`)
+
           if (existing) {
             await prisma.penilaianSikap.update({
               where: {
@@ -444,7 +450,8 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
                 }
               },
               data: {
-                nilai: parseInt(item.nilai)
+                nilai: nilaiNum,
+                predikat: predikat
               }
             })
             results.penilaianSikap.updated++
@@ -454,7 +461,8 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
                 siswa_id: siswa.id,
                 indikator_id: indikator.id,
                 periode_ajaran_id: parseInt(periodeAjaranId),
-                nilai: parseInt(item.nilai)
+                nilai: nilaiNum,
+                predikat: predikat
               }
             })
             results.penilaianSikap.inserted++
