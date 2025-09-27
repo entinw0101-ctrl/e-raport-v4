@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { Document, Packer, Paragraph, TextRun, Table, TableCell, TableRow, WidthType, AlignmentType, HeadingLevel } from "docx"
+import Docxtemplater from "docxtemplater"
+import PizZip from "pizzip"
+import fs from "fs"
+import path from "path"
+import { getPredicate } from "@/lib/raport-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,6 +27,7 @@ export async function POST(request: NextRequest) {
             tingkatan: true,
           },
         },
+        kamar: true,
       },
     })
 
@@ -49,22 +54,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch kehadiran data
-    const kehadiran = await prisma.kehadiran.findMany({
-      where: {
-        siswa_id: parseInt(siswaId),
-        periode_ajaran_id: parseInt(periodeAjaranId),
-      },
-      include: {
-        indikator_kehadiran: true,
-      },
-      orderBy: {
-        indikator_kehadiran: {
-          nama_indikator: 'asc'
-        }
-      }
-    })
-
     // Fetch penilaian sikap
     const penilaianSikap = await prisma.penilaianSikap.findMany({
       where: {
@@ -88,6 +77,16 @@ export async function POST(request: NextRequest) {
       ]
     })
 
+    // Fetch catatan siswa
+    const catatanSiswa = await prisma.catatanSiswa.findUnique({
+      where: {
+        siswa_id_periode_ajaran_id: {
+          siswa_id: parseInt(siswaId),
+          periode_ajaran_id: parseInt(periodeAjaranId)
+        }
+      }
+    })
+
     // Group penilaian sikap by jenis_sikap
     const sikapByJenis = penilaianSikap.reduce((acc, item) => {
       const jenis = item.indikator_sikap.jenis_sikap || 'Spiritual'
@@ -102,247 +101,87 @@ export async function POST(request: NextRequest) {
     const spiritualItems = sikapByJenis['Spiritual'] || []
     const sosialItems = sikapByJenis['Sosial'] || []
 
-    const avgSpiritual = spiritualItems.length > 0
+    const rataSs = spiritualItems.length > 0
       ? spiritualItems.reduce((sum, item) => sum + item.nilai, 0) / spiritualItems.length
       : 0
 
-    const avgSosial = sosialItems.length > 0
+    const rataSo = sosialItems.length > 0
       ? sosialItems.reduce((sum, item) => sum + item.nilai, 0) / sosialItems.length
       : 0
 
-    // Create document
-    const doc = new Document({
-      sections: [{
-        properties: {},
-        children: [
-          // Header
-          new Paragraph({
-            text: "LAPORAN SIKAP DAN KEHADIRAN SISWA",
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: `Nama: ${siswa.nama}`,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: `Kelas: ${siswa.kelas?.nama_kelas || ''}${siswa.kelas?.tingkatan ? ` (${siswa.kelas.tingkatan.nama_tingkatan})` : ''}`,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: `Periode: ${periodeAjaran.nama_ajaran} - Semester ${periodeAjaran.semester === 'SATU' ? '1' : '2'}`,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: "",
-          }),
+    // Calculate final sikap score (average of spiritual and sosial)
+    const nilaiAkhirSikap = (rataSs + rataSo) / 2
 
-          // Kehadiran Section
-          new Paragraph({
-            text: "KEHADIRAN",
-            heading: HeadingLevel.HEADING_2,
-          }),
+    // Prepare template data
+    const templateData = {
+      // Basic info
+      nama: siswa.nama || "",
+      no_induk: siswa.nis || "",
+      ttl: siswa.tempat_lahir && siswa.tanggal_lahir
+        ? `${siswa.tempat_lahir}, ${new Date(siswa.tanggal_lahir).toLocaleDateString('id-ID')}`
+        : "",
+      kamar: siswa.kamar?.nama_kamar || "",
 
-          // Kehadiran Table
-          new Table({
-            width: {
-              size: 100,
-              type: WidthType.PERCENTAGE,
-            },
-            rows: [
-              new TableRow({
-                children: [
-                  new TableCell({
-                    width: { size: 50, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ text: "Indikator Kehadiran", bold: true })],
-                  }),
-                  new TableCell({
-                    width: { size: 15, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ text: "Sakit", bold: true })],
-                  }),
-                  new TableCell({
-                    width: { size: 15, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ text: "Izin", bold: true })],
-                  }),
-                  new TableCell({
-                    width: { size: 15, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ text: "Alpha", bold: true })],
-                  }),
-                  new TableCell({
-                    width: { size: 15, type: WidthType.PERCENTAGE },
-                    children: [new Paragraph({ text: "Total", bold: true })],
-                  }),
-                ],
-              }),
-              ...kehadiran.map((k) => new TableRow({
-                children: [
-                  new TableCell({
-                    children: [new Paragraph(k.indikator_kehadiran.nama_indikator)],
-                  }),
-                  new TableCell({
-                    children: [new Paragraph(k.sakit.toString())],
-                  }),
-                  new TableCell({
-                    children: [new Paragraph(k.izin.toString())],
-                  }),
-                  new TableCell({
-                    children: [new Paragraph(k.alpha.toString())],
-                  }),
-                  new TableCell({
-                    children: [new Paragraph((k.sakit + k.izin + k.alpha).toString())],
-                  }),
-                ],
-              })),
-            ],
-          }),
+      // Semester info
+      semester: periodeAjaran.semester === 'SATU' ? '1' : '2',
+      thn_ajaran: periodeAjaran.nama_ajaran,
 
-          new Paragraph({
-            text: "",
-          }),
+      // Spiritual sikap items (with numbering)
+      sikap_s: spiritualItems.map((item, index) => ({
+        no: index + 1,
+        indikator: item.indikator_sikap.indikator || "",
+        angka: item.nilai,
+        predikat: getPredicate(item.nilai)
+      })),
 
-          // Penilaian Sikap Section
-          new Paragraph({
-            text: "PENILAIAN SIKAP",
-            heading: HeadingLevel.HEADING_2,
-          }),
+      // Sosial sikap items (with numbering)
+      sikap_o: sosialItems.map((item, index) => ({
+        no: index + 1,
+        indikator: item.indikator_sikap.indikator || "",
+        angka: item.nilai,
+        predikat: getPredicate(item.nilai)
+      })),
 
-          // Spiritual Section
-          ...(spiritualItems.length > 0 ? [
-            new Paragraph({
-              text: "Spiritual",
-              heading: HeadingLevel.HEADING_3,
-            }),
-            new Table({
-              width: {
-                size: 100,
-                type: WidthType.PERCENTAGE,
-              },
-              rows: [
-                new TableRow({
-                  children: [
-                    new TableCell({
-                      width: { size: 70, type: WidthType.PERCENTAGE },
-                      children: [new Paragraph({ text: "Indikator", bold: true })],
-                    }),
-                    new TableCell({
-                      width: { size: 15, type: WidthType.PERCENTAGE },
-                      children: [new Paragraph({ text: "Nilai", bold: true })],
-                    }),
-                    new TableCell({
-                      width: { size: 15, type: WidthType.PERCENTAGE },
-                      children: [new Paragraph({ text: "Predikat", bold: true })],
-                    }),
-                  ],
-                }),
-                ...spiritualItems.map((item) => new TableRow({
-                  children: [
-                    new TableCell({
-                      children: [new Paragraph(item.indikator_sikap.indikator || "")],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(item.nilai.toString())],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(
-                        item.nilai >= 90 ? 'A' : item.nilai >= 80 ? 'B' : item.nilai >= 70 ? 'C' : 'D'
-                      )],
-                    }),
-                  ],
-                })),
-                new TableRow({
-                  children: [
-                    new TableCell({
-                      children: [new Paragraph({ text: "Rata-rata Spiritual", bold: true })],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(avgSpiritual.toFixed(1))],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(
-                        avgSpiritual >= 90 ? 'A' : avgSpiritual >= 80 ? 'B' : avgSpiritual >= 70 ? 'C' : 'D'
-                      )],
-                    }),
-                  ],
-                }),
-              ],
-            }),
-            new Paragraph({ text: "" }),
-          ] : []),
+      // Averages and final scores
+      rata_ss: Math.round(rataSs * 100) / 100,
+      pred_ss: getPredicate(rataSs),
+      rata_so: Math.round(rataSo * 100) / 100,
+      pred_so: getPredicate(rataSo),
+      nilai_akhir_sikap: Math.round(nilaiAkhirSikap * 100) / 100,
+      pred_akhir_sikap: getPredicate(nilaiAkhirSikap),
 
-          // Sosial Section
-          ...(sosialItems.length > 0 ? [
-            new Paragraph({
-              text: "Sosial",
-              heading: HeadingLevel.HEADING_3,
-            }),
-            new Table({
-              width: {
-                size: 100,
-                type: WidthType.PERCENTAGE,
-              },
-              rows: [
-                new TableRow({
-                  children: [
-                    new TableCell({
-                      width: { size: 70, type: WidthType.PERCENTAGE },
-                      children: [new Paragraph({ text: "Indikator", bold: true })],
-                    }),
-                    new TableCell({
-                      width: { size: 15, type: WidthType.PERCENTAGE },
-                      children: [new Paragraph({ text: "Nilai", bold: true })],
-                    }),
-                    new TableCell({
-                      width: { size: 15, type: WidthType.PERCENTAGE },
-                      children: [new Paragraph({ text: "Predikat", bold: true })],
-                    }),
-                  ],
-                }),
-                ...sosialItems.map((item) => new TableRow({
-                  children: [
-                    new TableCell({
-                      children: [new Paragraph(item.indikator_sikap.indikator || "")],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(item.nilai.toString())],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(
-                        item.nilai >= 90 ? 'A' : item.nilai >= 80 ? 'B' : item.nilai >= 70 ? 'C' : 'D'
-                      )],
-                    }),
-                  ],
-                })),
-                new TableRow({
-                  children: [
-                    new TableCell({
-                      children: [new Paragraph({ text: "Rata-rata Sosial", bold: true })],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(avgSosial.toFixed(1))],
-                    }),
-                    new TableCell({
-                      children: [new Paragraph(
-                        avgSosial >= 90 ? 'A' : avgSosial >= 80 ? 'B' : avgSosial >= 70 ? 'C' : 'D'
-                      )],
-                    }),
-                  ],
-                }),
-              ],
-            }),
-          ] : []),
-        ],
-      }],
+      // Catatan sikap
+      catatan_sikap: catatanSiswa?.catatan_sikap || "",
+
+      // Metadata
+      tgl_raport: new Date().toLocaleDateString('id-ID')
+    }
+
+    // Load template
+    const templatePath = path.join(process.cwd(), 'public/uploads/templates/template_sikap_1758891177667.docx')
+    const templateContent = fs.readFileSync(templatePath, 'binary')
+
+    const zip = new PizZip(templateContent)
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
     })
 
+    // Set template data
+    doc.render(templateData)
+
     // Generate buffer
-    const buffer = await Packer.toBuffer(doc)
+    const buffer = doc.getZip().generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    })
 
     // Set headers for file download
     const headers = new Headers()
     headers.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     headers.set('Content-Disposition', `attachment; filename="Sikap_${siswa.nama?.replace(/\s+/g, '_') || 'Siswa'}_${periodeAjaran.nama_ajaran}.docx"`)
 
-    return new NextResponse(buffer, {
+    return new NextResponse(Buffer.from(buffer), {
       status: 200,
       headers,
     })
