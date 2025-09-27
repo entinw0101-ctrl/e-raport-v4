@@ -91,14 +91,6 @@ export default function LoginPage() {
               {isLoading ? "Sedang Masuk..." : "Masuk"}
             </Button>
           </form>
-          <div className="mt-4 text-sm text-gray-600 text-center">
-            <p>Akun yang tersedia:</p>
-            <ul className="mt-2 space-y-1">
-              <li>Admin 1: akunadmin1@nuurushsholaah.com</li>
-              <li>Admin 2: akunadmin2@nuurushsholaah.com</li>
-              <li>Developer: matin.rusydan@gmail.com</li>
-            </ul>
-          </div>
         </CardContent>
       </Card>
     </div>
