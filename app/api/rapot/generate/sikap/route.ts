@@ -5,7 +5,7 @@ import PizZip from "pizzip"
 import ImageModule from "docxtemplater-image-module-free"
 import fs from "fs"
 import path from "path"
-import { getPredicate } from "@/lib/raport-utils"
+import { getPredicate, formatTanggal } from "@/lib/raport-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
       tanda_tangan_penanggung_jawab: penanggungJawab.tanda_tangan?.replace('/uploads/', 'uploads/') || "",
 
       // Metadata
-      tgl_raport: new Date().toLocaleDateString('id-ID')
+      tgl_raport: `Sumedang, ${formatTanggal(new Date())}`
     }
 
     // Setup image module for signature

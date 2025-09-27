@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       kepala_pesantren: kepalaPesantren?.nama || '-',
       nip_kepala_pesantren: kepalaPesantren?.nip || '-',
 
-      tgl_raport: formatTanggal(new Date()),
+      tgl_raport: `Sumedang, ${formatTanggal(new Date())}`,
       kamar: siswa.kamar?.nama_kamar || '-',
       kota_asal: siswa.kota_asal || '-'
     }

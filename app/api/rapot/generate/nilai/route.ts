@@ -141,12 +141,6 @@ export async function POST(request: NextRequest) {
       peringkat: reportData.peringkat || '-',
       total_siswa: reportData.totalSiswa || '-',
       status_hafalan: reportData.statusHafalan,
-      total_sakit: reportData.totalSakit || 0,
-      total_izin: reportData.totalIzin || 0,
-      total_alpha: reportData.totalAlpha || 0,
-      total_kehadiran: reportData.totalKehadiran || 0,
-      persentase_kehadiran: reportData.persentaseKehadiran || '0.00%',
-      total: reportData.total || 0,
       catatan_akademik: reportData.catatanAkademik,
 
       // Detailed nilai ujian (for loops in template)
@@ -173,7 +167,8 @@ export async function POST(request: NextRequest) {
         indikator_kehadiran: item.indikatorKehadiran,
         sakit: item.sakit,
         izin: item.izin,
-        alpha: item.alpha
+        alpha: item.alpha,
+        total: item.sakit + item.izin + item.alpha
       })),
 
       // Wali kelas info
@@ -193,7 +188,7 @@ export async function POST(request: NextRequest) {
       })(),
 
       // Metadata
-      tgl_raport: formatTanggal(new Date()),
+      tgl_raport: `Sumedang, ${formatTanggal(new Date())}`,
     }
 
     // Set template data (following sikap rapor pattern)
