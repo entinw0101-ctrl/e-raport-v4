@@ -117,8 +117,8 @@ export async function POST(request: NextRequest) {
       // Basic info
       nama: siswa.nama || "",
       no_induk: siswa.nis || "",
-      ttl: siswa.tempat_lahir && siswa.tanggal_lahir
-        ? `${siswa.tempat_lahir}, ${new Date(siswa.tanggal_lahir).toLocaleDateString('id-ID')}`
+      ttl: siswa.tanggal_lahir
+        ? new Date(siswa.tanggal_lahir).toLocaleDateString('id-ID')
         : "",
       kamar: siswa.kamar?.nama_kamar || "",
 
