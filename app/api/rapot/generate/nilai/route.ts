@@ -180,13 +180,18 @@ export async function POST(request: NextRequest) {
       // Wali kelas info
       nama_wali_kelas: siswa.kelas?.wali_kelas?.nama || "",
       nip_wali_kelas: siswa.kelas?.wali_kelas?.nip || "",
-      // Image placeholder - convert cloud URL to local path (following sikap rapor pattern)
-      tanda_tangan_wali_kelas: siswa.kelas?.wali_kelas?.tanda_tangan?.startsWith('https://')
-        ? siswa.kelas?.wali_kelas?.tanda_tangan?.replace(
-            'https://6uc7tvnigewtrcyh.public.blob.vercel-storage.com/',
-            'uploads/signatures/'
-          )
-        : siswa.kelas?.wali_kelas?.tanda_tangan?.replace('/uploads/', 'uploads/') || "",
+      // Image placeholder - handle both cloud URLs and local paths
+      tanda_tangan_wali_kelas: (() => {
+        const signature = siswa.kelas?.wali_kelas?.tanda_tangan;
+        if (!signature) return "";
+
+        // If it's a cloud URL, convert to local path
+        if (signature.startsWith('https://')) {
+          return signature.replace('https://6uc7tvnigewtrcyh.public.blob.vercel-storage.com/', 'uploads/signatures/');
+        }
+        // If it's already a local path, just remove leading slash
+        return signature.replace('/uploads/', 'uploads/');
+      })(),
 
       // Metadata
       tgl_raport: formatTanggal(new Date()),
