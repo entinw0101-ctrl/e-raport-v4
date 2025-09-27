@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { FileText, Download, Eye, ArrowLeft } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useParams } from "next/navigation"
+import { getPredicate } from "@/lib/raport-utils"
 
 interface StudentData {
   siswa: {
@@ -370,7 +371,7 @@ export default function StudentRaportPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{sikap.nilai}</span>
                     <Badge variant="outline">
-                      {sikap.nilai >= 90 ? 'A' : sikap.nilai >= 80 ? 'B' : sikap.nilai >= 70 ? 'C' : 'D'}
+                      {getPredicate(sikap.nilai)}
                     </Badge>
                   </div>
                 </div>
