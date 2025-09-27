@@ -61,41 +61,23 @@ export async function POST(request: NextRequest) {
     })
 
     if (!template) {
+      console.log("No active template found")
       return NextResponse.json(
         { success: false, error: "Template nilai tidak ditemukan. Silakan upload template terlebih dahulu." },
         { status: 404 }
       )
     }
 
-    // Setup image module for wali kelas signature
+    // Setup image module for wali kelas signature (following sikap rapor pattern)
     const imageOpts = {
-      getImage: async (tagValue: string) => {
+      getImage: (tagValue: string) => {
         try {
-          // Check if it's a cloud URL (production)
-          if (process.env.NODE_ENV === 'production' && process.env.BLOB_READ_WRITE_TOKEN && tagValue.startsWith('https://')) {
-            const response = await fetch(tagValue)
-            if (!response.ok) {
-              throw new Error(`Failed to fetch signature image from cloud: ${tagValue}`)
-            }
-            const arrayBuffer = await response.arrayBuffer()
-            return Buffer.from(arrayBuffer)
-          }
-          // Local development - convert cloud URL to local path
-          else if (tagValue.startsWith('https://')) {
-            const localPath = tagValue.replace(
-              'https://6uc7tvnigewtrcyh.public.blob.vercel-storage.com/',
-              'uploads/signatures/'
-            )
-            const imagePath = path.join(process.cwd(), 'public', localPath)
-            return fs.readFileSync(imagePath)
-          }
-          // Fallback for other paths
-          else {
-            const imagePath = path.join(process.cwd(), 'public', tagValue.replace(/^\//, ''))
-            return fs.readFileSync(imagePath)
-          }
+          // tagValue should be the path to the signature image (following sikap rapor pattern)
+          const imagePath = path.join(process.cwd(), 'public', tagValue)
+          return fs.readFileSync(imagePath)
         } catch (error) {
           console.error('Error loading signature image:', error)
+          // Return empty buffer if image not found
           return Buffer.alloc(0)
         }
       },
@@ -198,28 +180,22 @@ export async function POST(request: NextRequest) {
       // Wali kelas info
       nama_wali_kelas: siswa.kelas?.wali_kelas?.nama || "",
       nip_wali_kelas: siswa.kelas?.wali_kelas?.nip || "",
-      // Image placeholder - full URL for cloud, will be handled by image module
-      tanda_tangan_wali_kelas: siswa.kelas?.wali_kelas?.tanda_tangan || "",
+      // Image placeholder - convert cloud URL to local path (following sikap rapor pattern)
+      tanda_tangan_wali_kelas: siswa.kelas?.wali_kelas?.tanda_tangan?.startsWith('https://')
+        ? siswa.kelas?.wali_kelas?.tanda_tangan?.replace(
+            'https://6uc7tvnigewtrcyh.public.blob.vercel-storage.com/',
+            'uploads/signatures/'
+          )
+        : siswa.kelas?.wali_kelas?.tanda_tangan?.replace('/uploads/', 'uploads/') || "",
 
       // Metadata
       tgl_raport: formatTanggal(new Date()),
     }
 
-    // Set data in template
-    doc.setData(data)
+    // Set template data (following sikap rapor pattern)
+    doc.render(data)
 
-    try {
-      // Render the document
-      doc.render()
-    } catch (error) {
-      console.error("Template rendering error:", error)
-      return NextResponse.json(
-        { success: false, error: "Gagal memproses template. Periksa placeholder di template." },
-        { status: 500 }
-      )
-    }
-
-    // Generate output
+    // Generate output buffer
     const outputBuffer = doc.getZip().generate({
       type: "nodebuffer",
       compression: "DEFLATE",
