@@ -42,6 +42,9 @@ export default function NilaiHafalanPage() {
   const [selectedKelas, setSelectedKelas] = useState<string>("")
   const [selectedPeriodeForTable, setSelectedPeriodeForTable] = useState<string>("")
 
+  // Selection states
+  const [selectedIds, setSelectedIds] = useState<(number | string)[]>([])
+
 
   // Excel template states
   const [selectedPeriodeAjaran, setSelectedPeriodeAjaran] = useState<string>("")
@@ -168,7 +171,7 @@ export default function NilaiHafalanPage() {
 
   const fetchKelasOptions = async () => {
     try {
-      const response = await fetch("/api/kelas")
+      const response = await fetch("/api/kelas?per_page=1000")
       const result = await response.json()
       setKelasOptions(result.success ? (result.data || []) : [])
     } catch (error) {

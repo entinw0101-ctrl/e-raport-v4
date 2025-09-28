@@ -170,7 +170,7 @@ export default function PenilaianSikapPage() {
 
   const fetchKelasOptions = async () => {
     try {
-      const response = await fetch("/api/kelas")
+      const response = await fetch("/api/kelas?per_page=1000")
       const result = await response.json()
       setKelasOptions(result.success ? (result.data || []) : [])
     } catch (error) {
