@@ -6,6 +6,7 @@ import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { siswaService, type Siswa } from "@/src/services/siswaService"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
@@ -26,10 +27,9 @@ export default function SiswaPage() {
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null)
   const [formLoading, setFormLoading] = useState(false)
 
-  // Filter states (removed for now to fix infinite loops)
+  // Filter states
   const [searchTerm, setSearchTerm] = useState("")
-  // const [selectedTingkatan, setSelectedTingkatan] = useState("")
-  // const [selectedKelas, setSelectedKelas] = useState("")
+  const [selectedKelas, setSelectedKelas] = useState<string>("")
 
   // Options for form selects
   const [kelasOptions, setKelasOptions] = useState<{ value: number; label: string }[]>([])
@@ -269,6 +269,7 @@ export default function SiswaPage() {
         page,
         per_page: perPage,
         search: search || undefined,
+        kelas_id: selectedKelas && selectedKelas !== "all" ? Number(selectedKelas) : undefined,
       })
 
       if (response.success && response.data) {
@@ -302,7 +303,7 @@ export default function SiswaPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.per_page])
+  }, [pagination.per_page, selectedKelas])
 
   const fetchOptions = async () => {
     try {
@@ -361,6 +362,10 @@ export default function SiswaPage() {
     fetchData()
     fetchOptions()
   }, [])
+
+  useEffect(() => {
+    fetchData(1, searchTerm)
+  }, [selectedKelas])
 
   const handlePageChange = useCallback((page: number) => {
     fetchData(page, searchTerm)
@@ -539,6 +544,28 @@ export default function SiswaPage() {
     }
   }
 
+  // Custom header for table filters
+  const tableFilters = (
+    <div className="flex gap-4 items-center">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Kelas</label>
+        <Select value={selectedKelas} onValueChange={setSelectedKelas}>
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="Semua Kelas" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Kelas</SelectItem>
+            {kelasOptions?.map((kelas: any) => (
+              <SelectItem key={kelas.value} value={kelas.value?.toString()}>
+                {kelas.label}
+              </SelectItem>
+            )) || []}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+
   return (
     <div className="container mx-auto px-4 py-8">
       <DataTable
@@ -553,6 +580,7 @@ export default function SiswaPage() {
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        customHeader={tableFilters}
         searchPlaceholder="Cari nama atau NIS siswa..."
         addButtonText="Tambah Siswa"
         emptyMessage="Belum ada data siswa"

@@ -241,7 +241,7 @@ export function CascadingSelect({
     const loadKelas = async () => {
       setLoading((prev) => ({ ...prev, kelas: true }))
       try {
-        const response = await fetch(`/api/kelas?tingkatan_id=${selectedTingkatan}`)
+        const response = await fetch(`/api/kelas?tingkatan_id=${selectedTingkatan}&per_page=1000`)
         if (response.ok) {
           const data = await response.json()
           setKelasOptions(
