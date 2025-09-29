@@ -270,23 +270,29 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
 
     console.timeEnd('Pre-loading lookups')
 
-    // 2. Process all tables in parallel for maximum speed
+    // 2. Process tables sequentially to avoid race conditions
     console.time('Processing tables')
 
-    // Process all tables simultaneously
-    const [
-      nilaiUjianResult,
-      nilaiHafalanResult,
-      kehadiranResult,
-      penilaianSikapResult,
-      catatanSiswaResult
-    ] = await Promise.all([
-      processNilaiUjian(validatedData.nilaiUjian || [], siswaMap, mapelMap, periodeAjaranId),
-      processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId),
-      processKehadiran(validatedData.kehadiran || [], siswaMap, indikatorKehadiranMap, periodeAjaranId),
-      processPenilaianSikap(validatedData.penilaianSikap || [], siswaMap, indikatorSikapMap, periodeAjaranId),
-      processCatatanSiswa(validatedData.catatanSiswa || [], siswaMap, periodeAjaranId)
-    ])
+    // Process tables one by one to prevent database conflicts
+    console.time('Nilai Ujian processing')
+    const nilaiUjianResult = await processNilaiUjian(validatedData.nilaiUjian || [], siswaMap, mapelMap, periodeAjaranId)
+    console.timeEnd('Nilai Ujian processing')
+
+    console.time('Nilai Hafalan processing')
+    const nilaiHafalanResult = await processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId)
+    console.timeEnd('Nilai Hafalan processing')
+
+    console.time('Kehadiran processing')
+    const kehadiranResult = await processKehadiran(validatedData.kehadiran || [], siswaMap, indikatorKehadiranMap, periodeAjaranId)
+    console.timeEnd('Kehadiran processing')
+
+    console.time('Penilaian Sikap processing')
+    const penilaianSikapResult = await processPenilaianSikap(validatedData.penilaianSikap || [], siswaMap, indikatorSikapMap, periodeAjaranId)
+    console.timeEnd('Penilaian Sikap processing')
+
+    console.time('Catatan Siswa processing')
+    const catatanSiswaResult = await processCatatanSiswa(validatedData.catatanSiswa || [], siswaMap, periodeAjaranId)
+    console.timeEnd('Catatan Siswa processing')
 
     results.nilaiUjian = nilaiUjianResult
     results.nilaiHafalan = nilaiHafalanResult
