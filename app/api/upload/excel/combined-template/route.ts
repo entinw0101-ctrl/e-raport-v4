@@ -270,34 +270,48 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
 
     console.timeEnd('Pre-loading lookups')
 
-    // 2. Process each table separately (no single long transaction)
+    // 2. Process tables in chunks to avoid Vercel timeout (process limited records per table)
     console.time('Processing tables')
 
-    // Process Nilai Ujian
+    const CHUNK_SIZE = 50 // Process 50 records at a time per table
+
+    // Process Nilai Ujian in chunks
     console.time('Nilai Ujian processing')
-    const nilaiUjianResult = await processNilaiUjian(validatedData.nilaiUjian || [], siswaMap, mapelMap, periodeAjaranId)
+    const nilaiUjianResult = await processTableInChunks(
+      validatedData.nilaiUjian || [],
+      CHUNK_SIZE,
+      (chunk) => processNilaiUjian(chunk, siswaMap, mapelMap, periodeAjaranId)
+    )
     results.nilaiUjian = nilaiUjianResult
     console.timeEnd('Nilai Ujian processing')
 
-    // Process Nilai Hafalan
+    // Process Nilai Hafalan in chunks
     console.time('Nilai Hafalan processing')
     const nilaiHafalanResult = await processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId)
     results.nilaiHafalan = nilaiHafalanResult
     console.timeEnd('Nilai Hafalan processing')
 
-    // Process Kehadiran
+    // Process Kehadiran in chunks
     console.time('Kehadiran processing')
-    const kehadiranResult = await processKehadiran(validatedData.kehadiran || [], siswaMap, indikatorKehadiranMap, periodeAjaranId)
+    const kehadiranResult = await processTableInChunks(
+      validatedData.kehadiran || [],
+      CHUNK_SIZE,
+      (chunk) => processKehadiran(chunk, siswaMap, indikatorKehadiranMap, periodeAjaranId)
+    )
     results.kehadiran = kehadiranResult
     console.timeEnd('Kehadiran processing')
 
-    // Process Penilaian Sikap
+    // Process Penilaian Sikap in chunks
     console.time('Penilaian Sikap processing')
-    const penilaianSikapResult = await processPenilaianSikap(validatedData.penilaianSikap || [], siswaMap, indikatorSikapMap, periodeAjaranId)
+    const penilaianSikapResult = await processTableInChunks(
+      validatedData.penilaianSikap || [],
+      CHUNK_SIZE,
+      (chunk) => processPenilaianSikap(chunk, siswaMap, indikatorSikapMap, periodeAjaranId)
+    )
     results.penilaianSikap = penilaianSikapResult
     console.timeEnd('Penilaian Sikap processing')
 
-    // Process Catatan Siswa
+    // Process Catatan Siswa (usually small, no chunking needed)
     console.time('Catatan Siswa processing')
     const catatanSiswaResult = await processCatatanSiswa(validatedData.catatanSiswa || [], siswaMap, periodeAjaranId)
     results.catatanSiswa = catatanSiswaResult
@@ -312,6 +326,31 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
     console.error('Bulk import error:', error)
     throw error
   }
+}
+
+// Helper function to process data in chunks
+async function processTableInChunks<T>(
+  data: T[],
+  chunkSize: number,
+  processor: (chunk: T[]) => Promise<{ inserted: number; updated: number; errors: number }>
+): Promise<{ inserted: number; updated: number; errors: number }> {
+  const results = { inserted: 0, updated: 0, errors: 0 }
+
+  for (let i = 0; i < data.length; i += chunkSize) {
+    const chunk = data.slice(i, i + chunkSize)
+    const chunkResult = await processor(chunk)
+
+    results.inserted += chunkResult.inserted
+    results.updated += chunkResult.updated
+    results.errors += chunkResult.errors
+
+    // Small delay between chunks to prevent overwhelming the database
+    if (i + chunkSize < data.length) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+
+  return results
 }
 
 // Separate processing functions for each table
