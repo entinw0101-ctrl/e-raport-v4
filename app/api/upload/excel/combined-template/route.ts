@@ -14,6 +14,7 @@ interface ValidationResult {
 }
 
 export async function POST(request: NextRequest) {
+  console.time('Total processing time')
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File
@@ -35,9 +36,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Read Excel file
+    console.time('Excel file loading')
     const buffer = await file.arrayBuffer()
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer)
+    console.timeEnd('Excel file loading')
 
     // Validate required sheets
     const requiredSheets = ['Nilai Ujian', 'Nilai Hafalan', 'Kehadiran', 'Penilaian Sikap', 'Catatan Siswa']
@@ -72,11 +75,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate each sheet's data
+    console.time('Sheet validation')
     const nilaiUjianValidation = await validateNilaiUjianSheet(workbook.getWorksheet('Nilai Ujian'), kelasId, periodeAjaranId)
     const nilaiHafalanValidation = await validateNilaiHafalanSheet(workbook.getWorksheet('Nilai Hafalan'), kelasId, periodeAjaranId)
     const kehadiranValidation = await validateKehadiranSheet(workbook.getWorksheet('Kehadiran'), kelasId, periodeAjaranId)
     const penilaianSikapValidation = await validatePenilaianSikapSheet(workbook.getWorksheet('Penilaian Sikap'), kelasId, periodeAjaranId)
     const catatanSiswaValidation = await validateCatatanSiswaSheet(workbook.getWorksheet('Catatan Siswa'), kelasId, periodeAjaranId)
+    console.timeEnd('Sheet validation')
 
     // Collect validated data from all sheets
     const validatedData = {
@@ -117,9 +122,12 @@ export async function POST(request: NextRequest) {
     let importResult = null
     if (!hasErrors && shouldImport) {
       // Perform import if validation passed and import is requested
+      console.time('Data import')
       importResult = await performImport(validatedData, kelasId, periodeAjaranId)
+      console.timeEnd('Data import')
     }
 
+    console.timeEnd('Total processing time')
     return NextResponse.json({
       success: true,
       validation: allValidations,
@@ -204,12 +212,101 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
     catatanSiswa: { inserted: 0, updated: 0, errors: 0 }
   }
 
+  // Caches for lookups to avoid repeated DB queries
+  const siswaCache = new Map<string, any>()
+  const mapelCache = new Map<string, any>()
+  const indikatorKehadiranCache = new Map<string, any>()
+  const indikatorSikapCache = new Map<string, any>()
+
+  // Helper functions with caching
+  async function getSiswa(nis: string) {
+    if (!siswaCache.has(nis)) {
+      const siswa = await prisma.siswa.findFirst({
+        where: { nis, status: "Aktif" }
+      })
+      siswaCache.set(nis, siswa)
+    }
+    return siswaCache.get(nis)
+  }
+
+  async function getMapel(namaMapel: string, jenis?: string) {
+    const key = jenis ? `${namaMapel}:${jenis}` : namaMapel
+    if (!mapelCache.has(key)) {
+      const where: any = { nama_mapel: namaMapel }
+      if (jenis) where.jenis = jenis
+      const mapel = await prisma.mataPelajaran.findFirst({ where })
+      mapelCache.set(key, mapel)
+    }
+    return mapelCache.get(key)
+  }
+
+  async function getIndikatorKehadiran(namaIndikator: string) {
+    if (!indikatorKehadiranCache.has(namaIndikator)) {
+      const indikator = await prisma.indikatorKehadiran.findFirst({
+        where: { nama_indikator: namaIndikator }
+      })
+      indikatorKehadiranCache.set(namaIndikator, indikator)
+    }
+    return indikatorKehadiranCache.get(namaIndikator)
+  }
+
+  async function getIndikatorSikap(indikator: string) {
+    if (!indikatorSikapCache.has(indikator)) {
+      const ind = await prisma.indikatorSikap.findFirst({
+        where: { indikator }
+      })
+      indikatorSikapCache.set(indikator, ind)
+    }
+    return indikatorSikapCache.get(indikator)
+  }
+
   try {
+    // Pre-load all unique lookups to enable parallel queries
+    console.time('Pre-loading lookups')
+    const allNis = new Set<string>()
+    const allMapelNames = new Set<string>()
+    const allIndikatorKehadiran = new Set<string>()
+    const allIndikatorSikap = new Set<string>()
+
+    // Collect all unique values
+    for (const item of validatedData.nilaiUjian || []) {
+      allNis.add(item.nis)
+      allMapelNames.add(item.mataPelajaran)
+    }
+    for (const item of validatedData.nilaiHafalan || []) {
+      allNis.add(item.nis)
+      allMapelNames.add(item.mataPelajaran)
+    }
+    for (const item of validatedData.kehadiran || []) {
+      allNis.add(item.nis)
+      allIndikatorKehadiran.add(item.indikator)
+    }
+    for (const item of validatedData.penilaianSikap || []) {
+      allNis.add(item.nis)
+      allIndikatorSikap.add(item.indikator)
+    }
+    for (const item of validatedData.catatanSiswa || []) {
+      allNis.add(item.nis)
+    }
+
+    // Parallel load all lookups
+    await Promise.all([
+      // Load all siswa
+      ...Array.from(allNis).map(nis => getSiswa(nis)),
+      // Load all mapel
+      ...Array.from(allMapelNames).map(name => getMapel(name)),
+      ...Array.from(allMapelNames).map(name => getMapel(name, 'Hafalan')),
+      // Load all indikator
+      ...Array.from(allIndikatorKehadiran).map(name => getIndikatorKehadiran(name)),
+      ...Array.from(allIndikatorSikap).map(name => getIndikatorSikap(name))
+    ])
+    console.timeEnd('Pre-loading lookups')
+
     // Import Nilai Ujian
     for (const item of validatedData.nilaiUjian || []) {
       try {
-        const siswa = await prisma.siswa.findFirst({ where: { nis: item.nis } })
-        const mapel = await prisma.mataPelajaran.findFirst({ where: { nama_mapel: item.mataPelajaran } })
+        const siswa = await getSiswa(item.nis)
+        const mapel = await getMapel(item.mataPelajaran)
 
         if (siswa && mapel) {
           const existing = await prisma.nilaiUjian.findUnique({
@@ -273,19 +370,8 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
 
         console.log('Processing nilai hafalan item:', trimmedItem)
 
-        const siswa = await prisma.siswa.findFirst({
-          where: {
-            nis: trimmedItem.nis,
-            status: "Aktif" // Ensure only active students
-          }
-        })
-
-        const mapel = await prisma.mataPelajaran.findFirst({
-          where: {
-            nama_mapel: trimmedItem.mataPelajaran,
-            jenis: "Hafalan" // Ensure it's a Hafalan subject
-          }
-        })
+        const siswa = await getSiswa(trimmedItem.nis)
+        const mapel = await getMapel(trimmedItem.mataPelajaran, "Hafalan")
 
         console.log('Found siswa:', siswa?.id, 'mapel:', mapel?.id)
 
@@ -367,8 +453,8 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
     // Import Kehadiran
     for (const item of validatedData.kehadiran || []) {
       try {
-        const siswa = await prisma.siswa.findFirst({ where: { nis: item.nis } })
-        const indikator = await prisma.indikatorKehadiran.findFirst({ where: { nama_indikator: item.indikator } })
+        const siswa = await getSiswa(item.nis)
+        const indikator = await getIndikatorKehadiran(item.indikator)
 
         if (siswa && indikator) {
           const existing = await prisma.kehadiran.findUnique({
@@ -421,8 +507,8 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
     // Import Penilaian Sikap
     for (const item of validatedData.penilaianSikap || []) {
       try {
-        const siswa = await prisma.siswa.findFirst({ where: { nis: item.nis } })
-        const indikator = await prisma.indikatorSikap.findFirst({ where: { indikator: item.indikator } })
+        const siswa = await getSiswa(item.nis)
+        const indikator = await getIndikatorSikap(item.indikator)
 
         if (siswa && indikator) {
           const existing = await prisma.penilaianSikap.findUnique({
@@ -478,7 +564,7 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
     // Import Catatan Siswa
     for (const item of validatedData.catatanSiswa || []) {
       try {
-        const siswa = await prisma.siswa.findFirst({ where: { nis: item.nis } })
+        const siswa = await getSiswa(item.nis)
 
         if (siswa) {
           const existing = await prisma.catatanSiswa.findUnique({
