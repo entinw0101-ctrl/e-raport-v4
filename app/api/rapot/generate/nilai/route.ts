@@ -52,6 +52,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Pre-load wali kelas signature image
+    let waliKelasSignatureBuffer: Buffer = Buffer.alloc(0)
+    const signature = siswa.kelas?.wali_kelas?.tanda_tangan
+    if (signature) {
+      if (signature.startsWith('https://')) {
+        // Fetch from Vercel Blob Storage
+        try {
+          const response = await fetch(signature)
+          if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer()
+            waliKelasSignatureBuffer = Buffer.from(arrayBuffer)
+          }
+        } catch (error) {
+          console.error('Error fetching signature from blob:', error)
+        }
+      } else {
+        // Read from local filesystem
+        try {
+          const localPath = path.join(process.cwd(), 'public', signature.replace(/^\//, ''))
+          waliKelasSignatureBuffer = fs.readFileSync(localPath)
+        } catch (error) {
+          console.error('Error reading local signature:', error)
+        }
+      }
+    }
+
     // Fetch active nilai template
     const template = await prisma.templateDokumen.findFirst({
       where: {
@@ -68,18 +94,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Setup image module for wali kelas signature (following sikap rapor pattern)
+    // Setup image module for wali kelas signature
     const imageOpts = {
       getImage: (tagValue: string) => {
-        try {
-          // tagValue should be the path to the signature image (following sikap rapor pattern)
-          const imagePath = path.join(process.cwd(), 'public', tagValue)
-          return fs.readFileSync(imagePath)
-        } catch (error) {
-          console.error('Error loading signature image:', error)
-          // Return empty buffer if image not found
-          return Buffer.alloc(0)
+        console.log('getImage called with tagValue:', tagValue)
+        if (tagValue === 'wali_kelas_signature') {
+          console.log('Returning pre-loaded signature buffer, size:', waliKelasSignatureBuffer.length)
+          return waliKelasSignatureBuffer
         }
+        // For any other images
+        return Buffer.alloc(0)
       },
       getSize: () => [150, 75], // width, height in pixels
     }
@@ -174,18 +198,8 @@ export async function POST(request: NextRequest) {
       // Wali kelas info
       nama_wali_kelas: siswa.kelas?.wali_kelas?.nama || "",
       nip_wali_kelas: siswa.kelas?.wali_kelas?.nip || "",
-      // Image placeholder - handle both cloud URLs and local paths
-      tanda_tangan_wali_kelas: (() => {
-        const signature = siswa.kelas?.wali_kelas?.tanda_tangan;
-        if (!signature) return "";
-
-        // If it's a cloud URL, convert to local path
-        if (signature.startsWith('https://')) {
-          return signature.replace('https://6uc7tvnigewtrcyh.public.blob.vercel-storage.com/', 'uploads/signatures/');
-        }
-        // If it's already a local path, just remove leading slash
-        return signature.replace('/uploads/', 'uploads/');
-      })(),
+      // Image placeholder
+      tanda_tangan_wali_kelas: 'wali_kelas_signature',
 
       // Metadata
       tgl_raport: `Sumedang, ${formatTanggal(new Date())}`,
