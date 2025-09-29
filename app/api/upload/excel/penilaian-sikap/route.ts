@@ -170,58 +170,64 @@ export async function POST(request: NextRequest) {
     // Create lookup map
     const siswaMap = new Map(siswaList.map(s => [s.nis, s]))
 
-    // Process import without transaction
-    let successCount = 0
+    // Process upserts in parallel batches
     const errorDetails: string[] = []
+    const upsertPromises: Promise<any>[] = []
 
+    // Collect all valid upsert operations
     for (const data of importData) {
-      try {
-        // Find student by NIS from pre-loaded map
-        const siswa = siswaMap.get(data.nis)
+      const siswa = siswaMap.get(data.nis)
 
-        if (!siswa) {
-          errorDetails.push(`Baris ${data.rowNumber}: Siswa dengan NIS ${data.nis} tidak ditemukan`)
-          continue
-        }
+      if (!siswa) {
+        errorDetails.push(`Baris ${data.rowNumber}: Siswa dengan NIS ${data.nis} tidak ditemukan`)
+        continue
+      }
 
-        // Insert assessment data for each indicator
-        for (const assessment of data.assessments) {
-          // Generate predikat from nilai
-          const predikat = generatePredikat(assessment.nilai)
+      // Create upsert promises for each assessment
+      for (const assessment of data.assessments) {
+        const predikat = generatePredikat(assessment.nilai)
 
-          await prisma.penilaianSikap.upsert({
-            where: {
-              siswa_id_indikator_id_periode_ajaran_id: {
-                siswa_id: siswa.id,
-                indikator_id: assessment.indikator_sikap_id,
-                periode_ajaran_id: periodeAjaran.id,
-              },
-            },
-            update: {
-              nilai: assessment.nilai,
-              predikat: predikat,
-            },
-            create: {
+        const upsertPromise = prisma.penilaianSikap.upsert({
+          where: {
+            siswa_id_indikator_id_periode_ajaran_id: {
               siswa_id: siswa.id,
               indikator_id: assessment.indikator_sikap_id,
               periode_ajaran_id: periodeAjaran.id,
-              nilai: assessment.nilai,
-              predikat: predikat,
             },
-          })
-        }
+          },
+          update: {
+            nilai: assessment.nilai,
+            predikat: predikat,
+          },
+          create: {
+            siswa_id: siswa.id,
+            indikator_id: assessment.indikator_sikap_id,
+            periode_ajaran_id: periodeAjaran.id,
+            nilai: assessment.nilai,
+            predikat: predikat,
+          },
+        }).catch((error: any) => {
+          if (error.code === 'P2002') {
+            errorDetails.push(`Baris ${data.rowNumber}: Data penilaian sikap sudah ada untuk siswa ${data.nis}`)
+          } else {
+            errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
+          }
+          return null // Return null for failed operations
+        })
 
-        successCount++
-      } catch (error: any) {
-        if (error.code === 'P2002') {
-          errorDetails.push(`Baris ${data.rowNumber}: Data penilaian sikap sudah ada untuk siswa ${data.nis}`)
-        } else {
-          errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
-        }
+        upsertPromises.push(upsertPromise)
       }
     }
 
-    const result = { successCount, errorDetails }
+    // Execute all upserts in parallel
+    if (upsertPromises.length > 0) {
+      await Promise.all(upsertPromises)
+    }
+
+    const result = {
+      successCount: upsertPromises.length - errorDetails.length,
+      errorDetails
+    }
 
     return NextResponse.json({
       success: true,
