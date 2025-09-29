@@ -501,17 +501,28 @@ async function processKehadiran(data: any[], siswaMap: Map<string, any>, indikat
 }
 
 async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, indikatorMap: Map<string, any>, periodeAjaranId: string) {
+  console.log('Processing penilaian sikap data:', data.length, 'items')
   const result = { inserted: 0, updated: 0, errors: 0 }
   const upsertPromises: Promise<any>[] = []
 
   // Collect all valid upsert operations
   for (const item of data) {
+    console.log('Processing penilaian sikap item:', item)
     const siswa = siswaMap.get(item.nis)
     const indikator = indikatorMap.get(item.indikator)
+
+    console.log('Found siswa:', !!siswa, 'indikator:', !!indikator, 'for indikator:', item.indikator)
 
     if (siswa && indikator) {
       const nilaiNum = parseInt(item.nilai)
       const predikat = getPredicate(nilaiNum)
+
+      console.log('Creating upsert for penilaian sikap:', {
+        siswa_id: siswa.id,
+        indikator_id: indikator.id,
+        nilai: nilaiNum,
+        predikat
+      })
 
       const upsertPromise = prisma.penilaianSikap.upsert({
         where: {
@@ -533,23 +544,28 @@ async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, in
           predikat: predikat
         }
       }).catch((error: any) => {
-        console.error('Upsert error for penilaian sikap:', error)
+        console.error('Upsert error for penilaian sikap:', error, 'for item:', item)
         result.errors++
         return null
       })
 
       upsertPromises.push(upsertPromise)
     } else {
+      console.log('Missing siswa or indikator for penilaian sikap item:', item)
       result.errors++
     }
   }
+
+  console.log('Executing', upsertPromises.length, 'penilaian sikap upserts')
 
   // Execute all upserts in parallel
   if (upsertPromises.length > 0) {
     const upsertResults = await Promise.all(upsertPromises)
     result.inserted = upsertResults.filter(r => r !== null).length
+    console.log('Penilaian sikap upsert results:', upsertResults.length, 'total,', result.inserted, 'successful')
   }
 
+  console.log('Penilaian sikap processing result:', result)
   return result
 }
 
