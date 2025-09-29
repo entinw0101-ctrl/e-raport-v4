@@ -49,7 +49,10 @@ export async function POST(request: NextRequest) {
     })
     const mapelMap = new Map(mapelList.map(m => [m.nama_mapel, m]))
 
-    // Process data
+    // Process upserts in parallel
+    const upsertPromises: Promise<any>[] = []
+
+    // Collect all valid upsert operations
     for (const row of dataRows) {
       if (!row || !Array.isArray(row) || row.length < 5) continue
 
@@ -65,49 +68,46 @@ export async function POST(request: NextRequest) {
       if (siswa && mapel) {
         const nilaiNum = parseFloat(String(nilai))
         if (!isNaN(nilaiNum) && nilaiNum >= 0 && nilaiNum <= 100) {
-          const existing = await prisma.nilaiUjian.findUnique({
+          const upsertPromise = prisma.nilaiUjian.upsert({
             where: {
               siswa_id_mapel_id_periode_ajaran_id: {
                 siswa_id: siswa.id,
                 mapel_id: mapel.id,
                 periode_ajaran_id: parseInt(periodeAjaranId)
               }
+            },
+            update: {
+              nilai_angka: nilaiNum,
+              predikat: generatePredikat(nilaiNum)
+            },
+            create: {
+              siswa_id: siswa.id,
+              mapel_id: mapel.id,
+              periode_ajaran_id: parseInt(periodeAjaranId),
+              nilai_angka: nilaiNum,
+              predikat: generatePredikat(nilaiNum)
             }
+          }).catch((error: any) => {
+            console.error('Upsert error for nilai ujian:', error)
+            results.errors++
+            return null
           })
 
-          if (existing) {
-            await prisma.nilaiUjian.update({
-              where: {
-                siswa_id_mapel_id_periode_ajaran_id: {
-                  siswa_id: siswa.id,
-                  mapel_id: mapel.id,
-                  periode_ajaran_id: parseInt(periodeAjaranId)
-                }
-              },
-              data: {
-                nilai_angka: nilaiNum,
-                predikat: generatePredikat(nilaiNum)
-              }
-            })
-            results.updated++
-          } else {
-            await prisma.nilaiUjian.create({
-              data: {
-                siswa_id: siswa.id,
-                mapel_id: mapel.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                nilai_angka: nilaiNum,
-                predikat: generatePredikat(nilaiNum)
-              }
-            })
-            results.inserted++
-          }
+          upsertPromises.push(upsertPromise)
         } else {
           results.errors++
         }
       } else {
         results.errors++
       }
+    }
+
+    // Execute all upserts in parallel
+    if (upsertPromises.length > 0) {
+      const upsertResults = await Promise.all(upsertPromises)
+      results.inserted = upsertResults.filter(r => r !== null).length
+      // Note: We can't easily distinguish between inserts and updates in parallel mode
+      // For simplicity, we'll count all successful operations as inserted
     }
 
     return NextResponse.json({

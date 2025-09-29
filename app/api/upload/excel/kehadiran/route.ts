@@ -48,7 +48,10 @@ export async function POST(request: NextRequest) {
     })
     const indikatorMap = new Map(indikatorList.map(i => [i.nama_indikator, i]))
 
-    // Process data
+    // Process upserts in parallel
+    const upsertPromises: Promise<any>[] = []
+
+    // Collect all valid upsert operations
     for (const row of dataRows) {
       if (!row || !Array.isArray(row) || row.length < 8) continue
 
@@ -69,51 +72,47 @@ export async function POST(request: NextRequest) {
         const alphaNum = parseInt(String(alpha || 0))
 
         if (sakitNum >= 0 && izinNum >= 0 && alphaNum >= 0) {
-          const existing = await prisma.kehadiran.findUnique({
+          const upsertPromise = prisma.kehadiran.upsert({
             where: {
               siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
                 siswa_id: siswa.id,
                 periode_ajaran_id: parseInt(periodeAjaranId),
                 indikator_kehadiran_id: indikatorData.id
               }
+            },
+            update: {
+              sakit: sakitNum,
+              izin: izinNum,
+              alpha: alphaNum
+            },
+            create: {
+              siswa_id: siswa.id,
+              periode_ajaran_id: parseInt(periodeAjaranId),
+              indikator_kehadiran_id: indikatorData.id,
+              sakit: sakitNum,
+              izin: izinNum,
+              alpha: alphaNum
             }
+          }).catch((error: any) => {
+            console.error('Upsert error for kehadiran:', error)
+            results.errors++
+            return null
           })
 
-          if (existing) {
-            await prisma.kehadiran.update({
-              where: {
-                siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
-                  siswa_id: siswa.id,
-                  periode_ajaran_id: parseInt(periodeAjaranId),
-                  indikator_kehadiran_id: indikatorData.id
-                }
-              },
-              data: {
-                sakit: sakitNum,
-                izin: izinNum,
-                alpha: alphaNum
-              }
-            })
-            results.updated++
-          } else {
-            await prisma.kehadiran.create({
-              data: {
-                siswa_id: siswa.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                indikator_kehadiran_id: indikatorData.id,
-                sakit: sakitNum,
-                izin: izinNum,
-                alpha: alphaNum
-              }
-            })
-            results.inserted++
-          }
+          upsertPromises.push(upsertPromise)
         } else {
           results.errors++
         }
       } else {
         results.errors++
       }
+    }
+
+    // Execute all upserts in parallel
+    if (upsertPromises.length > 0) {
+      const upsertResults = await Promise.all(upsertPromises)
+      results.inserted = upsertResults.filter(r => r !== null).length
+      // Note: We can't easily distinguish between inserts and updates in parallel mode
     }
 
     return NextResponse.json({

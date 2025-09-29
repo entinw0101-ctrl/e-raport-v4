@@ -146,18 +146,33 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       { header: "Tahun Ajaran", key: "tahun_ajaran", width: 15 },
     ]
 
+    // Set row height for better readability
+    worksheet.getRow(1).height = 25; // Header row height
+
     // Mengisi data siswa dan mata pelajaran
     let currentRow = 2; // Mulai dari baris 2 karena baris 1 adalah header
     for (const siswa of siswaInKelas) {
         const startRow = currentRow;
         for (const kurikulum of validKurikulum) {
-            worksheet.addRow({
+            const rowData = {
                 nama_mapel: kurikulum.mata_pelajaran!.nama_mapel,
                 kitab: kurikulum.kitab?.nama_kitab || '-',
                 target_hafalan: kurikulum.batas_hafalan || '',
+                predikat: '', // Kosong untuk template, user akan isi
                 semester: periodeAjaran.semester,
                 tahun_ajaran: periodeAjaran.master_tahun_ajaran.nama_ajaran
-            });
+            };
+
+            const addedRow = worksheet.addRow(rowData);
+
+            // Set alignment untuk setiap cell
+            addedRow.getCell(3).alignment = { horizontal: 'left' }; // Nama Mapel
+            addedRow.getCell(4).alignment = { horizontal: 'left' }; // Kitab
+            addedRow.getCell(5).alignment = { horizontal: 'left' }; // Target Hafalan
+            addedRow.getCell(6).alignment = { horizontal: 'center' }; // Predikat (dropdown)
+            addedRow.getCell(7).alignment = { horizontal: 'center' }; // Semester
+            addedRow.getCell(8).alignment = { horizontal: 'center' }; // Tahun Ajaran
+
             currentRow++;
         }
         const endRow = currentRow - 1;

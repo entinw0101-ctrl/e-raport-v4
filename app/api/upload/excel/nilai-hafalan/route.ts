@@ -82,7 +82,10 @@ export async function POST(request: NextRequest) {
             periodeList.filter(p => p !== null && p.master_tahun_ajaran !== null).map(p => [`${p!.master_tahun_ajaran!.nama_ajaran}:${p!.semester}`, p!])
         );
 
-        // Process each row without transaction
+        // Process upserts in parallel
+        const upsertPromises: Promise<any>[] = []
+
+        // Collect all valid upsert operations
         for (let i = 2; i <= worksheet.rowCount; i++) {
             const row = worksheet.getRow(i);
 
@@ -128,8 +131,8 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            // Melakukan operasi UPSERT (Update or Insert)
-            await prisma.nilaiHafalan.upsert({
+            // Create upsert promise
+            const upsertPromise = prisma.nilaiHafalan.upsert({
                 where: {
                     siswa_id_mapel_id_periode_ajaran_id: {
                         siswa_id: siswa.id,
@@ -148,9 +151,20 @@ export async function POST(request: NextRequest) {
                     predikat: enumPredikat,
                     target_hafalan: targetHafalan || null,
                 },
-            });
+            }).catch((error: any) => {
+                console.error('Upsert error for nilai hafalan:', error)
+                results.errors++
+                results.errorDetails.push(`Baris ${i}: Error menyimpan data - ${error.message}`)
+                return null
+            })
 
-            results.success++;
+            upsertPromises.push(upsertPromise)
+        }
+
+        // Execute all upserts in parallel
+        if (upsertPromises.length > 0) {
+            const upsertResults = await Promise.all(upsertPromises)
+            results.success = upsertResults.filter(r => r !== null).length
         }
 
 
