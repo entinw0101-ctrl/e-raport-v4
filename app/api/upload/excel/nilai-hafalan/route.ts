@@ -41,90 +41,117 @@ export async function POST(request: NextRequest) {
             errorDetails: [] as string[],
         };
         
-        // Memulai transaksi database
-        await prisma.$transaction(async (tx) => {
-            // Looping dimulai dari baris kedua (setelah header)
-            for (let i = 2; i <= worksheet.rowCount; i++) {
-                const row = worksheet.getRow(i);
-                
-                // Mengambil data dari setiap sel. NIS di-unmerge secara otomatis oleh ExcelJS.
-                const nis = getCellValue(row, 1);
-                const namaMapel = getCellValue(row, 3);
-                const targetHafalan = getCellValue(row, 5);
-                const predikat = getCellValue(row, 6);
-                const semester = getCellValue(row, 7);
-                const tahunAjaranStr = getCellValue(row, 8);
+        // Pre-load lookups to avoid repeated queries
+        const allNis = new Set<string>()
+        const allMapel = new Set<string>()
+        const allPeriodeData = new Set<string>()
 
-                if (!nis || !namaMapel || !predikat) {
-                    results.errors++;
-                    results.errorDetails.push(`Baris ${i}: Data tidak lengkap (NIS, Nama Mapel, atau Predikat kosong).`);
-                    continue;
-                }
+        // Collect all unique values first
+        for (let i = 2; i <= worksheet.rowCount; i++) {
+            const row = worksheet.getRow(i);
+            const nis = getCellValue(row, 1);
+            const namaMapel = getCellValue(row, 3);
+            const semester = getCellValue(row, 7);
+            const tahunAjaranStr = getCellValue(row, 8);
 
-                // Cari entitas yang diperlukan dari database di dalam transaksi
-                const siswa = await tx.siswa.findUnique({ where: { nis } });
-                const mataPelajaran = await tx.mataPelajaran.findFirst({ where: { nama_mapel: namaMapel } });
-                const periodeAjaran = await tx.periodeAjaran.findFirst({
+            if (nis) allNis.add(nis);
+            if (namaMapel) allMapel.add(namaMapel);
+            if (semester && tahunAjaranStr) allPeriodeData.add(`${tahunAjaranStr}:${semester}`);
+        }
+
+        // Load all data in parallel
+        const [siswaList, mapelList, periodeList] = await Promise.all([
+            prisma.siswa.findMany({ where: { nis: { in: Array.from(allNis) }, status: "Aktif" } }),
+            prisma.mataPelajaran.findMany({ where: { nama_mapel: { in: Array.from(allMapel) } } }),
+            Promise.all(Array.from(allPeriodeData).map(async (periodeStr) => {
+                const [tahunAjaran, semester] = periodeStr.split(':');
+                return await prisma.periodeAjaran.findFirst({
                     where: {
                         semester: semester as any,
-                        master_tahun_ajaran: { nama_ajaran: tahunAjaranStr }
+                        master_tahun_ajaran: { nama_ajaran: tahunAjaran }
                     },
                     include: { master_tahun_ajaran: true }
                 });
+            }))
+        ]);
 
-                if (!siswa || !mataPelajaran || !periodeAjaran) {
-                    results.errors++;
-                    const missing = [
-                        !siswa ? `Siswa (NIS: ${nis})` : '',
-                        !mataPelajaran ? `Mapel (${namaMapel})` : '',
-                        !periodeAjaran ? `Periode (${tahunAjaranStr} Sem ${semester})` : ''
-                    ].filter(Boolean).join(', ');
-                    results.errorDetails.push(`Baris ${i}: ${missing} tidak ditemukan.`);
-                    continue;
-                }
+        // Create lookup maps
+        const siswaMap = new Map(siswaList.map(s => [s.nis, s]));
+        const mapelMap = new Map(mapelList.map(m => [m.nama_mapel, m]));
+        const periodeMap = new Map(
+            periodeList.filter(p => p !== null && p.master_tahun_ajaran !== null).map(p => [`${p!.master_tahun_ajaran!.nama_ajaran}:${p!.semester}`, p!])
+        );
 
-                // Mapping dari display value ke enum value
-                let enumPredikat: any;
-                if (predikat === "Tercapai") {
-                    enumPredikat = "TERCAPAI";
-                } else if (predikat === "Tidak Tercapai") {
-                    enumPredikat = "TIDAK_TERCAPAI";
-                } else {
-                    results.errors++;
-                    results.errorDetails.push(`Baris ${i}: Predikat '${predikat}' tidak valid. Gunakan 'Tercapai' atau 'Tidak Tercapai'.`);
-                    continue;
-                }
+        // Process each row without transaction
+        for (let i = 2; i <= worksheet.rowCount; i++) {
+            const row = worksheet.getRow(i);
 
-                // Melakukan operasi UPSERT (Update or Insert)
-                await tx.nilaiHafalan.upsert({
-                    where: {
-                        siswa_id_mapel_id_periode_ajaran_id: {
-                            siswa_id: siswa.id,
-                            mapel_id: mataPelajaran.id,
-                            periode_ajaran_id: periodeAjaran.id,
-                        },
-                    },
-                    update: {
-                        predikat: enumPredikat,
-                        target_hafalan: targetHafalan || null,
-                    },
-                    create: {
+            // Mengambil data dari setiap sel. NIS di-unmerge secara otomatis oleh ExcelJS.
+            const nis = getCellValue(row, 1);
+            const namaMapel = getCellValue(row, 3);
+            const targetHafalan = getCellValue(row, 5);
+            const predikat = getCellValue(row, 6);
+            const semester = getCellValue(row, 7);
+            const tahunAjaranStr = getCellValue(row, 8);
+
+            if (!nis || !namaMapel || !predikat) {
+                results.errors++;
+                results.errorDetails.push(`Baris ${i}: Data tidak lengkap (NIS, Nama Mapel, atau Predikat kosong).`);
+                continue;
+            }
+
+            // Get entities from pre-loaded maps
+            const siswa = siswaMap.get(nis);
+            const mataPelajaran = mapelMap.get(namaMapel);
+            const periodeAjaran = periodeMap.get(`${tahunAjaranStr}:${semester}`);
+
+            if (!siswa || !mataPelajaran || !periodeAjaran) {
+                results.errors++;
+                const missing = [
+                    !siswa ? `Siswa (NIS: ${nis})` : '',
+                    !mataPelajaran ? `Mapel (${namaMapel})` : '',
+                    !periodeAjaran ? `Periode (${tahunAjaranStr} Sem ${semester})` : ''
+                ].filter(Boolean).join(', ');
+                results.errorDetails.push(`Baris ${i}: ${missing} tidak ditemukan.`);
+                continue;
+            }
+
+            // Mapping dari display value ke enum value
+            let enumPredikat: any;
+            if (predikat === "Tercapai") {
+                enumPredikat = "TERCAPAI";
+            } else if (predikat === "Tidak Tercapai") {
+                enumPredikat = "TIDAK_TERCAPAI";
+            } else {
+                results.errors++;
+                results.errorDetails.push(`Baris ${i}: Predikat '${predikat}' tidak valid. Gunakan 'Tercapai' atau 'Tidak Tercapai'.`);
+                continue;
+            }
+
+            // Melakukan operasi UPSERT (Update or Insert)
+            await prisma.nilaiHafalan.upsert({
+                where: {
+                    siswa_id_mapel_id_periode_ajaran_id: {
                         siswa_id: siswa.id,
                         mapel_id: mataPelajaran.id,
                         periode_ajaran_id: periodeAjaran.id,
-                        predikat: enumPredikat,
-                        target_hafalan: targetHafalan || null,
                     },
-                });
+                },
+                update: {
+                    predikat: enumPredikat,
+                    target_hafalan: targetHafalan || null,
+                },
+                create: {
+                    siswa_id: siswa.id,
+                    mapel_id: mataPelajaran.id,
+                    periode_ajaran_id: periodeAjaran.id,
+                    predikat: enumPredikat,
+                    target_hafalan: targetHafalan || null,
+                },
+            });
 
-                results.success++;
-            }
-            
-            // Jika ada error selama proses, transaction akan otomatis rollback
-            if (results.errors > 0) {
-                 throw new Error("Terjadi kesalahan pada beberapa baris, semua perubahan dibatalkan.");
-            }
-        });
+            results.success++;
+        }
 
 
         return NextResponse.json({

@@ -159,9 +159,23 @@ export function DataTable<T extends { id: number | string }>({
             Sebelumnya
           </Button>
           <div className="flex items-center space-x-1">
-            {Array.from({ length: Math.min(5, total_pages) }, (_, i) => {
-              const pageNum = i + 1
-              return (
+            {(() => {
+              const maxVisiblePages = 5
+              const halfVisible = Math.floor(maxVisiblePages / 2)
+              let startPage = Math.max(1, page - halfVisible)
+              let endPage = Math.min(total_pages, startPage + maxVisiblePages - 1)
+
+              // Adjust startPage if we're near the end
+              if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1)
+              }
+
+              const pageNumbers = []
+              for (let i = startPage; i <= endPage; i++) {
+                pageNumbers.push(i)
+              }
+
+              return pageNumbers.map((pageNum) => (
                 <Button
                   key={pageNum}
                   variant={page === pageNum ? "default" : "outline"}
@@ -171,8 +185,8 @@ export function DataTable<T extends { id: number | string }>({
                 >
                   {pageNum}
                 </Button>
-              )
-            })}
+              ))
+            })()}
           </div>
           <Button variant="outline" size="sm" onClick={() => onPageChange?.(page + 1)} disabled={page >= total_pages}>
             Selanjutnya
