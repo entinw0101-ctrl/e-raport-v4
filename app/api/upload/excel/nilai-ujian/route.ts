@@ -24,10 +24,10 @@ export async function POST(request: NextRequest) {
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer)
 
-    // Get worksheet
-    const worksheet = workbook.getWorksheet('Nilai Ujian')
+    // Get first worksheet (should be the nilai ujian template)
+    const worksheet = workbook.worksheets[0]
     if (!worksheet) {
-      return NextResponse.json({ success: false, error: "Sheet 'Nilai Ujian' tidak ditemukan" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "Tidak ada sheet di file Excel" }, { status: 400 })
     }
 
     // Parse data
