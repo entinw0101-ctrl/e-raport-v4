@@ -576,14 +576,25 @@ async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, in
 }
 
 async function processCatatanSiswa(data: any[], siswaMap: Map<string, any>, periodeAjaranId: string) {
+  console.log('Processing catatan siswa data:', data.length, 'items')
   const result = { inserted: 0, updated: 0, errors: 0 }
   const upsertPromises: Promise<any>[] = []
 
   // Collect all valid upsert operations
   for (const item of data) {
+    console.log('Processing catatan siswa item:', item)
     const siswa = siswaMap.get(item.nis)
 
+    console.log('Found siswa for catatan:', !!siswa, 'for nis:', item.nis)
+
     if (siswa) {
+      console.log('Creating upsert for catatan siswa:', {
+        siswa_id: siswa.id,
+        periode_ajaran_id: parseInt(periodeAjaranId),
+        catatan_sikap: item.catatanSikap,
+        catatan_akademik: item.catatanAkademik
+      })
+
       const upsertPromise = prisma.catatanSiswa.upsert({
         where: {
           siswa_id_periode_ajaran_id: {
@@ -602,23 +613,28 @@ async function processCatatanSiswa(data: any[], siswaMap: Map<string, any>, peri
           catatan_akademik: item.catatanAkademik
         }
       }).catch((error: any) => {
-        console.error('Upsert error for catatan siswa:', error)
+        console.error('Upsert error for catatan siswa:', error, 'for item:', item)
         result.errors++
         return null
       })
 
       upsertPromises.push(upsertPromise)
     } else {
+      console.log('Siswa not found for catatan siswa item:', item)
       result.errors++
     }
   }
+
+  console.log('Executing', upsertPromises.length, 'catatan siswa upserts')
 
   // Execute all upserts in parallel
   if (upsertPromises.length > 0) {
     const upsertResults = await Promise.all(upsertPromises)
     result.inserted = upsertResults.filter(r => r !== null).length
+    console.log('Catatan siswa upsert results:', upsertResults.length, 'total,', result.inserted, 'successful')
   }
 
+  console.log('Catatan siswa processing result:', result)
   return result
 }
 
