@@ -157,63 +157,71 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Process import in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      let successCount = 0
-      const errorDetails: string[] = []
+    // Pre-load all unique lookups to avoid repeated queries
+    const allNis = new Set<string>()
+    importData.forEach(data => allNis.add(data.nis))
 
-      for (const data of importData) {
-        try {
-          // Find student by NIS
-          const siswa = await tx.siswa.findUnique({
-            where: { nis: data.nis },
-            select: { id: true, nama: true }
-          })
+    // Load all students in parallel
+    const siswaList = await prisma.siswa.findMany({
+      where: { nis: { in: Array.from(allNis) }, status: "Aktif" },
+      select: { id: true, nama: true, nis: true }
+    })
 
-          if (!siswa) {
-            errorDetails.push(`Baris ${data.rowNumber}: Siswa dengan NIS ${data.nis} tidak ditemukan`)
-            continue
-          }
+    // Create lookup map
+    const siswaMap = new Map(siswaList.map(s => [s.nis, s]))
 
-          // Insert assessment data for each indicator
-          for (const assessment of data.assessments) {
-            // Generate predikat from nilai
-            const predikat = generatePredikat(assessment.nilai)
+    // Process import without transaction
+    let successCount = 0
+    const errorDetails: string[] = []
 
-            await tx.penilaianSikap.upsert({
-              where: {
-                siswa_id_indikator_id_periode_ajaran_id: {
-                  siswa_id: siswa.id,
-                  indikator_id: assessment.indikator_sikap_id,
-                  periode_ajaran_id: periodeAjaran.id,
-                },
-              },
-              update: {
-                nilai: assessment.nilai,
-                predikat: predikat,
-              },
-              create: {
+    for (const data of importData) {
+      try {
+        // Find student by NIS from pre-loaded map
+        const siswa = siswaMap.get(data.nis)
+
+        if (!siswa) {
+          errorDetails.push(`Baris ${data.rowNumber}: Siswa dengan NIS ${data.nis} tidak ditemukan`)
+          continue
+        }
+
+        // Insert assessment data for each indicator
+        for (const assessment of data.assessments) {
+          // Generate predikat from nilai
+          const predikat = generatePredikat(assessment.nilai)
+
+          await prisma.penilaianSikap.upsert({
+            where: {
+              siswa_id_indikator_id_periode_ajaran_id: {
                 siswa_id: siswa.id,
                 indikator_id: assessment.indikator_sikap_id,
                 periode_ajaran_id: periodeAjaran.id,
-                nilai: assessment.nilai,
-                predikat: predikat,
               },
-            })
-          }
+            },
+            update: {
+              nilai: assessment.nilai,
+              predikat: predikat,
+            },
+            create: {
+              siswa_id: siswa.id,
+              indikator_id: assessment.indikator_sikap_id,
+              periode_ajaran_id: periodeAjaran.id,
+              nilai: assessment.nilai,
+              predikat: predikat,
+            },
+          })
+        }
 
-          successCount++
-        } catch (error: any) {
-          if (error.code === 'P2002') {
-            errorDetails.push(`Baris ${data.rowNumber}: Data penilaian sikap sudah ada untuk siswa ${data.nis}`)
-          } else {
-            errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
-          }
+        successCount++
+      } catch (error: any) {
+        if (error.code === 'P2002') {
+          errorDetails.push(`Baris ${data.rowNumber}: Data penilaian sikap sudah ada untuk siswa ${data.nis}`)
+        } else {
+          errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
         }
       }
+    }
 
-      return { successCount, errorDetails }
-    })
+    const result = { successCount, errorDetails }
 
     return NextResponse.json({
       success: true,

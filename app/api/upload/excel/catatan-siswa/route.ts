@@ -103,52 +103,60 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Process import in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      let successCount = 0
-      const errorDetails: string[] = []
+    // Pre-load all unique lookups to avoid repeated queries
+    const allNis = new Set<string>()
+    importData.forEach(data => allNis.add(data.nis))
 
-      for (const data of importData) {
-        try {
-          // Find student by NIS
-          const siswa = await tx.siswa.findUnique({
-            where: { nis: data.nis },
-            select: { id: true, nama: true }
-          })
+    // Load all students in parallel
+    const siswaList = await prisma.siswa.findMany({
+      where: { nis: { in: Array.from(allNis) }, status: "Aktif" },
+      select: { id: true, nama: true, nis: true }
+    })
 
-          if (!siswa) {
-            errorDetails.push(`Baris ${data.rowNumber}: Siswa dengan NIS ${data.nis} tidak ditemukan`)
-            continue
-          }
+    // Create lookup map
+    const siswaMap = new Map(siswaList.map(s => [s.nis, s]))
 
-          // Upsert catatan siswa
-          await tx.catatanSiswa.upsert({
-            where: {
-              siswa_id_periode_ajaran_id: {
-                siswa_id: siswa.id,
-                periode_ajaran_id: periodeAjaran.id,
-              },
-            },
-            update: {
-              catatan_sikap: data.catatan_sikap || null,
-              catatan_akademik: data.catatan_akademik || null,
-            },
-            create: {
+    // Process import without transaction
+    let successCount = 0
+    const errorDetails: string[] = []
+
+    for (const data of importData) {
+      try {
+        // Find student by NIS from pre-loaded map
+        const siswa = siswaMap.get(data.nis)
+
+        if (!siswa) {
+          errorDetails.push(`Baris ${data.rowNumber}: Siswa dengan NIS ${data.nis} tidak ditemukan`)
+          continue
+        }
+
+        // Upsert catatan siswa
+        await prisma.catatanSiswa.upsert({
+          where: {
+            siswa_id_periode_ajaran_id: {
               siswa_id: siswa.id,
               periode_ajaran_id: periodeAjaran.id,
-              catatan_sikap: data.catatan_sikap || null,
-              catatan_akademik: data.catatan_akademik || null,
             },
-          })
+          },
+          update: {
+            catatan_sikap: data.catatan_sikap || null,
+            catatan_akademik: data.catatan_akademik || null,
+          },
+          create: {
+            siswa_id: siswa.id,
+            periode_ajaran_id: periodeAjaran.id,
+            catatan_sikap: data.catatan_sikap || null,
+            catatan_akademik: data.catatan_akademik || null,
+          },
+        })
 
-          successCount++
-        } catch (error: any) {
-          errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
-        }
+        successCount++
+      } catch (error: any) {
+        errorDetails.push(`Baris ${data.rowNumber}: Error menyimpan data - ${error.message}`)
       }
+    }
 
-      return { successCount, errorDetails }
-    })
+    const result = { successCount, errorDetails }
 
     return NextResponse.json({
       success: true,
