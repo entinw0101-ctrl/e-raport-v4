@@ -270,52 +270,29 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
 
     console.timeEnd('Pre-loading lookups')
 
-    // 2. Process tables in chunks to avoid Vercel timeout (process limited records per table)
+    // 2. Process all tables in parallel for maximum speed
     console.time('Processing tables')
 
-    const CHUNK_SIZE = 50 // Process 50 records at a time per table
+    // Process all tables simultaneously
+    const [
+      nilaiUjianResult,
+      nilaiHafalanResult,
+      kehadiranResult,
+      penilaianSikapResult,
+      catatanSiswaResult
+    ] = await Promise.all([
+      processNilaiUjian(validatedData.nilaiUjian || [], siswaMap, mapelMap, periodeAjaranId),
+      processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId),
+      processKehadiran(validatedData.kehadiran || [], siswaMap, indikatorKehadiranMap, periodeAjaranId),
+      processPenilaianSikap(validatedData.penilaianSikap || [], siswaMap, indikatorSikapMap, periodeAjaranId),
+      processCatatanSiswa(validatedData.catatanSiswa || [], siswaMap, periodeAjaranId)
+    ])
 
-    // Process Nilai Ujian in chunks
-    console.time('Nilai Ujian processing')
-    const nilaiUjianResult = await processTableInChunks(
-      validatedData.nilaiUjian || [],
-      CHUNK_SIZE,
-      (chunk) => processNilaiUjian(chunk, siswaMap, mapelMap, periodeAjaranId)
-    )
     results.nilaiUjian = nilaiUjianResult
-    console.timeEnd('Nilai Ujian processing')
-
-    // Process Nilai Hafalan in chunks
-    console.time('Nilai Hafalan processing')
-    const nilaiHafalanResult = await processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId)
     results.nilaiHafalan = nilaiHafalanResult
-    console.timeEnd('Nilai Hafalan processing')
-
-    // Process Kehadiran in chunks
-    console.time('Kehadiran processing')
-    const kehadiranResult = await processTableInChunks(
-      validatedData.kehadiran || [],
-      CHUNK_SIZE,
-      (chunk) => processKehadiran(chunk, siswaMap, indikatorKehadiranMap, periodeAjaranId)
-    )
     results.kehadiran = kehadiranResult
-    console.timeEnd('Kehadiran processing')
-
-    // Process Penilaian Sikap in chunks
-    console.time('Penilaian Sikap processing')
-    const penilaianSikapResult = await processTableInChunks(
-      validatedData.penilaianSikap || [],
-      CHUNK_SIZE,
-      (chunk) => processPenilaianSikap(chunk, siswaMap, indikatorSikapMap, periodeAjaranId)
-    )
     results.penilaianSikap = penilaianSikapResult
-    console.timeEnd('Penilaian Sikap processing')
-
-    // Process Catatan Siswa (usually small, no chunking needed)
-    console.time('Catatan Siswa processing')
-    const catatanSiswaResult = await processCatatanSiswa(validatedData.catatanSiswa || [], siswaMap, periodeAjaranId)
     results.catatanSiswa = catatanSiswaResult
-    console.timeEnd('Catatan Siswa processing')
 
     console.timeEnd('Processing tables')
     console.timeEnd('Bulk import process')
@@ -353,64 +330,52 @@ async function processTableInChunks<T>(
   return results
 }
 
-// Separate processing functions for each table
+// Parallel upsert functions for each table
 async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string) {
   const result = { inserted: 0, updated: 0, errors: 0 }
-  const toCreate: any[] = []
-  const toUpdate: any[] = []
+  const upsertPromises: Promise<any>[] = []
 
+  // Collect all valid upsert operations
   for (const item of data) {
     const siswa = siswaMap.get(item.nis)
     const mapel = mapelMap.get(item.mataPelajaran)
 
     if (siswa && mapel) {
-      const existing = await prisma.nilaiUjian.findUnique({
+      const upsertPromise = prisma.nilaiUjian.upsert({
         where: {
           siswa_id_mapel_id_periode_ajaran_id: {
             siswa_id: siswa.id,
             mapel_id: mapel.id,
             periode_ajaran_id: parseInt(periodeAjaranId)
           }
-        }
-      })
-
-      if (existing) {
-        toUpdate.push({
-          where: {
-            siswa_id_mapel_id_periode_ajaran_id: {
-              siswa_id: siswa.id,
-              mapel_id: mapel.id,
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          },
-          data: {
-            nilai_angka: item.nilai,
-            predikat: generatePredikat(item.nilai)
-          }
-        })
-      } else {
-        toCreate.push({
+        },
+        update: {
+          nilai_angka: item.nilai,
+          predikat: generatePredikat(item.nilai)
+        },
+        create: {
           siswa_id: siswa.id,
           mapel_id: mapel.id,
           periode_ajaran_id: parseInt(periodeAjaranId),
           nilai_angka: item.nilai,
           predikat: generatePredikat(item.nilai)
-        })
-      }
+        }
+      }).catch((error: any) => {
+        console.error('Upsert error for nilai ujian:', error)
+        result.errors++
+        return null
+      })
+
+      upsertPromises.push(upsertPromise)
     } else {
       result.errors++
     }
   }
 
-  // Bulk operations
-  if (toCreate.length > 0) {
-    await prisma.nilaiUjian.createMany({ data: toCreate, skipDuplicates: true })
-    result.inserted = toCreate.length
-  }
-
-  for (const update of toUpdate) {
-    await prisma.nilaiUjian.update(update)
-    result.updated++
+  // Execute all upserts in parallel
+  if (upsertPromises.length > 0) {
+    const upsertResults = await Promise.all(upsertPromises)
+    result.inserted = upsertResults.filter(r => r !== null).length
   }
 
   return result
@@ -418,9 +383,9 @@ async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelM
 
 async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string) {
   const result = { inserted: 0, updated: 0, errors: 0 }
-  const toCreate: any[] = []
-  const toUpdate: any[] = []
+  const upsertPromises: Promise<any>[] = []
 
+  // Collect all valid upsert operations
   for (const item of data) {
     const trimmedItem = {
       nis: item.nis?.trim(),
@@ -443,53 +408,41 @@ async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mape
         continue
       }
 
-      const existing = await prisma.nilaiHafalan.findUnique({
+      const upsertPromise = prisma.nilaiHafalan.upsert({
         where: {
           siswa_id_mapel_id_periode_ajaran_id: {
             siswa_id: siswa.id,
             mapel_id: mapel.id,
             periode_ajaran_id: parseInt(periodeAjaranId)
           }
-        }
-      })
-
-      if (existing) {
-        toUpdate.push({
-          where: {
-            siswa_id_mapel_id_periode_ajaran_id: {
-              siswa_id: siswa.id,
-              mapel_id: mapel.id,
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          },
-          data: {
-            target_hafalan: trimmedItem.targetHafalan,
-            predikat: predikatEnum
-          }
-        })
-      } else {
-        toCreate.push({
+        },
+        update: {
+          target_hafalan: trimmedItem.targetHafalan,
+          predikat: predikatEnum
+        },
+        create: {
           siswa_id: siswa.id,
           mapel_id: mapel.id,
           periode_ajaran_id: parseInt(periodeAjaranId),
           target_hafalan: trimmedItem.targetHafalan,
           predikat: predikatEnum
-        })
-      }
+        }
+      }).catch((error: any) => {
+        console.error('Upsert error for nilai hafalan:', error)
+        result.errors++
+        return null
+      })
+
+      upsertPromises.push(upsertPromise)
     } else {
       result.errors++
     }
   }
 
-  // Bulk operations
-  if (toCreate.length > 0) {
-    await prisma.nilaiHafalan.createMany({ data: toCreate, skipDuplicates: true })
-    result.inserted = toCreate.length
-  }
-
-  for (const update of toUpdate) {
-    await prisma.nilaiHafalan.update(update)
-    result.updated++
+  // Execute all upserts in parallel
+  if (upsertPromises.length > 0) {
+    const upsertResults = await Promise.all(upsertPromises)
+    result.inserted = upsertResults.filter(r => r !== null).length
   }
 
   return result
@@ -497,63 +450,51 @@ async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mape
 
 async function processKehadiran(data: any[], siswaMap: Map<string, any>, indikatorMap: Map<string, any>, periodeAjaranId: string) {
   const result = { inserted: 0, updated: 0, errors: 0 }
-  const toCreate: any[] = []
-  const toUpdate: any[] = []
+  const upsertPromises: Promise<any>[] = []
 
+  // Collect all valid upsert operations
   for (const item of data) {
     const siswa = siswaMap.get(item.nis)
     const indikator = indikatorMap.get(item.indikator)
 
     if (siswa && indikator) {
-      const existing = await prisma.kehadiran.findUnique({
+      const upsertPromise = prisma.kehadiran.upsert({
         where: {
           siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
             siswa_id: siswa.id,
             periode_ajaran_id: parseInt(periodeAjaranId),
             indikator_kehadiran_id: indikator.id
           }
-        }
-      })
-
-      if (existing) {
-        toUpdate.push({
-          where: {
-            siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
-              siswa_id: siswa.id,
-              periode_ajaran_id: parseInt(periodeAjaranId),
-              indikator_kehadiran_id: indikator.id
-            }
-          },
-          data: {
-            sakit: parseInt(item.sakit) || 0,
-            izin: parseInt(item.izin) || 0,
-            alpha: parseInt(item.alpha) || 0
-          }
-        })
-      } else {
-        toCreate.push({
+        },
+        update: {
+          sakit: parseInt(item.sakit) || 0,
+          izin: parseInt(item.izin) || 0,
+          alpha: parseInt(item.alpha) || 0
+        },
+        create: {
           siswa_id: siswa.id,
           periode_ajaran_id: parseInt(periodeAjaranId),
           indikator_kehadiran_id: indikator.id,
           sakit: parseInt(item.sakit) || 0,
           izin: parseInt(item.izin) || 0,
           alpha: parseInt(item.alpha) || 0
-        })
-      }
+        }
+      }).catch((error: any) => {
+        console.error('Upsert error for kehadiran:', error)
+        result.errors++
+        return null
+      })
+
+      upsertPromises.push(upsertPromise)
     } else {
       result.errors++
     }
   }
 
-  // Bulk operations
-  if (toCreate.length > 0) {
-    await prisma.kehadiran.createMany({ data: toCreate, skipDuplicates: true })
-    result.inserted = toCreate.length
-  }
-
-  for (const update of toUpdate) {
-    await prisma.kehadiran.update(update)
-    result.updated++
+  // Execute all upserts in parallel
+  if (upsertPromises.length > 0) {
+    const upsertResults = await Promise.all(upsertPromises)
+    result.inserted = upsertResults.filter(r => r !== null).length
   }
 
   return result
@@ -561,9 +502,9 @@ async function processKehadiran(data: any[], siswaMap: Map<string, any>, indikat
 
 async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, indikatorMap: Map<string, any>, periodeAjaranId: string) {
   const result = { inserted: 0, updated: 0, errors: 0 }
-  const toCreate: any[] = []
-  const toUpdate: any[] = []
+  const upsertPromises: Promise<any>[] = []
 
+  // Collect all valid upsert operations
   for (const item of data) {
     const siswa = siswaMap.get(item.nis)
     const indikator = indikatorMap.get(item.indikator)
@@ -572,53 +513,41 @@ async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, in
       const nilaiNum = parseInt(item.nilai)
       const predikat = getPredicate(nilaiNum)
 
-      const existing = await prisma.penilaianSikap.findUnique({
+      const upsertPromise = prisma.penilaianSikap.upsert({
         where: {
           siswa_id_indikator_id_periode_ajaran_id: {
             siswa_id: siswa.id,
             indikator_id: indikator.id,
             periode_ajaran_id: parseInt(periodeAjaranId)
           }
-        }
-      })
-
-      if (existing) {
-        toUpdate.push({
-          where: {
-            siswa_id_indikator_id_periode_ajaran_id: {
-              siswa_id: siswa.id,
-              indikator_id: indikator.id,
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          },
-          data: {
-            nilai: nilaiNum,
-            predikat: predikat
-          }
-        })
-      } else {
-        toCreate.push({
+        },
+        update: {
+          nilai: nilaiNum,
+          predikat: predikat
+        },
+        create: {
           siswa_id: siswa.id,
           indikator_id: indikator.id,
           periode_ajaran_id: parseInt(periodeAjaranId),
           nilai: nilaiNum,
           predikat: predikat
-        })
-      }
+        }
+      }).catch((error: any) => {
+        console.error('Upsert error for penilaian sikap:', error)
+        result.errors++
+        return null
+      })
+
+      upsertPromises.push(upsertPromise)
     } else {
       result.errors++
     }
   }
 
-  // Bulk operations
-  if (toCreate.length > 0) {
-    await prisma.penilaianSikap.createMany({ data: toCreate, skipDuplicates: true })
-    result.inserted = toCreate.length
-  }
-
-  for (const update of toUpdate) {
-    await prisma.penilaianSikap.update(update)
-    result.updated++
+  // Execute all upserts in parallel
+  if (upsertPromises.length > 0) {
+    const upsertResults = await Promise.all(upsertPromises)
+    result.inserted = upsertResults.filter(r => r !== null).length
   }
 
   return result
@@ -626,57 +555,46 @@ async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, in
 
 async function processCatatanSiswa(data: any[], siswaMap: Map<string, any>, periodeAjaranId: string) {
   const result = { inserted: 0, updated: 0, errors: 0 }
-  const toCreate: any[] = []
-  const toUpdate: any[] = []
+  const upsertPromises: Promise<any>[] = []
 
+  // Collect all valid upsert operations
   for (const item of data) {
     const siswa = siswaMap.get(item.nis)
 
     if (siswa) {
-      const existing = await prisma.catatanSiswa.findUnique({
+      const upsertPromise = prisma.catatanSiswa.upsert({
         where: {
           siswa_id_periode_ajaran_id: {
             siswa_id: siswa.id,
             periode_ajaran_id: parseInt(periodeAjaranId)
           }
-        }
-      })
-
-      if (existing) {
-        toUpdate.push({
-          where: {
-            siswa_id_periode_ajaran_id: {
-              siswa_id: siswa.id,
-              periode_ajaran_id: parseInt(periodeAjaranId)
-            }
-          },
-          data: {
-            catatan_sikap: item.catatanSikap,
-            catatan_akademik: item.catatanAkademik
-          }
-        })
-      } else {
-        toCreate.push({
+        },
+        update: {
+          catatan_sikap: item.catatanSikap,
+          catatan_akademik: item.catatanAkademik
+        },
+        create: {
           siswa_id: siswa.id,
           periode_ajaran_id: parseInt(periodeAjaranId),
           catatan_sikap: item.catatanSikap,
           catatan_akademik: item.catatanAkademik
-        })
-      }
+        }
+      }).catch((error: any) => {
+        console.error('Upsert error for catatan siswa:', error)
+        result.errors++
+        return null
+      })
+
+      upsertPromises.push(upsertPromise)
     } else {
       result.errors++
     }
   }
 
-  // Bulk operations
-  if (toCreate.length > 0) {
-    await prisma.catatanSiswa.createMany({ data: toCreate, skipDuplicates: true })
-    result.inserted = toCreate.length
-  }
-
-  for (const update of toUpdate) {
-    await prisma.catatanSiswa.update(update)
-    result.updated++
+  // Execute all upserts in parallel
+  if (upsertPromises.length > 0) {
+    const upsertResults = await Promise.all(upsertPromises)
+    result.inserted = upsertResults.filter(r => r !== null).length
   }
 
   return result
