@@ -202,7 +202,7 @@ async function validateNilaiUjianSheet(worksheet: ExcelJS.Worksheet | undefined,
   }
 }
 
-// Import function to save validated data to database
+// Bulk import function using transactions and createMany
 async function performImport(validatedData: any, kelasId: string, periodeAjaranId: string) {
   const results = {
     nilaiUjian: { inserted: 0, updated: 0, errors: 0 },
@@ -212,409 +212,435 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
     catatanSiswa: { inserted: 0, updated: 0, errors: 0 }
   }
 
-  // Caches for lookups to avoid repeated DB queries
-  const siswaCache = new Map<string, any>()
-  const mapelCache = new Map<string, any>()
-  const indikatorKehadiranCache = new Map<string, any>()
-  const indikatorSikapCache = new Map<string, any>()
-
-  // Helper functions with caching
-  async function getSiswa(nis: string) {
-    if (!siswaCache.has(nis)) {
-      const siswa = await prisma.siswa.findFirst({
-        where: { nis, status: "Aktif" }
-      })
-      siswaCache.set(nis, siswa)
-    }
-    return siswaCache.get(nis)
-  }
-
-  async function getMapel(namaMapel: string, jenis?: string) {
-    const key = jenis ? `${namaMapel}:${jenis}` : namaMapel
-    if (!mapelCache.has(key)) {
-      const where: any = { nama_mapel: namaMapel }
-      if (jenis) where.jenis = jenis
-      const mapel = await prisma.mataPelajaran.findFirst({ where })
-      mapelCache.set(key, mapel)
-    }
-    return mapelCache.get(key)
-  }
-
-  async function getIndikatorKehadiran(namaIndikator: string) {
-    if (!indikatorKehadiranCache.has(namaIndikator)) {
-      const indikator = await prisma.indikatorKehadiran.findFirst({
-        where: { nama_indikator: namaIndikator }
-      })
-      indikatorKehadiranCache.set(namaIndikator, indikator)
-    }
-    return indikatorKehadiranCache.get(namaIndikator)
-  }
-
-  async function getIndikatorSikap(indikator: string) {
-    if (!indikatorSikapCache.has(indikator)) {
-      const ind = await prisma.indikatorSikap.findFirst({
-        where: { indikator }
-      })
-      indikatorSikapCache.set(indikator, ind)
-    }
-    return indikatorSikapCache.get(indikator)
-  }
-
   try {
-    // Pre-load all unique lookups to enable parallel queries
+    console.time('Bulk import process')
+
+    // 1. Pre-load all lookups (outside transaction for speed)
     console.time('Pre-loading lookups')
-    const allNis = new Set<string>()
-    const allMapelNames = new Set<string>()
-    const allIndikatorKehadiran = new Set<string>()
-    const allIndikatorSikap = new Set<string>()
+    const siswaMap = new Map()
+    const mapelMap = new Map()
+    const indikatorKehadiranMap = new Map()
+    const indikatorSikapMap = new Map()
 
-    // Collect all unique values
-    for (const item of validatedData.nilaiUjian || []) {
-      allNis.add(item.nis)
-      allMapelNames.add(item.mataPelajaran)
-    }
-    for (const item of validatedData.nilaiHafalan || []) {
-      allNis.add(item.nis)
-      allMapelNames.add(item.mataPelajaran)
-    }
-    for (const item of validatedData.kehadiran || []) {
-      allNis.add(item.nis)
-      allIndikatorKehadiran.add(item.indikator)
-    }
-    for (const item of validatedData.penilaianSikap || []) {
-      allNis.add(item.nis)
-      allIndikatorSikap.add(item.indikator)
-    }
-    for (const item of validatedData.catatanSiswa || []) {
-      allNis.add(item.nis)
-    }
+    // Get all unique NIS
+    const allNis = new Set([
+      ...validatedData.nilaiUjian?.map((item: any) => item.nis) || [],
+      ...validatedData.nilaiHafalan?.map((item: any) => item.nis) || [],
+      ...validatedData.kehadiran?.map((item: any) => item.nis) || [],
+      ...validatedData.penilaianSikap?.map((item: any) => item.nis) || [],
+      ...validatedData.catatanSiswa?.map((item: any) => item.nis) || []
+    ].filter(Boolean))
 
-    // Parallel load all lookups
-    await Promise.all([
-      // Load all siswa
-      ...Array.from(allNis).map(nis => getSiswa(nis)),
-      // Load all mapel
-      ...Array.from(allMapelNames).map(name => getMapel(name)),
-      ...Array.from(allMapelNames).map(name => getMapel(name, 'Hafalan')),
-      // Load all indikator
-      ...Array.from(allIndikatorKehadiran).map(name => getIndikatorKehadiran(name)),
-      ...Array.from(allIndikatorSikap).map(name => getIndikatorSikap(name))
-    ])
+    // Bulk load siswa
+    const siswaList = await prisma.siswa.findMany({
+      where: { nis: { in: Array.from(allNis) }, status: "Aktif" }
+    })
+    siswaList.forEach(siswa => siswaMap.set(siswa.nis, siswa))
+
+    // Get all unique mapel names
+    const allMapelNames = new Set([
+      ...validatedData.nilaiUjian?.map((item: any) => item.mataPelajaran) || [],
+      ...validatedData.nilaiHafalan?.map((item: any) => item.mataPelajaran) || []
+    ].filter(Boolean))
+
+    // Bulk load mapel
+    const mapelList = await prisma.mataPelajaran.findMany({
+      where: { nama_mapel: { in: Array.from(allMapelNames) } }
+    })
+    mapelList.forEach(mapel => mapelMap.set(mapel.nama_mapel, mapel))
+
+    // Get all unique indikator
+    const allIndikatorKehadiran = new Set(
+      validatedData.kehadiran?.map((item: any) => item.indikator).filter(Boolean) || []
+    )
+    const allIndikatorSikap = new Set(
+      validatedData.penilaianSikap?.map((item: any) => item.indikator).filter(Boolean) || []
+    )
+
+    // Bulk load indikator
+    const indikatorKehadiranList = await prisma.indikatorKehadiran.findMany({
+      where: { nama_indikator: { in: Array.from(allIndikatorKehadiran) as string[] } }
+    })
+    indikatorKehadiranList.forEach(ind => indikatorKehadiranMap.set(ind.nama_indikator, ind))
+
+    const indikatorSikapList = await prisma.indikatorSikap.findMany({
+      where: { indikator: { in: Array.from(allIndikatorSikap) as string[] } }
+    })
+    indikatorSikapList.forEach(ind => indikatorSikapMap.set(ind.indikator, ind))
+
     console.timeEnd('Pre-loading lookups')
 
-    // Import Nilai Ujian
-    for (const item of validatedData.nilaiUjian || []) {
-      try {
-        const siswa = await getSiswa(item.nis)
-        const mapel = await getMapel(item.mataPelajaran)
+    // 2. Process each table separately (no single long transaction)
+    console.time('Processing tables')
 
-        if (siswa && mapel) {
-          const existing = await prisma.nilaiUjian.findUnique({
-            where: {
-              siswa_id_mapel_id_periode_ajaran_id: {
-                siswa_id: siswa.id,
-                mapel_id: mapel.id,
-                periode_ajaran_id: parseInt(periodeAjaranId)
-              }
-            }
-          })
+    // Process Nilai Ujian
+    console.time('Nilai Ujian processing')
+    const nilaiUjianResult = await processNilaiUjian(validatedData.nilaiUjian || [], siswaMap, mapelMap, periodeAjaranId)
+    results.nilaiUjian = nilaiUjianResult
+    console.timeEnd('Nilai Ujian processing')
 
-          if (existing) {
-            await prisma.nilaiUjian.update({
-              where: {
-                siswa_id_mapel_id_periode_ajaran_id: {
-                  siswa_id: siswa.id,
-                  mapel_id: mapel.id,
-                  periode_ajaran_id: parseInt(periodeAjaranId)
-                }
-              },
-              data: {
-                nilai_angka: item.nilai,
-                predikat: generatePredikat(item.nilai)
-              }
-            })
-            results.nilaiUjian.updated++
-          } else {
-            await prisma.nilaiUjian.create({
-              data: {
-                siswa_id: siswa.id,
-                mapel_id: mapel.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                nilai_angka: item.nilai,
-                predikat: generatePredikat(item.nilai)
-              }
-            })
-            results.nilaiUjian.inserted++
-          }
-        } else {
-          results.nilaiUjian.errors++
-        }
-      } catch (error) {
-        results.nilaiUjian.errors++
-      }
-    }
+    // Process Nilai Hafalan
+    console.time('Nilai Hafalan processing')
+    const nilaiHafalanResult = await processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId)
+    results.nilaiHafalan = nilaiHafalanResult
+    console.timeEnd('Nilai Hafalan processing')
 
-    // Import Nilai Hafalan
-    console.log(`Processing ${validatedData.nilaiHafalan?.length || 0} nilai hafalan items`)
-    for (const item of validatedData.nilaiHafalan || []) {
-      try {
-        // Trim whitespace from data
-        const trimmedItem = {
-          nis: item.nis?.trim(),
-          nama: item.nama?.trim(),
-          mataPelajaran: item.mataPelajaran?.trim(),
-          kitab: item.kitab?.trim(),
-          targetHafalan: item.targetHafalan?.trim(),
-          predikat: item.predikat?.trim()
-        }
+    // Process Kehadiran
+    console.time('Kehadiran processing')
+    const kehadiranResult = await processKehadiran(validatedData.kehadiran || [], siswaMap, indikatorKehadiranMap, periodeAjaranId)
+    results.kehadiran = kehadiranResult
+    console.timeEnd('Kehadiran processing')
 
-        console.log('Processing nilai hafalan item:', trimmedItem)
+    // Process Penilaian Sikap
+    console.time('Penilaian Sikap processing')
+    const penilaianSikapResult = await processPenilaianSikap(validatedData.penilaianSikap || [], siswaMap, indikatorSikapMap, periodeAjaranId)
+    results.penilaianSikap = penilaianSikapResult
+    console.timeEnd('Penilaian Sikap processing')
 
-        const siswa = await getSiswa(trimmedItem.nis)
-        const mapel = await getMapel(trimmedItem.mataPelajaran, "Hafalan")
+    // Process Catatan Siswa
+    console.time('Catatan Siswa processing')
+    const catatanSiswaResult = await processCatatanSiswa(validatedData.catatanSiswa || [], siswaMap, periodeAjaranId)
+    results.catatanSiswa = catatanSiswaResult
+    console.timeEnd('Catatan Siswa processing')
 
-        console.log('Found siswa:', siswa?.id, 'mapel:', mapel?.id)
-
-        if (siswa && mapel) {
-          // Map string values to enum values
-          let predikatEnum: PredikatHafalan | null = null
-          if (trimmedItem.predikat === 'Tercapai') {
-            predikatEnum = PredikatHafalan.TERCAPAI
-          } else if (trimmedItem.predikat === 'Tidak Tercapai') {
-            predikatEnum = PredikatHafalan.TIDAK_TERCAPAI
-          } else {
-            console.log('Invalid predikat for nilai hafalan:', trimmedItem.predikat, 'Valid values: Tercapai, Tidak Tercapai')
-            results.nilaiHafalan.errors++
-            continue
-          }
-
-          const existing = await prisma.nilaiHafalan.findUnique({
-            where: {
-              siswa_id_mapel_id_periode_ajaran_id: {
-                siswa_id: siswa.id,
-                mapel_id: mapel.id,
-                periode_ajaran_id: parseInt(periodeAjaranId)
-              }
-            }
-          })
-
-          if (existing) {
-            await prisma.nilaiHafalan.update({
-              where: {
-                siswa_id_mapel_id_periode_ajaran_id: {
-                  siswa_id: siswa.id,
-                  mapel_id: mapel.id,
-                  periode_ajaran_id: parseInt(periodeAjaranId)
-                }
-              },
-              data: {
-                target_hafalan: trimmedItem.targetHafalan,
-                predikat: predikatEnum
-              }
-            })
-            results.nilaiHafalan.updated++
-            console.log('Updated nilai hafalan successfully')
-          } else {
-            await prisma.nilaiHafalan.create({
-              data: {
-                siswa_id: siswa.id,
-                mapel_id: mapel.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                target_hafalan: trimmedItem.targetHafalan,
-                predikat: predikatEnum
-              }
-            })
-            results.nilaiHafalan.inserted++
-            console.log('Inserted nilai hafalan successfully')
-          }
-        } else {
-          console.log('Siswa or mapel not found for nilai hafalan:', {
-            siswa: !!siswa,
-            mapel: !!mapel,
-            trimmedItem,
-            siswaDetails: siswa ? { id: siswa.id, nama: siswa.nama } : null,
-            mapelDetails: mapel ? { id: mapel.id, nama: mapel.nama_mapel, jenis: mapel.jenis } : null
-          })
-          results.nilaiHafalan.errors++
-        }
-      } catch (error) {
-        console.error('Error importing nilai hafalan for item:', item, 'Error:', error)
-        if (error instanceof Error) {
-          console.error('Error details:', {
-            message: error.message,
-            name: error.name,
-            stack: error.stack
-          })
-        }
-        results.nilaiHafalan.errors++
-      }
-    }
-
-    // Import Kehadiran
-    for (const item of validatedData.kehadiran || []) {
-      try {
-        const siswa = await getSiswa(item.nis)
-        const indikator = await getIndikatorKehadiran(item.indikator)
-
-        if (siswa && indikator) {
-          const existing = await prisma.kehadiran.findUnique({
-            where: {
-              siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
-                siswa_id: siswa.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                indikator_kehadiran_id: indikator.id
-              }
-            }
-          })
-
-          if (existing) {
-            await prisma.kehadiran.update({
-              where: {
-                siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
-                  siswa_id: siswa.id,
-                  periode_ajaran_id: parseInt(periodeAjaranId),
-                  indikator_kehadiran_id: indikator.id
-                }
-              },
-              data: {
-                sakit: parseInt(item.sakit) || 0,
-                izin: parseInt(item.izin) || 0,
-                alpha: parseInt(item.alpha) || 0
-              }
-            })
-            results.kehadiran.updated++
-          } else {
-            await prisma.kehadiran.create({
-              data: {
-                siswa_id: siswa.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                indikator_kehadiran_id: indikator.id,
-                sakit: parseInt(item.sakit) || 0,
-                izin: parseInt(item.izin) || 0,
-                alpha: parseInt(item.alpha) || 0
-              }
-            })
-            results.kehadiran.inserted++
-          }
-        } else {
-          results.kehadiran.errors++
-        }
-      } catch (error) {
-        results.kehadiran.errors++
-      }
-    }
-
-    // Import Penilaian Sikap
-    for (const item of validatedData.penilaianSikap || []) {
-      try {
-        const siswa = await getSiswa(item.nis)
-        const indikator = await getIndikatorSikap(item.indikator)
-
-        if (siswa && indikator) {
-          const existing = await prisma.penilaianSikap.findUnique({
-            where: {
-              siswa_id_indikator_id_periode_ajaran_id: {
-                siswa_id: siswa.id,
-                indikator_id: indikator.id,
-                periode_ajaran_id: parseInt(periodeAjaranId)
-              }
-            }
-          })
-
-          // Generate predikat based on nilai
-          const nilaiNum = parseInt(item.nilai)
-          const predikat = getPredicate(nilaiNum)
-          console.log(`Generated predikat for nilai ${nilaiNum}: "${predikat}"`)
-
-          if (existing) {
-            await prisma.penilaianSikap.update({
-              where: {
-                siswa_id_indikator_id_periode_ajaran_id: {
-                  siswa_id: siswa.id,
-                  indikator_id: indikator.id,
-                  periode_ajaran_id: parseInt(periodeAjaranId)
-                }
-              },
-              data: {
-                nilai: nilaiNum,
-                predikat: predikat
-              }
-            })
-            results.penilaianSikap.updated++
-          } else {
-            await prisma.penilaianSikap.create({
-              data: {
-                siswa_id: siswa.id,
-                indikator_id: indikator.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                nilai: nilaiNum,
-                predikat: predikat
-              }
-            })
-            results.penilaianSikap.inserted++
-          }
-        } else {
-          results.penilaianSikap.errors++
-        }
-      } catch (error) {
-        results.penilaianSikap.errors++
-      }
-    }
-
-    // Import Catatan Siswa
-    for (const item of validatedData.catatanSiswa || []) {
-      try {
-        const siswa = await getSiswa(item.nis)
-
-        if (siswa) {
-          const existing = await prisma.catatanSiswa.findUnique({
-            where: {
-              siswa_id_periode_ajaran_id: {
-                siswa_id: siswa.id,
-                periode_ajaran_id: parseInt(periodeAjaranId)
-              }
-            }
-          })
-
-          if (existing) {
-            await prisma.catatanSiswa.update({
-              where: {
-                siswa_id_periode_ajaran_id: {
-                  siswa_id: siswa.id,
-                  periode_ajaran_id: parseInt(periodeAjaranId)
-                }
-              },
-              data: {
-                catatan_sikap: item.catatanSikap,
-                catatan_akademik: item.catatanAkademik
-              }
-            })
-            results.catatanSiswa.updated++
-          } else {
-            await prisma.catatanSiswa.create({
-              data: {
-                siswa_id: siswa.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                catatan_sikap: item.catatanSikap,
-                catatan_akademik: item.catatanAkademik
-              }
-            })
-            results.catatanSiswa.inserted++
-          }
-        } else {
-          results.catatanSiswa.errors++
-        }
-      } catch (error) {
-        results.catatanSiswa.errors++
-      }
-    }
-
-    console.log('Import results:', results)
+    console.timeEnd('Processing tables')
+    console.timeEnd('Bulk import process')
+    console.log('Final import results:', results)
     return results
+
   } catch (error) {
-    console.error('Import error:', error)
+    console.error('Bulk import error:', error)
     throw error
   }
+}
+
+// Separate processing functions for each table
+async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string) {
+  const result = { inserted: 0, updated: 0, errors: 0 }
+  const toCreate: any[] = []
+  const toUpdate: any[] = []
+
+  for (const item of data) {
+    const siswa = siswaMap.get(item.nis)
+    const mapel = mapelMap.get(item.mataPelajaran)
+
+    if (siswa && mapel) {
+      const existing = await prisma.nilaiUjian.findUnique({
+        where: {
+          siswa_id_mapel_id_periode_ajaran_id: {
+            siswa_id: siswa.id,
+            mapel_id: mapel.id,
+            periode_ajaran_id: parseInt(periodeAjaranId)
+          }
+        }
+      })
+
+      if (existing) {
+        toUpdate.push({
+          where: {
+            siswa_id_mapel_id_periode_ajaran_id: {
+              siswa_id: siswa.id,
+              mapel_id: mapel.id,
+              periode_ajaran_id: parseInt(periodeAjaranId)
+            }
+          },
+          data: {
+            nilai_angka: item.nilai,
+            predikat: generatePredikat(item.nilai)
+          }
+        })
+      } else {
+        toCreate.push({
+          siswa_id: siswa.id,
+          mapel_id: mapel.id,
+          periode_ajaran_id: parseInt(periodeAjaranId),
+          nilai_angka: item.nilai,
+          predikat: generatePredikat(item.nilai)
+        })
+      }
+    } else {
+      result.errors++
+    }
+  }
+
+  // Bulk operations
+  if (toCreate.length > 0) {
+    await prisma.nilaiUjian.createMany({ data: toCreate, skipDuplicates: true })
+    result.inserted = toCreate.length
+  }
+
+  for (const update of toUpdate) {
+    await prisma.nilaiUjian.update(update)
+    result.updated++
+  }
+
+  return result
+}
+
+async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string) {
+  const result = { inserted: 0, updated: 0, errors: 0 }
+  const toCreate: any[] = []
+  const toUpdate: any[] = []
+
+  for (const item of data) {
+    const trimmedItem = {
+      nis: item.nis?.trim(),
+      mataPelajaran: item.mataPelajaran?.trim(),
+      targetHafalan: item.targetHafalan?.trim(),
+      predikat: item.predikat?.trim()
+    }
+
+    const siswa = siswaMap.get(trimmedItem.nis)
+    const mapel = mapelMap.get(trimmedItem.mataPelajaran)
+
+    if (siswa && mapel) {
+      let predikatEnum: PredikatHafalan | null = null
+      if (trimmedItem.predikat === 'Tercapai') {
+        predikatEnum = PredikatHafalan.TERCAPAI
+      } else if (trimmedItem.predikat === 'Tidak Tercapai') {
+        predikatEnum = PredikatHafalan.TIDAK_TERCAPAI
+      } else {
+        result.errors++
+        continue
+      }
+
+      const existing = await prisma.nilaiHafalan.findUnique({
+        where: {
+          siswa_id_mapel_id_periode_ajaran_id: {
+            siswa_id: siswa.id,
+            mapel_id: mapel.id,
+            periode_ajaran_id: parseInt(periodeAjaranId)
+          }
+        }
+      })
+
+      if (existing) {
+        toUpdate.push({
+          where: {
+            siswa_id_mapel_id_periode_ajaran_id: {
+              siswa_id: siswa.id,
+              mapel_id: mapel.id,
+              periode_ajaran_id: parseInt(periodeAjaranId)
+            }
+          },
+          data: {
+            target_hafalan: trimmedItem.targetHafalan,
+            predikat: predikatEnum
+          }
+        })
+      } else {
+        toCreate.push({
+          siswa_id: siswa.id,
+          mapel_id: mapel.id,
+          periode_ajaran_id: parseInt(periodeAjaranId),
+          target_hafalan: trimmedItem.targetHafalan,
+          predikat: predikatEnum
+        })
+      }
+    } else {
+      result.errors++
+    }
+  }
+
+  // Bulk operations
+  if (toCreate.length > 0) {
+    await prisma.nilaiHafalan.createMany({ data: toCreate, skipDuplicates: true })
+    result.inserted = toCreate.length
+  }
+
+  for (const update of toUpdate) {
+    await prisma.nilaiHafalan.update(update)
+    result.updated++
+  }
+
+  return result
+}
+
+async function processKehadiran(data: any[], siswaMap: Map<string, any>, indikatorMap: Map<string, any>, periodeAjaranId: string) {
+  const result = { inserted: 0, updated: 0, errors: 0 }
+  const toCreate: any[] = []
+  const toUpdate: any[] = []
+
+  for (const item of data) {
+    const siswa = siswaMap.get(item.nis)
+    const indikator = indikatorMap.get(item.indikator)
+
+    if (siswa && indikator) {
+      const existing = await prisma.kehadiran.findUnique({
+        where: {
+          siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
+            siswa_id: siswa.id,
+            periode_ajaran_id: parseInt(periodeAjaranId),
+            indikator_kehadiran_id: indikator.id
+          }
+        }
+      })
+
+      if (existing) {
+        toUpdate.push({
+          where: {
+            siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
+              siswa_id: siswa.id,
+              periode_ajaran_id: parseInt(periodeAjaranId),
+              indikator_kehadiran_id: indikator.id
+            }
+          },
+          data: {
+            sakit: parseInt(item.sakit) || 0,
+            izin: parseInt(item.izin) || 0,
+            alpha: parseInt(item.alpha) || 0
+          }
+        })
+      } else {
+        toCreate.push({
+          siswa_id: siswa.id,
+          periode_ajaran_id: parseInt(periodeAjaranId),
+          indikator_kehadiran_id: indikator.id,
+          sakit: parseInt(item.sakit) || 0,
+          izin: parseInt(item.izin) || 0,
+          alpha: parseInt(item.alpha) || 0
+        })
+      }
+    } else {
+      result.errors++
+    }
+  }
+
+  // Bulk operations
+  if (toCreate.length > 0) {
+    await prisma.kehadiran.createMany({ data: toCreate, skipDuplicates: true })
+    result.inserted = toCreate.length
+  }
+
+  for (const update of toUpdate) {
+    await prisma.kehadiran.update(update)
+    result.updated++
+  }
+
+  return result
+}
+
+async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, indikatorMap: Map<string, any>, periodeAjaranId: string) {
+  const result = { inserted: 0, updated: 0, errors: 0 }
+  const toCreate: any[] = []
+  const toUpdate: any[] = []
+
+  for (const item of data) {
+    const siswa = siswaMap.get(item.nis)
+    const indikator = indikatorMap.get(item.indikator)
+
+    if (siswa && indikator) {
+      const nilaiNum = parseInt(item.nilai)
+      const predikat = getPredicate(nilaiNum)
+
+      const existing = await prisma.penilaianSikap.findUnique({
+        where: {
+          siswa_id_indikator_id_periode_ajaran_id: {
+            siswa_id: siswa.id,
+            indikator_id: indikator.id,
+            periode_ajaran_id: parseInt(periodeAjaranId)
+          }
+        }
+      })
+
+      if (existing) {
+        toUpdate.push({
+          where: {
+            siswa_id_indikator_id_periode_ajaran_id: {
+              siswa_id: siswa.id,
+              indikator_id: indikator.id,
+              periode_ajaran_id: parseInt(periodeAjaranId)
+            }
+          },
+          data: {
+            nilai: nilaiNum,
+            predikat: predikat
+          }
+        })
+      } else {
+        toCreate.push({
+          siswa_id: siswa.id,
+          indikator_id: indikator.id,
+          periode_ajaran_id: parseInt(periodeAjaranId),
+          nilai: nilaiNum,
+          predikat: predikat
+        })
+      }
+    } else {
+      result.errors++
+    }
+  }
+
+  // Bulk operations
+  if (toCreate.length > 0) {
+    await prisma.penilaianSikap.createMany({ data: toCreate, skipDuplicates: true })
+    result.inserted = toCreate.length
+  }
+
+  for (const update of toUpdate) {
+    await prisma.penilaianSikap.update(update)
+    result.updated++
+  }
+
+  return result
+}
+
+async function processCatatanSiswa(data: any[], siswaMap: Map<string, any>, periodeAjaranId: string) {
+  const result = { inserted: 0, updated: 0, errors: 0 }
+  const toCreate: any[] = []
+  const toUpdate: any[] = []
+
+  for (const item of data) {
+    const siswa = siswaMap.get(item.nis)
+
+    if (siswa) {
+      const existing = await prisma.catatanSiswa.findUnique({
+        where: {
+          siswa_id_periode_ajaran_id: {
+            siswa_id: siswa.id,
+            periode_ajaran_id: parseInt(periodeAjaranId)
+          }
+        }
+      })
+
+      if (existing) {
+        toUpdate.push({
+          where: {
+            siswa_id_periode_ajaran_id: {
+              siswa_id: siswa.id,
+              periode_ajaran_id: parseInt(periodeAjaranId)
+            }
+          },
+          data: {
+            catatan_sikap: item.catatanSikap,
+            catatan_akademik: item.catatanAkademik
+          }
+        })
+      } else {
+        toCreate.push({
+          siswa_id: siswa.id,
+          periode_ajaran_id: parseInt(periodeAjaranId),
+          catatan_sikap: item.catatanSikap,
+          catatan_akademik: item.catatanAkademik
+        })
+      }
+    } else {
+      result.errors++
+    }
+  }
+
+  // Bulk operations
+  if (toCreate.length > 0) {
+    await prisma.catatanSiswa.createMany({ data: toCreate, skipDuplicates: true })
+    result.inserted = toCreate.length
+  }
+
+  for (const update of toUpdate) {
+    await prisma.catatanSiswa.update(update)
+    result.updated++
+  }
+
+  return result
 }
 
 async function validateNilaiHafalanSheet(worksheet: ExcelJS.Worksheet | undefined, kelasId: string, periodeAjaranId: string): Promise<ValidationResult> {
