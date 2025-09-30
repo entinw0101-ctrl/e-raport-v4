@@ -61,7 +61,10 @@ export async function POST(request: NextRequest) {
 
         // Load all data in parallel
         const [siswaList, mapelList, periodeList] = await Promise.all([
-            prisma.siswa.findMany({ where: { nis: { in: Array.from(allNis) }, status: "Aktif" } }),
+            prisma.siswa.findMany({
+                where: { nis: { in: Array.from(allNis) }, status: "Aktif" },
+                include: { kelas: { include: { tingkatan: true } } }
+            }),
             prisma.mataPelajaran.findMany({ where: { nama_mapel: { in: Array.from(allMapel) } } }),
             Promise.all(Array.from(allPeriodeData).map(async (periodeStr) => {
                 const [tahunAjaran, semester] = periodeStr.split(':');
@@ -81,6 +84,14 @@ export async function POST(request: NextRequest) {
         const periodeMap = new Map(
             periodeList.filter(p => p !== null && p.master_tahun_ajaran !== null).map(p => [`${p!.master_tahun_ajaran!.nama_ajaran}:${p!.semester}`, p!])
         );
+
+        // Get all tingkatan mappings for validation
+        const siswaTingkatanMap = new Map()
+        for (const siswa of siswaList) {
+            if (siswa.kelas?.tingkatan?.id) {
+                siswaTingkatanMap.set(siswa.nis, siswa.kelas.tingkatan.id)
+            }
+        }
 
         // Process upserts in parallel
         const upsertPromises: Promise<any>[] = []
@@ -116,6 +127,29 @@ export async function POST(request: NextRequest) {
                     !periodeAjaran ? `Periode (${tahunAjaranStr} Sem ${semester})` : ''
                 ].filter(Boolean).join(', ');
                 results.errorDetails.push(`Baris ${i}: ${missing} tidak ditemukan.`);
+                continue;
+            }
+
+            // Validate that mata pelajaran is assigned to student's current tingkatan
+            const studentTingkatanId = siswaTingkatanMap.get(nis);
+            if (!studentTingkatanId) {
+                results.errors++;
+                results.errorDetails.push(`Baris ${i}: Siswa ${nis} tidak memiliki tingkatan yang valid.`);
+                continue;
+            }
+
+            // Check if mata pelajaran is assigned to student's tingkatan via kurikulum
+            const kurikulumExists = await prisma.kurikulum.findFirst({
+                where: {
+                    mapel_id: mataPelajaran.id,
+                    tingkatan_id: studentTingkatanId,
+                    mata_pelajaran: { jenis: "Hafalan" } // Ensure it's a hafalan subject
+                }
+            });
+
+            if (!kurikulumExists) {
+                results.errors++;
+                results.errorDetails.push(`Baris ${i}: Mata pelajaran "${namaMapel}" tidak sesuai dengan tingkatan siswa ${nis}.`);
                 continue;
             }
 

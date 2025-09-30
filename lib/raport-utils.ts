@@ -222,12 +222,23 @@ export async function generateLaporanNilai(
     const nilaiUjian = await prisma.nilaiUjian.findMany({
       where: {
         siswa_id: parseInt(siswaId),
-        periode_ajaran_id: parseInt(periodeAjaranId)
+        periode_ajaran_id: parseInt(periodeAjaranId),
+        // Filter to only include mapel currently assigned to student's tingkatan
+        mata_pelajaran: {
+          kurikulum: {
+            some: {
+              tingkatan_id: siswa.kelas?.tingkatan?.id
+            }
+          }
+        }
       },
       include: {
         mata_pelajaran: {
           include: {
             kurikulum: {
+              where: {
+                tingkatan_id: siswa.kelas?.tingkatan?.id
+              },
               include: {
                 kitab: true
               }
@@ -267,12 +278,23 @@ export async function generateLaporanNilai(
     const nilaiHafalan = await prisma.nilaiHafalan.findMany({
       where: {
         siswa_id: parseInt(siswaId),
-        periode_ajaran_id: parseInt(periodeAjaranId)
+        periode_ajaran_id: parseInt(periodeAjaranId),
+        // Filter to only include mapel currently assigned to student's tingkatan
+        mata_pelajaran: {
+          kurikulum: {
+            some: {
+              tingkatan_id: siswa.kelas?.tingkatan?.id
+            }
+          }
+        }
       },
       include: {
         mata_pelajaran: {
           include: {
             kurikulum: {
+              where: {
+                tingkatan_id: siswa.kelas?.tingkatan?.id
+              },
               include: {
                 kitab: true
               }

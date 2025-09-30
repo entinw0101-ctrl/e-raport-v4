@@ -231,11 +231,20 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
       ...validatedData.catatanSiswa?.map((item: any) => item.nis) || []
     ].filter(Boolean))
 
-    // Bulk load siswa
+    // Bulk load siswa with kelas and tingkatan
     const siswaList = await prisma.siswa.findMany({
-      where: { nis: { in: Array.from(allNis) }, status: "Aktif" }
+      where: { nis: { in: Array.from(allNis) }, status: "Aktif" },
+      include: { kelas: { include: { tingkatan: true } } }
     })
     siswaList.forEach(siswa => siswaMap.set(siswa.nis, siswa))
+
+    // Create tingkatan mapping for validation
+    const siswaTingkatanMap = new Map()
+    siswaList.forEach(siswa => {
+      if (siswa.kelas?.tingkatan?.id) {
+        siswaTingkatanMap.set(siswa.nis, siswa.kelas.tingkatan.id)
+      }
+    })
 
     // Get all unique mapel names
     const allMapelNames = new Set([
@@ -275,11 +284,11 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
 
     // Process tables one by one to prevent database conflicts
     console.time('Nilai Ujian processing')
-    const nilaiUjianResult = await processNilaiUjian(validatedData.nilaiUjian || [], siswaMap, mapelMap, periodeAjaranId)
+    const nilaiUjianResult = await processNilaiUjian(validatedData.nilaiUjian || [], siswaMap, mapelMap, periodeAjaranId, siswaTingkatanMap)
     console.timeEnd('Nilai Ujian processing')
 
     console.time('Nilai Hafalan processing')
-    const nilaiHafalanResult = await processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId)
+    const nilaiHafalanResult = await processNilaiHafalan(validatedData.nilaiHafalan || [], siswaMap, mapelMap, periodeAjaranId, siswaTingkatanMap)
     console.timeEnd('Nilai Hafalan processing')
 
     console.time('Kehadiran processing')
@@ -337,7 +346,7 @@ async function processTableInChunks<T>(
 }
 
 // Parallel upsert functions for each table
-async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string) {
+async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string, siswaTingkatanMap: Map<string, number>) {
   const result = { inserted: 0, updated: 0, errors: 0 }
   const upsertPromises: Promise<any>[] = []
 
@@ -347,6 +356,28 @@ async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelM
     const mapel = mapelMap.get(item.mataPelajaran)
 
     if (siswa && mapel) {
+      // Validate that mata pelajaran is assigned to student's current tingkatan
+      const studentTingkatanId = siswaTingkatanMap.get(item.nis)
+      if (!studentTingkatanId) {
+        result.errors++
+        console.error(`Siswa ${item.nis} tidak memiliki tingkatan yang valid`)
+        continue
+      }
+
+      // Check if mata pelajaran is assigned to student's tingkatan via kurikulum
+      const kurikulumExists = await prisma.kurikulum.findFirst({
+        where: {
+          mapel_id: mapel.id,
+          tingkatan_id: studentTingkatanId,
+          mata_pelajaran: { jenis: "Ujian" } // Ensure it's an ujian subject
+        }
+      })
+
+      if (!kurikulumExists) {
+        result.errors++
+        console.error(`Mata pelajaran "${item.mataPelajaran}" tidak sesuai dengan tingkatan siswa ${item.nis}`)
+        continue
+      }
       const upsertPromise = prisma.nilaiUjian.upsert({
         where: {
           siswa_id_mapel_id_periode_ajaran_id: {
@@ -387,7 +418,7 @@ async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelM
   return result
 }
 
-async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string) {
+async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mapelMap: Map<string, any>, periodeAjaranId: string, siswaTingkatanMap: Map<string, number>) {
   const result = { inserted: 0, updated: 0, errors: 0 }
   const upsertPromises: Promise<any>[] = []
 
@@ -404,6 +435,28 @@ async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mape
     const mapel = mapelMap.get(trimmedItem.mataPelajaran)
 
     if (siswa && mapel) {
+      // Validate that mata pelajaran is assigned to student's current tingkatan
+      const studentTingkatanId = siswaTingkatanMap.get(trimmedItem.nis)
+      if (!studentTingkatanId) {
+        result.errors++
+        console.error(`Siswa ${trimmedItem.nis} tidak memiliki tingkatan yang valid`)
+        continue
+      }
+
+      // Check if mata pelajaran is assigned to student's tingkatan via kurikulum
+      const kurikulumExists = await prisma.kurikulum.findFirst({
+        where: {
+          mapel_id: mapel.id,
+          tingkatan_id: studentTingkatanId,
+          mata_pelajaran: { jenis: "Hafalan" } // Ensure it's a hafalan subject
+        }
+      })
+
+      if (!kurikulumExists) {
+        result.errors++
+        console.error(`Mata pelajaran "${trimmedItem.mataPelajaran}" tidak sesuai dengan tingkatan siswa ${trimmedItem.nis}`)
+        continue
+      }
       let predikatEnum: PredikatHafalan | null = null
       if (trimmedItem.predikat === 'Tercapai') {
         predikatEnum = PredikatHafalan.TERCAPAI
