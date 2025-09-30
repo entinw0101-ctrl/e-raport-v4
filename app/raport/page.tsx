@@ -31,6 +31,19 @@ export default function RaportPage() {
   const [selectedPeriode, setSelectedPeriode] = useState<string>("")
   const [selectedKelas, setSelectedKelas] = useState<string>("")
 
+  // Pagination state
+  const [pagination, setPagination] = useState<{
+    page: number
+    per_page: number
+    total: number
+    total_pages: number
+  }>({
+    page: 1,
+    per_page: 10,
+    total: 0,
+    total_pages: 0
+  })
+
   const { toast } = useToast()
   const router = useRouter()
 
@@ -45,8 +58,21 @@ export default function RaportPage() {
   }, [])
 
   useEffect(() => {
-    fetchStudents()
+    // Reset to page 1 when kelas filter changes
+    setPagination(prev => ({ ...prev, page: 1 }))
+    fetchStudents(1, pagination.per_page)
   }, [selectedKelas])
+
+  // Pagination handlers
+  const handlePageChange = (page: number) => {
+    setPagination(prev => ({ ...prev, page }))
+    fetchStudents(page, pagination.per_page)
+  }
+
+  const handlePerPageChange = (perPage: number) => {
+    setPagination(prev => ({ ...prev, per_page: perPage, page: 1 }))
+    fetchStudents(1, perPage)
+  }
 
   const fetchOptions = async () => {
     try {
@@ -72,11 +98,14 @@ export default function RaportPage() {
     }
   }
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (page = pagination.page, perPage = pagination.per_page) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       params.append("status", "Aktif") // Only active students
+      params.append("page", page.toString())
+      params.append("per_page", perPage.toString())
+
       if (selectedKelas && selectedKelas !== "all") {
         params.append("kelas_id", selectedKelas)
       }
@@ -86,6 +115,12 @@ export default function RaportPage() {
 
       if (result.success) {
         setData(result.data || [])
+        setPagination(result.pagination || {
+          page: 1,
+          per_page: perPage,
+          total: 0,
+          total_pages: 0
+        })
       } else {
         throw new Error(result.message || "Gagal memuat data siswa")
       }
@@ -194,6 +229,9 @@ export default function RaportPage() {
         actions={false}
         onEdit={undefined}
         onDelete={undefined}
+        pagination={pagination}
+        onPageChange={handlePageChange}
+        onPerPageChange={handlePerPageChange}
       />
     </div>
   )
