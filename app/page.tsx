@@ -391,15 +391,13 @@ export default function OnboardingPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary/10 rounded-full"
             >
-              <div className="w-4 h-4 text-primary">
-                {(() => {
-                  const Icon = steps[currentStep].icon
-                  return <Icon />
-                })()}
-              </div>
-              <span className="text-sm font-semibold text-primary">
+              {(() => {
+                const Icon = steps[currentStep].icon
+                return <Icon className="w-4 h-4 text-primary flex-shrink-0" />
+              })()}
+              <span className="text-sm font-semibold text-primary leading-none">
                 Langkah {currentStep + 1} dari {steps.length}
               </span>
             </motion.div>
