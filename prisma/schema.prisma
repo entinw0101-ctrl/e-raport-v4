@@ -501,14 +501,25 @@ model LogPromosi {
 
 // Tabel Surat Keluar
 model SuratKeluar {
-  id              Int      @id @default(autoincrement())
-  nomor_surat     String   @unique @db.VarChar(255)
-  siswa_id        Int?
-  tanggal_surat   DateTime?
-  perihal         String?
-  isi_surat       String?
-  dibuat_pada     DateTime @default(now())
-  diperbarui_pada DateTime @updatedAt
+  id                        Int           @id @default(autoincrement())
+  nomor_surat               String        @unique @db.VarChar(255)
+  siswa_id                  Int?
+  tanggal_surat             DateTime?
+  perihal                   String?
+  isi_surat                 String?
+
+  // Fields for student exit management
+  jenis_keluar              JenisKeluar?  // Pindah, Keluar, Lulus
+  tujuan_nama_pesantren     String?       @db.VarChar(255)
+  tujuan_alamat_pesantren   String?
+  alasan                    String?
+  penanggung_jawab          String?       @db.VarChar(100) // "Ayah/Ibu/Wali"
+  penanggung_nama           String?       @db.VarChar(255) // Parent/Guardian name
+  penanggung_pekerjaan      String?       @db.VarChar(255) // Parent/Guardian occupation
+  penanggung_alamat         String?       // Parent/Guardian address
+
+  dibuat_pada               DateTime      @default(now())
+  diperbarui_pada           DateTime      @updatedAt
 
   // Relasi
   siswa Siswa? @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -516,6 +527,7 @@ model SuratKeluar {
   @@index([nomor_surat])
   @@index([siswa_id])
   @@index([tanggal_surat])
+  @@index([jenis_keluar])
   @@map("surat_keluar")
 }
 
@@ -623,6 +635,12 @@ enum JenisTemplate {
   NILAI
   SIKAP
   SURAT_KELUAR
+}
+
+enum JenisKeluar {
+  Pindah @map("Pindah")
+  Keluar @map("Keluar")
+  Lulus  @map("Lulus")
 }
 
 enum AdminRole {

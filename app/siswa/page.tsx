@@ -7,6 +7,9 @@ import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { siswaService, type Siswa } from "@/src/services/siswaService"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { FileText } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
@@ -24,8 +27,12 @@ export default function SiswaPage() {
   // Modal states
   const [showFormModal, setShowFormModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showExitLetterModal, setShowExitLetterModal] = useState(false)
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null)
+  const [selectedExitSiswa, setSelectedExitSiswa] = useState<Siswa | null>(null)
   const [formLoading, setFormLoading] = useState(false)
+  const [exitLetterLoading, setExitLetterLoading] = useState(false)
+  const [selectedPenanggungJawab, setSelectedPenanggungJawab] = useState<string>("")
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("")
@@ -98,6 +105,24 @@ export default function SiswaPage() {
       key: "tanggal_lahir",
       label: "Tanggal Lahir",
       render: (value) => (value ? format(new Date(value), "dd MMM yyyy", { locale: id }) : "-"),
+    },
+    {
+      key: "actions",
+      label: "Aksi",
+      render: (_, row) => (
+        <div className="flex gap-2">
+          <Select onValueChange={(value) => handleExitAction(value, row)}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Keluar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pindah">📋 Surat Pindah</SelectItem>
+              <SelectItem value="lulus" disabled>Fitur belum tersedia</SelectItem>
+              <SelectItem value="keluar" disabled>Fitur belum tersedia</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ),
     },
   ]
 
@@ -436,6 +461,25 @@ export default function SiswaPage() {
     setShowFormModal(true)
   }
 
+  const handleExitAction = (action: string, siswa: Siswa) => {
+    if (action === "pindah") {
+      setSelectedExitSiswa(siswa)
+      setShowExitLetterModal(true)
+    } else if (action === "lulus") {
+      toast({
+        title: "Fitur Belum Tersedia",
+        description: "Surat keluar untuk siswa lulus belum diimplementasikan",
+        variant: "default",
+      })
+    } else if (action === "keluar") {
+      toast({
+        title: "Fitur Belum Tersedia",
+        description: "Surat keluar untuk siswa keluar belum diimplementasikan",
+        variant: "default",
+      })
+    }
+  }
+
   const handleDelete = (siswa: Siswa) => {
     setSelectedSiswa(siswa)
     setShowDeleteDialog(true)
@@ -529,6 +573,196 @@ export default function SiswaPage() {
   //   fetchData(1, searchTerm, "", "")
   // }
 
+  const getExitLetterFields = (): FormField[] => {
+    if (!selectedExitSiswa) return []
+
+    // Create penanggung jawab options from student family data
+    const penanggungJawabOptions = []
+
+    if (selectedExitSiswa.nama_ayah) {
+      penanggungJawabOptions.push({
+        value: `ayah:${selectedExitSiswa.nama_ayah}`,
+        label: `Ayah - ${selectedExitSiswa.nama_ayah}${selectedExitSiswa.pekerjaan_ayah ? ` (${selectedExitSiswa.pekerjaan_ayah})` : ''}`
+      })
+    }
+
+    if (selectedExitSiswa.nama_ibu) {
+      penanggungJawabOptions.push({
+        value: `ibu:${selectedExitSiswa.nama_ibu}`,
+        label: `Ibu - ${selectedExitSiswa.nama_ibu}${selectedExitSiswa.pekerjaan_ibu ? ` (${selectedExitSiswa.pekerjaan_ibu})` : ''}`
+      })
+    }
+
+    if (selectedExitSiswa.nama_wali) {
+      penanggungJawabOptions.push({
+        value: `wali:${selectedExitSiswa.nama_wali}`,
+        label: `Wali - ${selectedExitSiswa.nama_wali}${selectedExitSiswa.pekerjaan_wali ? ` (${selectedExitSiswa.pekerjaan_wali})` : ''}`
+      })
+    }
+
+    return [
+      {
+        name: "nomor_surat",
+        label: "Nomor Surat",
+        type: "text",
+        required: true,
+        placeholder: "Contoh: 012/PP.NS/IV/2025",
+      },
+      {
+        name: "penanggung_jawab",
+        label: "Penanggung Jawab",
+        type: "select",
+        required: true,
+        placeholder: "Pilih penanggung jawab",
+        options: penanggungJawabOptions,
+      },
+      {
+        name: "tujuan_nama_pesantren",
+        label: "Tujuan Nama Pesantren",
+        type: "text",
+        required: true,
+        placeholder: "Nama pesantren tujuan",
+      },
+      {
+        name: "tujuan_alamat_pesantren",
+        label: "Tujuan Alamat Pesantren",
+        type: "textarea",
+        required: true,
+        placeholder: "Alamat lengkap pesantren tujuan",
+        rows: 3,
+      },
+      {
+        name: "alasan",
+        label: "Alasan Pindah",
+        type: "textarea",
+        required: true,
+        placeholder: "Alasan siswa pindah ke pesantren lain",
+        rows: 2,
+      },
+      {
+        name: "pekerjaan_penanggung_jawab",
+        label: "Pekerjaan Penanggung Jawab",
+        type: "text",
+        disabled: true,
+        placeholder: "Otomatis terisi berdasarkan pilihan penanggung jawab",
+      },
+      {
+        name: "alamat_penanggung_jawab",
+        label: "Alamat Penanggung Jawab",
+        type: "textarea",
+        disabled: true,
+        placeholder: "Otomatis terisi berdasarkan pilihan penanggung jawab",
+        rows: 2,
+      },
+    ]
+  }
+
+  const handleExitLetterSubmit = async (formData: Record<string, any>) => {
+    if (!selectedExitSiswa) return
+
+    setExitLetterLoading(true)
+    try {
+      // Parse penanggung jawab data
+      const [jabatan, nama] = formData.penanggung_jawab.split(':')
+
+      // Get parent information based on selection
+      let pekerjaan = ''
+      let alamat = ''
+
+      if (jabatan === 'ayah') {
+        pekerjaan = selectedExitSiswa.pekerjaan_ayah || ''
+        alamat = selectedExitSiswa.alamat_ayah || ''
+      } else if (jabatan === 'ibu') {
+        pekerjaan = selectedExitSiswa.pekerjaan_ibu || ''
+        alamat = selectedExitSiswa.alamat_ibu || ''
+      } else if (jabatan === 'wali') {
+        pekerjaan = selectedExitSiswa.pekerjaan_wali || ''
+        alamat = selectedExitSiswa.alamat_wali || ''
+      }
+
+      const suratData = {
+        nomor_surat: formData.nomor_surat,
+        siswa_id: selectedExitSiswa.id,
+        jenis_keluar: "Pindah",
+        penanggung_jawab: jabatan === 'ayah' ? 'Ayah' : jabatan === 'ibu' ? 'Ibu' : 'Wali',
+        penanggung_nama: nama,
+        penanggung_pekerjaan: pekerjaan,
+        penanggung_alamat: alamat,
+        tujuan_nama_pesantren: formData.tujuan_nama_pesantren,
+        tujuan_alamat_pesantren: formData.tujuan_alamat_pesantren,
+        alasan: formData.alasan,
+        tanggal_surat: new Date(),
+      }
+
+      // Debug: Log the data being sent
+      console.log('Sending surat data:', suratData)
+
+      // Create surat keluar record
+      const createResponse = await fetch("/api/surat-keluar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(suratData),
+      })
+
+      if (!createResponse.ok) {
+        throw new Error("Gagal membuat surat keluar")
+      }
+
+      const createResult = await createResponse.json()
+
+      if (createResult.success) {
+        // Generate the letter
+        const generateResponse = await fetch(`/api/surat-keluar/generate/${createResult.data.id}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!generateResponse.ok) {
+          throw new Error("Gagal generate surat")
+        }
+
+        // Get filename and download
+        const contentDisposition = generateResponse.headers.get('Content-Disposition')
+        const filename = contentDisposition
+          ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
+          : `Surat_Pindah_${selectedExitSiswa.nama?.replace(/\s+/g, '_')}.docx`
+
+        const blob = await generateResponse.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+
+        toast({
+          title: "Berhasil",
+          description: "Surat pindah berhasil di-generate dan didownload",
+        })
+
+        setShowExitLetterModal(false)
+        setSelectedExitSiswa(null)
+      } else {
+        throw new Error(createResult.error || "Gagal membuat surat keluar")
+      }
+    } catch (error) {
+      console.error('Error generating exit letter:', error)
+      toast({
+        title: "Error",
+        description: "Gagal generate surat pindah",
+        variant: "destructive",
+      })
+    } finally {
+      setExitLetterLoading(false)
+    }
+  }
+
   const getInitialFormData = () => {
     if (!selectedSiswa) return { status: "Aktif" }
 
@@ -605,6 +839,92 @@ export default function SiswaPage() {
         confirmText="Hapus"
         variant="destructive"
       />
+
+      {/* Exit Letter Modal */}
+      <Dialog open={showExitLetterModal} onOpenChange={setShowExitLetterModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Generate Surat Pindah
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedExitSiswa && (
+            <div className="space-y-4">
+              {/* Student Info Summary */}
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="font-medium text-blue-900 mb-2">Data Siswa</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="font-medium">Nama:</span> {selectedExitSiswa.nama}
+                  </div>
+                  <div>
+                    <span className="font-medium">NIS:</span> {selectedExitSiswa.nis}
+                  </div>
+                  <div>
+                    <span className="font-medium">Kelas:</span> {selectedExitSiswa.kelas?.nama_kelas || '-'}
+                  </div>
+                  <div>
+                    <span className="font-medium">Kamar:</span> {selectedExitSiswa.kamar?.nama_kamar || '-'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Parent Information Display */}
+              {selectedPenanggungJawab && (
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <h4 className="font-medium text-green-900 mb-2">Informasi Penanggung Jawab</h4>
+                  <div className="text-sm space-y-1">
+                    {(() => {
+                      const [jabatan] = selectedPenanggungJawab.split(':')
+                      let pekerjaan = ''
+                      let alamat = ''
+
+                      if (jabatan === 'ayah') {
+                        pekerjaan = selectedExitSiswa.pekerjaan_ayah || '-'
+                        alamat = selectedExitSiswa.alamat_ayah || '-'
+                      } else if (jabatan === 'ibu') {
+                        pekerjaan = selectedExitSiswa.pekerjaan_ibu || '-'
+                        alamat = selectedExitSiswa.alamat_ibu || '-'
+                      } else if (jabatan === 'wali') {
+                        pekerjaan = selectedExitSiswa.pekerjaan_wali || '-'
+                        alamat = selectedExitSiswa.alamat_wali || '-'
+                      }
+
+                      return (
+                        <>
+                          <div><span className="font-medium">Pekerjaan:</span> {pekerjaan}</div>
+                          <div><span className="font-medium">Alamat:</span> {alamat}</div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              <FormModal
+                title=""
+                fields={getExitLetterFields()}
+                initialData={{}}
+                open={true}
+                onClose={() => {
+                  setShowExitLetterModal(false)
+                  setSelectedPenanggungJawab("")
+                }}
+                onSubmit={async (formData) => {
+                  // Extract penanggung jawab info before submitting
+                  setSelectedPenanggungJawab(formData.penanggung_jawab || "")
+                  await handleExitLetterSubmit(formData)
+                }}
+                loading={exitLetterLoading}
+                submitText="Generate & Download Surat"
+                cancelText="Batal"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

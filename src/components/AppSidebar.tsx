@@ -185,11 +185,6 @@ const data = {
           icon: ClipboardList,
         },
         {
-          title: "Surat Keluar",
-          url: "/surat-keluar",
-          icon: ClipboardList,
-        },
-        {
           title: "Template Lengkap",
           url: "/template-lengkap",
           icon: FileText,
