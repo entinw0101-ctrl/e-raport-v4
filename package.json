@@ -54,6 +54,7 @@
     "docxtemplater-image-module-free": "^1.1.1",
     "embla-carousel-react": "8.5.1",
     "exceljs": "^4.4.0",
+    "framer-motion": "^12.23.22",
     "fs": "latest",
     "geist": "latest",
     "input-otp": "1.4.1",

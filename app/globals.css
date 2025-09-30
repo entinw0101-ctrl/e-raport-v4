@@ -123,3 +123,78 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Paper-flipping animations for onboarding */
+@keyframes paper-flip-forward {
+  0% {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+  25% {
+    transform: rotateY(-15deg) scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: rotateY(-90deg) scale(0.9);
+    opacity: 0.3;
+  }
+  75% {
+    transform: rotateY(-165deg) scale(0.95);
+    opacity: 0.8;
+  }
+  100% {
+    transform: rotateY(-180deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes paper-flip-backward {
+  0% {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+  25% {
+    transform: rotateY(15deg) scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: rotateY(90deg) scale(0.9);
+    opacity: 0.3;
+  }
+  75% {
+    transform: rotateY(165deg) scale(0.95);
+    opacity: 0.8;
+  }
+  100% {
+    transform: rotateY(180deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-paper-flip-forward {
+  animation: paper-flip-forward 0.6s ease-in-out;
+}
+
+.animate-paper-flip-backward {
+  animation: paper-flip-backward 0.6s ease-in-out;
+}
+
+/* Enhanced floating animation for Islamic elements */
+@keyframes float-enhanced {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-8px) rotate(1deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(-0.5deg);
+  }
+  75% {
+    transform: translateY(-12px) rotate(0.5deg);
+  }
+}
+
+.animate-float-enhanced {
+  animation: float-enhanced 6s ease-in-out infinite;
+}
