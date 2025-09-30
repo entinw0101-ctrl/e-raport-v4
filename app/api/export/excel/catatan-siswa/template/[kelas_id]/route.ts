@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
 
+function applySheetStyling(sheet: ExcelJS.Worksheet) {
+  // Styling untuk baris header
+  const headerRow = sheet.getRow(1);
+  headerRow.font = {
+    bold: true,
+    color: { argb: "FFFFFFFF" }, // Teks putih
+  };
+  headerRow.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF4F81BD" }, // Latar belakang biru tua
+  };
+  headerRow.alignment = {
+    vertical: "middle",
+    horizontal: "center",
+  };
+
+  // Add borders to all cells
+  sheet.eachRow((row) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      }
+    })
+  })
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ kelas_id: string }> }
@@ -76,14 +106,8 @@ export async function GET(
       })
     })
 
-    // Style header row
-    const headerRow = worksheet.getRow(1)
-    headerRow.font = { bold: true }
-    headerRow.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFE6E6FA" }
-    }
+    // Apply comprehensive styling
+    applySheetStyling(worksheet)
 
     // Note: Data validation removed for simplicity
     // Catatan fields are free text without specific validation
