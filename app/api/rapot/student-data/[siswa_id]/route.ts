@@ -83,6 +83,9 @@ export async function GET(
           mata_pelajaran: {
             include: {
               kurikulum: {
+                where: {
+                  tingkatan_id: siswa.kelas?.tingkatan_id || undefined // Filter by student's tingkatan
+                },
                 include: {
                   kitab: true
                 }
@@ -159,7 +162,7 @@ export async function GET(
           nama_mapel: n.mata_pelajaran.nama_mapel
         }
       })),
-      nilaiHafalan: nilaiHafalan.map(h => ({
+      nilaiHafalan: nilaiHafalan.map((h: any) => ({
         id: h.id.toString(),
         predikat: h.predikat || '',
         mata_pelajaran: {
