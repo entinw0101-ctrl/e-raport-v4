@@ -138,20 +138,27 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            // Check if mata pelajaran is assigned to student's tingkatan via kurikulum
-            const kurikulumExists = await prisma.kurikulum.findFirst({
+            // Get kurikulum data to ensure correct kitab assignment
+            const kurikulum = await prisma.kurikulum.findFirst({
                 where: {
                     mapel_id: mataPelajaran.id,
                     tingkatan_id: studentTingkatanId,
                     mata_pelajaran: { jenis: "Hafalan" } // Ensure it's a hafalan subject
+                },
+                include: {
+                    kitab: true
                 }
             });
 
-            if (!kurikulumExists) {
+            if (!kurikulum) {
                 results.errors++;
                 results.errorDetails.push(`Baris ${i}: Mata pelajaran "${namaMapel}" tidak sesuai dengan tingkatan siswa ${nis}.`);
                 continue;
             }
+
+            // Use kitab name from kurikulum, not from Excel (to prevent mismatches)
+            const correctKitabName = kurikulum.kitab?.nama_kitab || kurikulum.batas_hafalan || ""
+            console.log(`Using kitab name from kurikulum: "${correctKitabName}" for ${namaMapel} (Excel had: "${targetHafalan}")`)
 
             // Mapping dari display value ke enum value
             let enumPredikat: any;
@@ -176,14 +183,14 @@ export async function POST(request: NextRequest) {
                 },
                 update: {
                     predikat: enumPredikat,
-                    target_hafalan: targetHafalan || null,
+                    target_hafalan: correctKitabName || null,
                 },
                 create: {
                     siswa_id: siswa.id,
                     mapel_id: mataPelajaran.id,
                     periode_ajaran_id: periodeAjaran.id,
                     predikat: enumPredikat,
-                    target_hafalan: targetHafalan || null,
+                    target_hafalan: correctKitabName || null,
                 },
             }).catch((error: any) => {
                 console.error('Upsert error for nilai hafalan:', error)

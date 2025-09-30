@@ -443,20 +443,27 @@ async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mape
         continue
       }
 
-      // Check if mata pelajaran is assigned to student's tingkatan via kurikulum
-      const kurikulumExists = await prisma.kurikulum.findFirst({
+      // Get kurikulum data to ensure correct kitab assignment
+      const kurikulum = await prisma.kurikulum.findFirst({
         where: {
           mapel_id: mapel.id,
           tingkatan_id: studentTingkatanId,
           mata_pelajaran: { jenis: "Hafalan" } // Ensure it's a hafalan subject
+        },
+        include: {
+          kitab: true
         }
       })
 
-      if (!kurikulumExists) {
+      if (!kurikulum) {
         result.errors++
         console.error(`Mata pelajaran "${trimmedItem.mataPelajaran}" tidak sesuai dengan tingkatan siswa ${trimmedItem.nis}`)
         continue
       }
+
+      // Use kitab name from kurikulum, not from Excel (to prevent mismatches)
+      const correctKitabName = kurikulum.kitab?.nama_kitab || kurikulum.batas_hafalan || ""
+      console.log(`Using kitab name from kurikulum: "${correctKitabName}" for ${trimmedItem.mataPelajaran} (Excel had: "${trimmedItem.targetHafalan}")`)
       let predikatEnum: PredikatHafalan | null = null
       if (trimmedItem.predikat === 'Tercapai') {
         predikatEnum = PredikatHafalan.TERCAPAI
@@ -476,18 +483,18 @@ async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mape
           }
         },
         update: {
-          target_hafalan: trimmedItem.targetHafalan,
+          target_hafalan: correctKitabName, // Use kitab name from kurikulum
           predikat: predikatEnum
         },
         create: {
           siswa_id: siswa.id,
           mapel_id: mapel.id,
           periode_ajaran_id: parseInt(periodeAjaranId),
-          target_hafalan: trimmedItem.targetHafalan,
+          target_hafalan: correctKitabName, // Use kitab name from kurikulum
           predikat: predikatEnum
         }
       }).catch((error: any) => {
-        console.error('Upsert error for nilai hafalan:', error)
+        console.error('Upsert error for nilai hafalan:', error, 'for item:', item)
         result.errors++
         return null
       })
