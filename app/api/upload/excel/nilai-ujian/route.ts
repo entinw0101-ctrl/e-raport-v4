@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
         }
 
         const nilaiNum = parseFloat(String(nilai))
-        if (!isNaN(nilaiNum) && nilaiNum >= 0 && nilaiNum <= 100) {
+        if (!isNaN(nilaiNum) && nilaiNum >= 0 && nilaiNum <= 10) {
           const upsertPromise = prisma.nilaiUjian.upsert({
             where: {
               siswa_id_mapel_id_periode_ajaran_id: {

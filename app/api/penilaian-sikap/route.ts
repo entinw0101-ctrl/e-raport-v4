@@ -109,8 +109,8 @@ export async function POST(request: NextRequest) {
 
     // Convert and validate data
     const nilai = Number.parseInt(body.nilai)
-    if (isNaN(nilai) || nilai < 0) {
-      return NextResponse.json({ success: false, error: "Nilai harus berupa angka positif atau nol" }, { status: 400 })
+    if (isNaN(nilai) || nilai < 0 || nilai > 10) {
+      return NextResponse.json({ success: false, error: "Nilai harus berupa angka antara 0-10" }, { status: 400 })
     }
 
     // Generate predikat automatically from nilai

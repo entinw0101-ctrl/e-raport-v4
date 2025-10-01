@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 import { BookOpen, Calculator } from "lucide-react"
+import { getNilaiColor } from "@/lib/utils"
 
 interface NilaiUjian {
   id: number
@@ -106,7 +107,7 @@ export default function PenilaianPage() {
       label: "Nilai",
       render: (value) => (
         <div className="text-center">
-          <div className="font-bold text-lg">{value}</div>
+          <div className={`font-bold text-lg ${getNilaiColor(value)}`}>{value}</div>
         </div>
       ),
     },
@@ -174,11 +175,11 @@ export default function PenilaianPage() {
     },
     {
       name: "nilai_angka",
-      label: "Nilai (0-100)",
+      label: "Nilai (0-10)",
       type: "number",
       required: true,
       min: 0,
-      max: 100,
+      max: 10,
       placeholder: "Masukkan nilai ujian",
     },
     {
@@ -186,11 +187,11 @@ export default function PenilaianPage() {
       label: "Predikat",
       type: "select",
       options: [
-        { value: "A", label: "A (90-100)" },
-        { value: "B", label: "B (80-89)" },
-        { value: "C", label: "C (70-79)" },
-        { value: "D", label: "D (60-69)" },
-        { value: "E", label: "E (0-59)" },
+        { value: "Sempurna", label: "Sempurna (10)" },
+        { value: "Sangat Baik", label: "Sangat Baik (9)" },
+        { value: "Baik", label: "Baik (8)" },
+        { value: "Cukup", label: "Cukup (7)" },
+        { value: "Kurang", label: "Kurang (0-6)" },
       ],
     },
   ]

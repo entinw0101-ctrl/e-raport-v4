@@ -15,6 +15,7 @@ import { FileText, Download, Eye, ArrowLeft } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useParams } from "next/navigation"
 import { getPredicate } from "@/lib/raport-utils"
+import { getNilaiColor } from "@/lib/utils"
 
 interface StudentData {
   siswa: {
@@ -291,7 +292,7 @@ export default function StudentRaportPage() {
                 <div key={nilai.id} className="flex justify-between items-center p-2 border rounded">
                   <span className="text-sm">{nilai.mata_pelajaran.nama_mapel}</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{nilai.nilai_angka}</span>
+                    <span className={`font-medium ${getNilaiColor(nilai.nilai_angka)}`}>{nilai.nilai_angka}</span>
                     <Badge variant="outline">{nilai.predikat}</Badge>
                   </div>
                 </div>
@@ -369,7 +370,7 @@ export default function StudentRaportPage() {
                     <p className="text-xs text-muted-foreground">{sikap.indikator_sikap.jenis_sikap}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{sikap.nilai}</span>
+                    <span className={`font-medium ${getNilaiColor(sikap.nilai)}`}>{sikap.nilai}</span>
                     <Badge variant="outline">
                       {getPredicate(sikap.nilai)}
                     </Badge>
