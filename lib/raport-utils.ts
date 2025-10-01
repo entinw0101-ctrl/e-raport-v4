@@ -223,8 +223,9 @@ export async function generateLaporanNilai(
       where: {
         siswa_id: parseInt(siswaId),
         periode_ajaran_id: parseInt(periodeAjaranId),
-        // Filter to only include mapel currently assigned to student's tingkatan
+        // Filter to only include mapel with jenis "Ujian" assigned to student's tingkatan
         mata_pelajaran: {
+          jenis: "Ujian",
           kurikulum: {
             some: {
               tingkatan_id: siswa.kelas?.tingkatan?.id
@@ -279,8 +280,9 @@ export async function generateLaporanNilai(
       where: {
         siswa_id: parseInt(siswaId),
         periode_ajaran_id: parseInt(periodeAjaranId),
-        // Filter to only include mapel currently assigned to student's tingkatan
+        // Filter to only include mapel with jenis "Hafalan" assigned to student's tingkatan
         mata_pelajaran: {
+          jenis: "Hafalan",
           kurikulum: {
             some: {
               tingkatan_id: siswa.kelas?.tingkatan?.id

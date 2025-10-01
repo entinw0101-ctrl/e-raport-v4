@@ -65,7 +65,12 @@ export async function POST(request: NextRequest) {
                 where: { nis: { in: Array.from(allNis) }, status: "Aktif" },
                 include: { kelas: { include: { tingkatan: true } } }
             }),
-            prisma.mataPelajaran.findMany({ where: { nama_mapel: { in: Array.from(allMapel) } } }),
+            prisma.mataPelajaran.findMany({
+                where: {
+                    nama_mapel: { in: Array.from(allMapel) },
+                    jenis: "Hafalan" // Ensure we only get hafalan subjects
+                }
+            }),
             Promise.all(Array.from(allPeriodeData).map(async (periodeStr) => {
                 const [tahunAjaran, semester] = periodeStr.split(':');
                 return await prisma.periodeAjaran.findFirst({
@@ -138,26 +143,29 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            // Get kurikulum data to ensure correct kitab assignment
+            // Check kurikulum data (optional - allow import even if not in kurikulum)
             const kurikulum = await prisma.kurikulum.findFirst({
                 where: {
                     mapel_id: mataPelajaran.id,
                     tingkatan_id: studentTingkatanId,
-                    mata_pelajaran: { jenis: "Hafalan" } // Ensure it's a hafalan subject
+                    mata_pelajaran: { jenis: "Hafalan" }
                 },
                 include: {
                     kitab: true
                 }
             });
 
-            if (!kurikulum) {
-                results.errors++;
-                results.errorDetails.push(`Baris ${i}: Mata pelajaran "${namaMapel}" tidak sesuai dengan tingkatan siswa ${nis}.`);
-                continue;
+            // If kurikulum exists, validate kitab consistency, otherwise just warn
+            if (kurikulum) {
+                const kurikulumKitab = kurikulum.kitab?.nama_kitab || kurikulum.batas_hafalan || "";
+                if (kurikulumKitab && targetHafalan && kurikulumKitab !== targetHafalan) {
+                    console.log(`Warning: Excel target_hafalan "${targetHafalan}" doesn't match kurikulum "${kurikulumKitab}" for ${namaMapel}`);
+                }
+            } else {
+                console.log(`Warning: Mata pelajaran "${namaMapel}" tidak terdaftar di kurikulum tingkatan siswa ${nis}, tapi tetap diizinkan import`);
             }
 
-            // Use target_hafalan value from Excel (which comes from kurikulum.batas_hafalan in template)
-            // This ensures consistency with the exported template
+            // Use target_hafalan directly from Excel as intended
             console.log(`Using target_hafalan from Excel: "${targetHafalan}" for ${namaMapel}`)
 
             // Mapping dari display value ke enum value

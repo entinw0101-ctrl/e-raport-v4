@@ -40,12 +40,24 @@ export async function POST(request: NextRequest) {
     const allMapel = new Set(dataRows.map((row: any) => row?.[3]).filter(Boolean))
 
     const siswaList = await prisma.siswa.findMany({
-      where: { nis: { in: Array.from(allNis) }, status: "Aktif" }
+      where: { nis: { in: Array.from(allNis) }, status: "Aktif" },
+      include: { kelas: { include: { tingkatan: true } } }
     })
     const siswaMap = new Map(siswaList.map(s => [s.nis, s]))
 
+    // Get all tingkatan mappings for validation
+    const siswaTingkatanMap = new Map()
+    for (const siswa of siswaList) {
+      if (siswa.kelas?.tingkatan?.id) {
+        siswaTingkatanMap.set(siswa.nis, siswa.kelas.tingkatan.id)
+      }
+    }
+
     const mapelList = await prisma.mataPelajaran.findMany({
-      where: { nama_mapel: { in: Array.from(allMapel) } }
+      where: {
+        nama_mapel: { in: Array.from(allMapel) },
+        jenis: "Ujian" // Ensure we only get ujian subjects
+      }
     })
     const mapelMap = new Map(mapelList.map(m => [m.nama_mapel, m]))
 
@@ -66,6 +78,25 @@ export async function POST(request: NextRequest) {
       const mapel = mapelMap.get(mataPelajaran)
 
       if (siswa && mapel) {
+        // Optional kurikulum validation for ujian (similar to hafalan fix)
+        const studentTingkatanId = siswaTingkatanMap.get(nis);
+        if (!studentTingkatanId) {
+          results.errors++;
+          continue;
+        }
+
+        const kurikulum = await prisma.kurikulum.findFirst({
+          where: {
+            mapel_id: mapel.id,
+            tingkatan_id: studentTingkatanId,
+            mata_pelajaran: { jenis: "Ujian" }
+          }
+        });
+
+        if (!kurikulum) {
+          console.log(`Warning: Mata pelajaran ujian "${mataPelajaran}" tidak terdaftar di kurikulum tingkatan siswa ${nis}, tapi tetap diizinkan import`);
+        }
+
         const nilaiNum = parseFloat(String(nilai))
         if (!isNaN(nilaiNum) && nilaiNum >= 0 && nilaiNum <= 100) {
           const upsertPromise = prisma.nilaiUjian.upsert({
