@@ -181,6 +181,7 @@ export async function POST(request: NextRequest) {
         no: index + 1, // 1-based numbering
         mata_pelajaran: item.mataPelajaran,
         kitab: item.kitab,
+        batas_hafalan: item.batasHafalan,
         target_hafalan: item.targetHafalan,
         predikat: item.predikat
       })),

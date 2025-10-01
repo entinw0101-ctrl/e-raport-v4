@@ -1,12 +1,111 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Users, GraduationCap, BookOpen, FileText, TrendingUp } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Users,
+  GraduationCap,
+  BookOpen,
+  TrendingUp,
+  FileText,
+  Plus,
+  BarChart3,
+  RefreshCw,
+  AlertCircle
+} from "lucide-react"
 
+// Import dashboard components
+import { StatCard } from "@/components/dashboard/stat-card"
+import { NilaiChart } from "@/components/dashboard/nilai-chart"
+import { QuickActions } from "@/components/dashboard/quick-actions"
+import { RecentActivity } from "@/components/dashboard/recent-activity"
+
+// Import mock data for fallbacks
+import {
+  mockDashboardStats,
+  mockNilaiCompletionData,
+  mockQuickActions,
+  mockRecentActivities,
+  formatIndonesianDate,
+  getGreeting
+} from "@/lib/mock-data"
+
+// Loading skeleton components
+function StatCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Skeleton className="h-4 w-[100px]" />
+        <Skeleton className="h-4 w-4" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-8 w-[60px] mb-1" />
+        <Skeleton className="h-3 w-[80px]" />
+      </CardContent>
+    </Card>
+  )
+}
+
+function ChartSkeleton() {
+  return (
+    <Card className="col-span-1 lg:col-span-2">
+      <CardHeader>
+        <Skeleton className="h-6 w-[200px]" />
+        <Skeleton className="h-4 w-[250px]" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-[400px] w-full" />
+      </CardContent>
+    </Card>
+  )
+}
+
+function QuickActionsSkeleton() {
+  return (
+    <Card className="w-full">
+      <CardHeader className="pb-3">
+        <Skeleton className="h-5 w-24" />
+        <Skeleton className="h-3 w-40" />
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-md" />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function RecentActivitySkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-6 w-[140px]" />
+        <Skeleton className="h-4 w-[180px]" />
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-3 p-3">
+              <Skeleton className="w-10 h-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Types for API responses
 interface DashboardStats {
   totalSiswa: number
   totalGuru: number
@@ -14,164 +113,315 @@ interface DashboardStats {
   totalNilai: number
 }
 
-interface RecentActivity {
+interface RecentActivityItem {
   id: string
-  nilai: number
-  created_at: string
+  nilai_angka: number
+  dibuat_pada: string
   siswa: { nama: string }
-  mata_pelajaran: { nama: string }
+  mata_pelajaran: { nama_mapel: string }
 }
 
+interface DashboardData {
+  stats: DashboardStats
+  lastMonthStats?: DashboardStats
+  recentActivities: RecentActivityItem[]
+  gradeDistribution: Record<string, number>
+  quickActions?: any[]
+  nilaiCompletionData?: any[]
+}
+
+// Client component for dynamic dashboard
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalSiswa: 0,
-    totalGuru: 0,
-    totalKelas: 0,
-    totalNilai: 0,
-  })
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
-  const [gradeDistribution, setGradeDistribution] = useState<any>({})
+  const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [])
-
+  // Fetch dashboard data
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch("/api/dashboard/stats")
-      const data = await response.json()
+      setLoading(true)
+      setError(null)
 
-      setStats(data.stats)
-      setRecentActivities(data.recentActivities)
-      setGradeDistribution(data.gradeDistribution)
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error)
+      const response = await fetch('/api/dashboard/stats')
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard data')
+      }
+
+      const apiData = await response.json()
+      setData(apiData)
+      setLastUpdated(new Date())
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+
+      // Fallback to mock data if API fails
+      setData({
+        stats: {
+          totalSiswa: mockDashboardStats.totalSantriAktif,
+          totalGuru: mockDashboardStats.totalUstadzAktif,
+          totalKelas: mockDashboardStats.kelasTerdaftar,
+          totalNilai: mockDashboardStats.nilaiTerinputHariIni
+        },
+        lastMonthStats: {
+          totalSiswa: Math.round(mockDashboardStats.totalSantriAktif * 0.88), // 12% less than current
+          totalGuru: Math.round(mockDashboardStats.totalUstadzAktif * 0.98), // 2% less than current
+          totalKelas: mockDashboardStats.kelasTerdaftar, // Same as current
+          totalNilai: Math.round(mockDashboardStats.nilaiTerinputHariIni * 0.95) // 5% less than current
+        },
+        recentActivities: mockRecentActivities.map(activity => ({
+          id: activity.id,
+          nilai_angka: 85, // mock value
+          dibuat_pada: new Date().toISOString(),
+          siswa: { nama: 'Mock Student' },
+          mata_pelajaran: { nama_mapel: 'Mock Subject' }
+        })),
+        gradeDistribution: {},
+        quickActions: mockQuickActions,
+        nilaiCompletionData: mockNilaiCompletionData
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  const gradeChartData = Object.entries(gradeDistribution).map(([grade, count]) => ({
-    grade,
-    count,
-  }))
+  // Initial load and periodic refresh
+  useEffect(() => {
+    fetchDashboardData()
 
-  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"]
+    // Auto-refresh every 5 minutes
+    const interval = setInterval(fetchDashboardData, 5 * 60 * 1000)
 
-  if (loading) {
+    return () => clearInterval(interval)
+  }, [])
+
+  // Manual refresh
+  const handleRefresh = () => {
+    fetchDashboardData()
+  }
+
+  // Transform API data for components
+  const transformRecentActivities = (activities: RecentActivityItem[]) => {
+    return activities.map(activity => ({
+      id: activity.id.toString(),
+      type: 'nilai' as const,
+      message: `Ustadz updated nilai ${activity.mata_pelajaran.nama_mapel} untuk ${activity.siswa.nama}`,
+      timestamp: new Date(activity.dibuat_pada).toLocaleString('id-ID'),
+      user: 'System'
+    }))
+  }
+
+  const transformGradeDistribution = (gradeDist: Record<string, number>) => {
+    const total = Object.values(gradeDist).reduce((a, b) => a + b, 0)
+    if (total === 0) return mockNilaiCompletionData
+
+    return Object.entries(gradeDist).map(([name, count]) => ({
+      name: `Grade ${name}`,
+      terisi: Math.round((count / total) * 100)
+    }))
+  }
+
+  // Calculate trend percentage
+  const calculateTrend = (current: number, previous: number): { percentage: number, type: 'positive' | 'negative' | 'neutral' } => {
+    if (previous === 0) {
+      return { percentage: current > 0 ? 100 : 0, type: current > 0 ? 'positive' : 'neutral' }
+    }
+
+    const percentage = ((current - previous) / previous) * 100
+    const type = percentage > 0 ? 'positive' : percentage < 0 ? 'negative' : 'neutral'
+
+    return { percentage: Math.abs(percentage), type }
+  }
+
+  // Format trend text
+  const formatTrendText = (trend: { percentage: number, type: 'positive' | 'negative' | 'neutral' }): string => {
+    const { percentage, type } = trend
+    const formattedPercentage = percentage.toFixed(1)
+
+    if (type === 'positive') {
+      return `+${formattedPercentage}% dari bulan lalu`
+    } else if (type === 'negative') {
+      return `-${formattedPercentage}% dari bulan lalu`
+    } else {
+      return 'Stabil dari bulan lalu'
+    }
+  }
+
+  // Loading state
+  if (loading && !data) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="container mx-auto p-6 space-y-8">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <Skeleton className="h-8 w-64 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <StatCardSkeleton key={i} />
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <QuickActionsSkeleton />
+          <div className="lg:col-span-2">
+            <ChartSkeleton />
+          </div>
+        </div>
       </div>
     )
   }
 
+  // Error state
+  if (error && !data) {
+    return (
+      <div className="container mx-auto p-6">
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            {error}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              className="ml-4 border-red-300 text-red-700 hover:bg-red-100"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Coba Lagi
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  // Ensure data exists
+  if (!data) return null
+
+  const transformedActivities = transformRecentActivities(data.recentActivities)
+  const transformedChartData = transformGradeDistribution(data.gradeDistribution)
+
+  // Calculate trends for each metric
+  const siswaTrend = calculateTrend(data.stats.totalSiswa, data.lastMonthStats?.totalSiswa || 0)
+  const guruTrend = calculateTrend(data.stats.totalGuru, data.lastMonthStats?.totalGuru || 0)
+  const kelasTrend = calculateTrend(data.stats.totalKelas, data.lastMonthStats?.totalKelas || 0)
+  const nilaiTrend = calculateTrend(data.stats.totalNilai, data.lastMonthStats?.totalNilai || 0)
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="container mx-auto p-6 space-y-8">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard E-RAPOT</h1>
-          <p className="text-gray-600 mt-1">NUURUSH SHOLAAH</p>
+          <h1 className="text-3xl font-bold text-foreground">
+            {getGreeting()}, Admin!
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {formatIndonesianDate(new Date())}
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Selamat datang di dashboard E-Raport Nuurush Sholaah
+          </p>
+          {lastUpdated && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Terakhir update: {lastUpdated.toLocaleTimeString('id-ID')}
+            </p>
+          )}
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700">
-          <FileText className="w-4 h-4 mr-2" />
-          Generate Laporan
-        </Button>
+
+        <div className="flex gap-3">
+          <Button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="inline-flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Memuat...' : 'Refresh'}
+          </Button>
+          <Button className="inline-flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            Generate Laporan
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Siswa</CardTitle>
-            <Users className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalSiswa}</div>
-            <p className="text-xs text-muted-foreground">Siswa aktif</p>
-          </CardContent>
-        </Card>
+      <Suspense fallback={<StatCardSkeleton />}>
+        <StatCard
+          icon={Users}
+          title="Total Santri"
+          value={data.stats.totalSiswa}
+          trend={formatTrendText(siswaTrend)}
+          trendType={siswaTrend.type}
+          description="Total santri terdaftar"
+        />
+      </Suspense>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Guru</CardTitle>
-            <GraduationCap className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalGuru}</div>
-            <p className="text-xs text-muted-foreground">Guru aktif</p>
-          </CardContent>
-        </Card>
+      <Suspense fallback={<StatCardSkeleton />}>
+        <StatCard
+          icon={GraduationCap}
+          title="Total Ustadz"
+          value={data.stats.totalGuru}
+          trend={formatTrendText(guruTrend)}
+          trendType={guruTrend.type}
+          description="Total ustadz terdaftar"
+        />
+      </Suspense>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Kelas</CardTitle>
-            <BookOpen className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalKelas}</div>
-            <p className="text-xs text-muted-foreground">Kelas aktif</p>
-          </CardContent>
-        </Card>
+      <Suspense fallback={<StatCardSkeleton />}>
+        <StatCard
+          icon={BookOpen}
+          title="Total Kelas"
+          value={data.stats.totalKelas}
+          trend={formatTrendText(kelasTrend)}
+          trendType={kelasTrend.type}
+          description="Total kelas aktif"
+        />
+      </Suspense>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Nilai</CardTitle>
-            <TrendingUp className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalNilai}</div>
-            <p className="text-xs text-muted-foreground">Nilai terinput</p>
-          </CardContent>
-        </Card>
+      <Suspense fallback={<StatCardSkeleton />}>
+        <StatCard
+          icon={TrendingUp}
+          title="Total Nilai"
+          value={data.stats.totalNilai}
+          trend={formatTrendText(nilaiTrend)}
+          trendType={nilaiTrend.type}
+          description="Total nilai yang diinput"
+        />
+      </Suspense>
+    </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Quick Actions */}
+        <div className="lg:col-span-1">
+          <Suspense fallback={<QuickActionsSkeleton />}>
+            <QuickActions actions={mockQuickActions} />
+          </Suspense>
+        </div>
+
+        {/* Charts Section */}
+        <div className="lg:col-span-2 space-y-6">
+          <Suspense fallback={<ChartSkeleton />}>
+            <NilaiChart data={transformedChartData} />
+          </Suspense>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Grade Distribution Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Distribusi Nilai</CardTitle>
-            <CardDescription>Sebaran grade nilai ujian</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={gradeChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="grade" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="count" fill="#3B82F6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {/* Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
+        <Suspense fallback={<RecentActivitySkeleton />}>
+          <RecentActivity activities={transformedActivities} />
+        </Suspense>
+      </div>
 
-        {/* Recent Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Aktivitas Terbaru</CardTitle>
-            <CardDescription>Nilai yang baru diinput</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium">{activity.siswa.nama}</p>
-                    <p className="text-sm text-gray-600">{activity.mata_pelajaran.nama}</p>
-                  </div>
-                  <div className="text-right">
-                    <Badge variant="secondary">{activity.nilai}</Badge>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(activity.created_at).toLocaleDateString("id-ID")}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Footer */}
+      <div className="text-center py-8 border-t border-border">
+        <p className="text-sm text-muted-foreground">
+          E-Raport Nuurush Sholaah - Sistem Manajemen Rapor Modern
+        </p>
       </div>
     </div>
   )

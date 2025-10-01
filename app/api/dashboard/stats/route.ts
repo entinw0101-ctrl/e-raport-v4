@@ -3,12 +3,53 @@ import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest) {
   try {
-    // Get total counts
+    const now = new Date()
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+
+    // Get total counts for current month
     const [siswaCount, guruCount, kelasCount, nilaiUjianCount] = await Promise.all([
       prisma.siswa.count(),
       prisma.guru.count(),
       prisma.kelas.count(),
       prisma.nilaiUjian.count(),
+    ])
+
+    // Get counts for last month (for trend calculation)
+    const [siswaLastMonth, guruLastMonth, kelasLastMonth, nilaiUjianLastMonth] = await Promise.all([
+      prisma.siswa.count({
+        where: {
+          dibuat_pada: {
+            gte: lastMonth,
+            lte: lastMonthEnd
+          }
+        }
+      }),
+      prisma.guru.count({
+        where: {
+          dibuat_pada: {
+            gte: lastMonth,
+            lte: lastMonthEnd
+          }
+        }
+      }),
+      prisma.kelas.count({
+        where: {
+          dibuat_pada: {
+            gte: lastMonth,
+            lte: lastMonthEnd
+          }
+        }
+      }),
+      prisma.nilaiUjian.count({
+        where: {
+          dibuat_pada: {
+            gte: lastMonth,
+            lte: lastMonthEnd
+          }
+        }
+      }),
     ])
 
     // Get recent activities
@@ -43,6 +84,12 @@ export async function GET(request: NextRequest) {
         totalGuru: guruCount,
         totalKelas: kelasCount,
         totalNilai: nilaiUjianCount,
+      },
+      lastMonthStats: {
+        totalSiswa: siswaLastMonth,
+        totalGuru: guruLastMonth,
+        totalKelas: kelasLastMonth,
+        totalNilai: nilaiUjianLastMonth,
       },
       recentActivities: recentNilai.map(item => ({
         id: item.id,

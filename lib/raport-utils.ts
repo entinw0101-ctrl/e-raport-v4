@@ -415,12 +415,16 @@ export async function generateLaporanNilai(
         ? (rankingData.isComplete ? rankingData.rank : `Sementara (${rankingData.rank})`)
         : (nilaiUjian.length > 0 ? "-" : null),
       totalSiswa: rankingData ? rankingData.totalActiveStudents : 0,
-      nilaiHafalan: nilaiHafalan.map(h => ({
-        mataPelajaran: h.mata_pelajaran.nama_mapel,
-        kitab: h.mata_pelajaran.kurikulum?.[0]?.kitab?.nama_kitab || "-",
-        targetHafalan: h.target_hafalan || "-",
-        predikat: normalizeHafalanPredikat(h.predikat)
-      })),
+      nilaiHafalan: nilaiHafalan.map(h => {
+        const kurikulumData = h.mata_pelajaran.kurikulum?.[0]
+        return {
+          mataPelajaran: h.mata_pelajaran.nama_mapel,
+          kitab: kurikulumData?.kitab?.nama_kitab || "-",
+          batasHafalan: kurikulumData?.batas_hafalan || "-",
+          targetHafalan: h.target_hafalan || "-",
+          predikat: normalizeHafalanPredikat(h.predikat)
+        }
+      }),
       statusHafalan: hafalanStatus,
       kehadiran: kehadiran.map(k => ({
         indikatorKehadiran: k.indikator_kehadiran.nama_indikator,

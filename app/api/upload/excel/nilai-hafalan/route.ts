@@ -156,9 +156,9 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            // Use kitab name from kurikulum, not from Excel (to prevent mismatches)
-            const correctKitabName = kurikulum.kitab?.nama_kitab || kurikulum.batas_hafalan || ""
-            console.log(`Using kitab name from kurikulum: "${correctKitabName}" for ${namaMapel} (Excel had: "${targetHafalan}")`)
+            // Use target_hafalan value from Excel (which comes from kurikulum.batas_hafalan in template)
+            // This ensures consistency with the exported template
+            console.log(`Using target_hafalan from Excel: "${targetHafalan}" for ${namaMapel}`)
 
             // Mapping dari display value ke enum value
             let enumPredikat: any;
@@ -183,14 +183,14 @@ export async function POST(request: NextRequest) {
                 },
                 update: {
                     predikat: enumPredikat,
-                    target_hafalan: correctKitabName || null,
+                    target_hafalan: targetHafalan || null,
                 },
                 create: {
                     siswa_id: siswa.id,
                     mapel_id: mataPelajaran.id,
                     periode_ajaran_id: periodeAjaran.id,
                     predikat: enumPredikat,
-                    target_hafalan: correctKitabName || null,
+                    target_hafalan: targetHafalan || null,
                 },
             }).catch((error: any) => {
                 console.error('Upsert error for nilai hafalan:', error)
