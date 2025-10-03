@@ -57,6 +57,7 @@
     "framer-motion": "^12.23.22",
     "fs": "latest",
     "geist": "latest",
+    "image-size": "^2.0.2",
     "input-otp": "1.4.1",
     "libreoffice-convert": "^1.7.0",
     "lucide-react": "^0.454.0",
