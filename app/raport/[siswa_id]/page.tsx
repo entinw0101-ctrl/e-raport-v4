@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { PageHeader } from "@/src/components/PageHeader"
 import { useToast } from "@/hooks/use-toast"
@@ -76,6 +78,7 @@ interface StudentData {
     nilai: number
     predikat: string
     indikator_sikap: {
+      id: string
       jenis_sikap: string
       indikator: string
     }
@@ -108,6 +111,24 @@ export default function StudentRaportPage() {
   })
   const [savingNotes, setSavingNotes] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+
+  // Individual editing states
+  const [editingNilaiUjian, setEditingNilaiUjian] = useState<string | null>(null)
+  const [editingNilaiHafalan, setEditingNilaiHafalan] = useState<string | null>(null)
+  const [editingKehadiran, setEditingKehadiran] = useState<string | null>(null)
+  const [editingPenilaianSikap, setEditingPenilaianSikap] = useState<string | null>(null)
+
+  // Edit data states
+  const [editNilaiUjianData, setEditNilaiUjianData] = useState({ nilai_angka: '', predikat: '' })
+  const [editNilaiHafalanData, setEditNilaiHafalanData] = useState({ predikat: '', target_hafalan: '' })
+  const [editKehadiranData, setEditKehadiranData] = useState({ sakit: '', izin: '', alpha: '' })
+  const [editPenilaianSikapData, setEditPenilaianSikapData] = useState({ nilai: '' })
+
+  // Saving states
+  const [savingNilaiUjian, setSavingNilaiUjian] = useState(false)
+  const [savingNilaiHafalan, setSavingNilaiHafalan] = useState(false)
+  const [savingKehadiran, setSavingKehadiran] = useState(false)
+  const [savingPenilaianSikap, setSavingPenilaianSikap] = useState(false)
 
   const { toast } = useToast()
   const { data: session } = useSession()
@@ -333,6 +354,286 @@ export default function StudentRaportPage() {
     }
   }
 
+  // Individual update handlers
+  const handleUpdateNilaiUjian = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    setSavingNilaiUjian(true)
+    try {
+      const response = await fetch(`/api/nilai-ujian/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nilai_angka: parseFloat(editNilaiUjianData.nilai_angka),
+          predikat: editNilaiUjianData.predikat || undefined,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        setEditingNilaiUjian(null)
+        toast({
+          title: "Berhasil",
+          description: "Nilai ujian berhasil diperbarui",
+        })
+      } else {
+        throw new Error(result.error || "Gagal memperbarui nilai ujian")
+      }
+    } catch (error) {
+      console.error("Error updating nilai ujian:", error)
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui nilai ujian",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingNilaiUjian(false)
+    }
+  }
+
+  const handleDeleteNilaiUjian = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    try {
+      const response = await fetch(`/api/nilai-ujian/${id}`, {
+        method: 'DELETE',
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        toast({
+          title: "Berhasil",
+          description: "Nilai ujian berhasil dihapus",
+        })
+      } else {
+        throw new Error(result.error || "Gagal menghapus nilai ujian")
+      }
+    } catch (error) {
+      console.error("Error deleting nilai ujian:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menghapus nilai ujian",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUpdateNilaiHafalan = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    setSavingNilaiHafalan(true)
+    try {
+      const response = await fetch(`/api/nilai-hafalan/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          predikat: editNilaiHafalanData.predikat,
+          target_hafalan: editNilaiHafalanData.target_hafalan || undefined,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        setEditingNilaiHafalan(null)
+        toast({
+          title: "Berhasil",
+          description: "Nilai hafalan berhasil diperbarui",
+        })
+      } else {
+        throw new Error(result.error || "Gagal memperbarui nilai hafalan")
+      }
+    } catch (error) {
+      console.error("Error updating nilai hafalan:", error)
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui nilai hafalan",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingNilaiHafalan(false)
+    }
+  }
+
+  const handleDeleteNilaiHafalan = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    try {
+      const response = await fetch(`/api/nilai-hafalan/${id}`, {
+        method: 'DELETE',
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        toast({
+          title: "Berhasil",
+          description: "Nilai hafalan berhasil dihapus",
+        })
+      } else {
+        throw new Error(result.error || "Gagal menghapus nilai hafalan")
+      }
+    } catch (error) {
+      console.error("Error deleting nilai hafalan:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menghapus nilai hafalan",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUpdateKehadiran = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    setSavingKehadiran(true)
+    try {
+      const response = await fetch(`/api/kehadiran/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sakit: parseInt(editKehadiranData.sakit),
+          izin: parseInt(editKehadiranData.izin),
+          alpha: parseInt(editKehadiranData.alpha),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        setEditingKehadiran(null)
+        toast({
+          title: "Berhasil",
+          description: "Data kehadiran berhasil diperbarui",
+        })
+      } else {
+        throw new Error(result.error || "Gagal memperbarui data kehadiran")
+      }
+    } catch (error) {
+      console.error("Error updating kehadiran:", error)
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui data kehadiran",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingKehadiran(false)
+    }
+  }
+
+  const handleDeleteKehadiran = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    try {
+      const response = await fetch(`/api/kehadiran/${id}`, {
+        method: 'DELETE',
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        toast({
+          title: "Berhasil",
+          description: "Data kehadiran berhasil dihapus",
+        })
+      } else {
+        throw new Error(result.error || "Gagal menghapus data kehadiran")
+      }
+    } catch (error) {
+      console.error("Error deleting kehadiran:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menghapus data kehadiran",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUpdatePenilaianSikap = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    setSavingPenilaianSikap(true)
+    try {
+      const response = await fetch(`/api/penilaian-sikap/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId,
+          indikator_sikap_id: data?.penilaianSikap.find(p => p.id === id)?.indikator_sikap.id,
+          nilai: editPenilaianSikapData.nilai,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        setEditingPenilaianSikap(null)
+        toast({
+          title: "Berhasil",
+          description: "Penilaian sikap berhasil diperbarui",
+        })
+      } else {
+        throw new Error(result.error || "Gagal memperbarui penilaian sikap")
+      }
+    } catch (error) {
+      console.error("Error updating penilaian sikap:", error)
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui penilaian sikap",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingPenilaianSikap(false)
+    }
+  }
+
+  const handleDeletePenilaianSikap = async (id: string) => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    try {
+      const response = await fetch(`/api/penilaian-sikap/${id}`, {
+        method: 'DELETE',
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        await fetchStudentData()
+        toast({
+          title: "Berhasil",
+          description: "Penilaian sikap berhasil dihapus",
+        })
+      } else {
+        throw new Error(result.error || "Gagal menghapus penilaian sikap")
+      }
+    } catch (error) {
+      console.error("Error deleting penilaian sikap:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menghapus penilaian sikap",
+        variant: "destructive",
+      })
+    }
+  }
+
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -435,7 +736,7 @@ export default function StudentRaportPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Nilai Ujian ({data.nilaiUjian.length} mata pelajaran)</CardTitle>
-              {session?.user?.role === 'admin' && data.nilaiUjian.length > 0 && (
+              {session?.user?.role?.includes('admin') && data.nilaiUjian.length > 0 && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" disabled={deleting === 'nilai-ujian'}>
@@ -464,12 +765,88 @@ export default function StudentRaportPage() {
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {data.nilaiUjian.map((nilai) => (
-                <div key={nilai.id} className="flex justify-between items-center p-2 border rounded">
-                  <span className="text-sm">{nilai.mata_pelajaran.nama_mapel}</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium ${getNilaiColor(nilai.nilai_angka)}`}>{nilai.nilai_angka}</span>
-                    <Badge variant="outline">{nilai.predikat}</Badge>
-                  </div>
+                <div key={nilai.id} className="p-2 border rounded">
+                  {editingNilaiUjian === nilai.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm flex-1">{nilai.mata_pelajaran.nama_mapel}</span>
+                      <Input
+                        type="number"
+                        placeholder="Nilai"
+                        value={editNilaiUjianData.nilai_angka}
+                        onChange={(e) => setEditNilaiUjianData(prev => ({ ...prev, nilai_angka: e.target.value }))}
+                        className="w-20"
+                        min="0"
+                        max="100"
+                      />
+                      <Input
+                        placeholder="Predikat"
+                        value={editNilaiUjianData.predikat}
+                        onChange={(e) => setEditNilaiUjianData(prev => ({ ...prev, predikat: e.target.value }))}
+                        className="w-16"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => handleUpdateNilaiUjian(nilai.id)}
+                        disabled={savingNilaiUjian}
+                      >
+                        <Save className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingNilaiUjian(null)}
+                        disabled={savingNilaiUjian}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">{nilai.mata_pelajaran.nama_mapel}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium ${getNilaiColor(nilai.nilai_angka)}`}>{nilai.nilai_angka}</span>
+                        <Badge variant="outline">{nilai.predikat}</Badge>
+                        {session?.user?.role?.includes('admin') && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingNilaiUjian(nilai.id)
+                                setEditNilaiUjianData({
+                                  nilai_angka: nilai.nilai_angka.toString(),
+                                  predikat: nilai.predikat
+                                })
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Apakah Anda yakin ingin menghapus nilai ujian {nilai.mata_pelajaran.nama_mapel}?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteNilaiUjian(nilai.id)}>
+                                    Hapus
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {data.nilaiUjian.length === 0 && (
@@ -484,7 +861,7 @@ export default function StudentRaportPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Nilai Hafalan ({data.nilaiHafalan.length} mata pelajaran)</CardTitle>
-              {session?.user?.role === 'admin' && data.nilaiHafalan.length > 0 && (
+              {session?.user?.role?.includes('admin') && data.nilaiHafalan.length > 0 && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" disabled={deleting === 'nilai-hafalan'}>
@@ -514,20 +891,104 @@ export default function StudentRaportPage() {
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {data.nilaiHafalan.map((nilai) => (
                 <div key={nilai.id} className="p-2 border rounded">
-                  <div className="flex justify-between items-start">
-                    <div>
+                  {editingNilaiHafalan === nilai.id ? (
+                    <div className="space-y-2">
                       <p className="text-sm font-medium">{nilai.mata_pelajaran.nama_mapel}</p>
                       <p className="text-xs text-muted-foreground">
                         Kitab: {nilai.kurikulum?.kitab?.nama_kitab || nilai.kurikulum?.batas_hafalan || 'Tidak ada data kitab'}
                       </p>
-                      {nilai.kurikulum?.batas_hafalan && nilai.kurikulum?.batas_hafalan !== nilai.kurikulum?.kitab?.nama_kitab && (
-                        <p className="text-xs text-muted-foreground">
-                          Target Hafalan: {nilai.kurikulum.batas_hafalan}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={editNilaiHafalanData.predikat}
+                          onValueChange={(value) => setEditNilaiHafalanData(prev => ({ ...prev, predikat: value }))}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Tercapai">Tercapai</SelectItem>
+                            <SelectItem value="Tidak Tercapai">Tidak Tercapai</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          placeholder="Target Hafalan"
+                          value={editNilaiHafalanData.target_hafalan}
+                          onChange={(e) => setEditNilaiHafalanData(prev => ({ ...prev, target_hafalan: e.target.value }))}
+                          className="flex-1"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpdateNilaiHafalan(nilai.id)}
+                          disabled={savingNilaiHafalan}
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingNilaiHafalan(null)}
+                          disabled={savingNilaiHafalan}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <Badge variant="outline">{nilai.predikat}</Badge>
-                  </div>
+                  ) : (
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-medium">{nilai.mata_pelajaran.nama_mapel}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Kitab: {nilai.kurikulum?.kitab?.nama_kitab || nilai.kurikulum?.batas_hafalan || 'Tidak ada data kitab'}
+                        </p>
+                        {nilai.kurikulum?.batas_hafalan && nilai.kurikulum?.batas_hafalan !== nilai.kurikulum?.kitab?.nama_kitab && (
+                          <p className="text-xs text-muted-foreground">
+                            Target Hafalan: {nilai.kurikulum.batas_hafalan}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{nilai.predikat}</Badge>
+                        {session?.user?.role?.includes('admin') && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingNilaiHafalan(nilai.id)
+                                setEditNilaiHafalanData({
+                                  predikat: nilai.predikat,
+                                  target_hafalan: nilai.kurikulum?.batas_hafalan || ''
+                                })
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Apakah Anda yakin ingin menghapus nilai hafalan {nilai.mata_pelajaran.nama_mapel}?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteNilaiHafalan(nilai.id)}>
+                                    Hapus
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {data.nilaiHafalan.length === 0 && (
@@ -542,7 +1003,7 @@ export default function StudentRaportPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Kehadiran ({data.kehadiran.length} indikator)</CardTitle>
-              {session?.user?.role === 'admin' && data.kehadiran.length > 0 && (
+              {session?.user?.role?.includes('admin') && data.kehadiran.length > 0 && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" disabled={deleting === 'kehadiran'}>
@@ -572,13 +1033,109 @@ export default function StudentRaportPage() {
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {data.kehadiran.map((k) => (
                 <div key={k.id} className="p-2 border rounded">
-                  <p className="text-sm font-medium">{k.indikator_kehadiran.nama_indikator}</p>
-                  <div className="flex gap-4 text-xs text-muted-foreground mt-1">
-                    <span>Sakit: {k.sakit}</span>
-                    <span>Izin: {k.izin}</span>
-                    <span>Alpha: {k.alpha}</span>
-                    <span>Total: {k.sakit + k.izin + k.alpha}</span>
-                  </div>
+                  {editingKehadiran === k.id ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">{k.indikator_kehadiran.nama_indikator}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <label className="text-xs">Sakit:</label>
+                          <Input
+                            type="number"
+                            value={editKehadiranData.sakit}
+                            onChange={(e) => setEditKehadiranData(prev => ({ ...prev, sakit: e.target.value }))}
+                            className="w-16"
+                            min="0"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <label className="text-xs">Izin:</label>
+                          <Input
+                            type="number"
+                            value={editKehadiranData.izin}
+                            onChange={(e) => setEditKehadiranData(prev => ({ ...prev, izin: e.target.value }))}
+                            className="w-16"
+                            min="0"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <label className="text-xs">Alpha:</label>
+                          <Input
+                            type="number"
+                            value={editKehadiranData.alpha}
+                            onChange={(e) => setEditKehadiranData(prev => ({ ...prev, alpha: e.target.value }))}
+                            className="w-16"
+                            min="0"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpdateKehadiran(k.id)}
+                          disabled={savingKehadiran}
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingKehadiran(null)}
+                          disabled={savingKehadiran}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex justify-between items-start">
+                        <p className="text-sm font-medium">{k.indikator_kehadiran.nama_indikator}</p>
+                        {session?.user?.role?.includes('admin') && (
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingKehadiran(k.id)
+                                setEditKehadiranData({
+                                  sakit: k.sakit.toString(),
+                                  izin: k.izin.toString(),
+                                  alpha: k.alpha.toString()
+                                })
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Apakah Anda yakin ingin menghapus data kehadiran {k.indikator_kehadiran.nama_indikator}?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteKehadiran(k.id)}>
+                                    Hapus
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+                        <span>Sakit: {k.sakit}</span>
+                        <span>Izin: {k.izin}</span>
+                        <span>Alpha: {k.alpha}</span>
+                        <span>Total: {k.sakit + k.izin + k.alpha}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {data.kehadiran.length === 0 && (
@@ -593,7 +1150,7 @@ export default function StudentRaportPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Penilaian Sikap ({data.penilaianSikap.length} indikator)</CardTitle>
-              {session?.user?.role === 'admin' && data.penilaianSikap.length > 0 && (
+              {session?.user?.role?.includes('admin') && data.penilaianSikap.length > 0 && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" disabled={deleting === 'penilaian-sikap'}>
@@ -622,17 +1179,100 @@ export default function StudentRaportPage() {
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {data.penilaianSikap.map((sikap) => (
-                <div key={sikap.id} className="flex justify-between items-center p-2 border rounded">
-                  <div>
-                    <p className="text-sm font-medium">{sikap.indikator_sikap.indikator}</p>
-                    <p className="text-xs text-muted-foreground">{sikap.indikator_sikap.jenis_sikap}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium ${getNilaiColor(sikap.nilai)}`}>{sikap.nilai}</span>
-                    <Badge variant="outline">
-                      {sikap.predikat}
-                    </Badge>
-                  </div>
+                <div key={sikap.id} className="p-2 border rounded">
+                  {editingPenilaianSikap === sikap.id ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{sikap.indikator_sikap.indikator}</p>
+                        <p className="text-xs text-muted-foreground">{sikap.indikator_sikap.jenis_sikap}</p>
+                      </div>
+                      <Select
+                        value={editPenilaianSikapData.nilai}
+                        onValueChange={(value) => setEditPenilaianSikapData({ nilai: value })}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Sangat Baik">Sangat Baik</SelectItem>
+                          <SelectItem value="Baik">Baik</SelectItem>
+                          <SelectItem value="Cukup">Cukup</SelectItem>
+                          <SelectItem value="Kurang">Kurang</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        onClick={() => handleUpdatePenilaianSikap(sikap.id)}
+                        disabled={savingPenilaianSikap}
+                      >
+                        <Save className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingPenilaianSikap(null)}
+                        disabled={savingPenilaianSikap}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-medium">{sikap.indikator_sikap.indikator}</p>
+                        <p className="text-xs text-muted-foreground">{sikap.indikator_sikap.jenis_sikap}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium ${getNilaiColor(sikap.nilai)}`}>{sikap.nilai}</span>
+                        <Badge variant="outline">
+                          {sikap.predikat}
+                        </Badge>
+                        {session?.user?.role?.includes('admin') && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingPenilaianSikap(sikap.id)
+                                const nilaiMap: Record<number, string> = {
+                                  4: "Sangat Baik",
+                                  3: "Baik",
+                                  2: "Cukup",
+                                  1: "Kurang"
+                                }
+                                setEditPenilaianSikapData({
+                                  nilai: nilaiMap[sikap.nilai] || "Kurang"
+                                })
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Apakah Anda yakin ingin menghapus penilaian sikap {sikap.indikator_sikap.indikator}?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeletePenilaianSikap(sikap.id)}>
+                                    Hapus
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {data.penilaianSikap.length === 0 && (
@@ -651,7 +1291,7 @@ export default function StudentRaportPage() {
               <CardTitle>Catatan Siswa</CardTitle>
               <CardDescription>Catatan akademik dan sikap siswa untuk periode ini</CardDescription>
             </div>
-            {session?.user?.role === 'admin' && (
+            {session?.user?.role?.includes('admin') && (
               <div className="flex gap-2">
                 {!editingNotes ? (
                   <>

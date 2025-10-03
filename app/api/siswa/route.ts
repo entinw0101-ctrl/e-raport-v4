@@ -3,6 +3,18 @@ import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("DATABASE_URL exists:", !!process.env.DATABASE_URL)
+    console.log("DATABASE_URL starts with:", process.env.DATABASE_URL?.substring(0, 20))
+
+    // Test database connection
+    try {
+      await prisma.$connect()
+      console.log("Prisma connected successfully")
+    } catch (connectError) {
+      console.error("Prisma connection failed:", connectError)
+      throw connectError
+    }
+
     const { searchParams } = new URL(request.url)
     const page = Number.parseInt(searchParams.get("page") || "1")
     const per_page = Number.parseInt(searchParams.get("per_page") || "10")

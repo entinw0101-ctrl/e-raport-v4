@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// Helper functions (same as legacy code)
+// Helper functions (tidak ada perubahan)
 const getPredicate = (nilai: number | null): string => {
   if (nilai === null || nilai === undefined) return '-'
   const n = parseFloat(nilai.toString())
@@ -15,7 +15,6 @@ const getPredicate = (nilai: number | null): string => {
   return 'Kurang Sekali'
 }
 
-// Predicate function for penilaian sikap (1-100 scale)
 const getSikapPredicate = (nilai: number | null): string => {
   if (nilai === null || nilai === undefined) return '-'
   const n = parseFloat(nilai.toString())
@@ -32,9 +31,7 @@ const formatTanggal = (tanggal: Date | string | null): string => {
   if (!tanggal) return '-'
   try {
     const date = new Date(tanggal)
-    // Check if date is valid
     if (isNaN(date.getTime())) return '-'
-
     const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
     return `${date.getDate()} ${bulan[date.getMonth()]} ${date.getFullYear()}`
   } catch (error) {
@@ -43,7 +40,6 @@ const formatTanggal = (tanggal: Date | string | null): string => {
   }
 }
 
-// Helper function to safely calculate averages
 const calculateAverage = (items: any[], key: string): string => {
   if (!items || items.length === 0) return '0.00'
   const numericItems = items
@@ -66,114 +62,59 @@ export interface FullRaportData {
   history: any
 }
 
-// Refactored getFullRaportData function using Prisma
 export async function getFullRaportData(siswaId: string, semester: string, tahunAjaranId: string): Promise<FullRaportData> {
-  const numericSiswaId = parseInt(siswaId, 10)
-  const numericTahunAjaranId = parseInt(tahunAjaranId, 10)
+    const numericSiswaId = parseInt(siswaId, 10);
+    const numericTahunAjaranId = parseInt(tahunAjaranId, 10);
 
-  const siswa = await prisma.siswa.findUnique({
-    where: { id: numericSiswaId },
-    include: {
-      kamar: true,
-      kelas: {
+    const siswa = await prisma.siswa.findUnique({
+        where: { id: numericSiswaId },
         include: {
-          wali_kelas: true
-        }
-      }
+            kamar: true,
+            kelas: { include: { wali_kelas: true, tingkatan: true } },
+        },
+    });
+    if (!siswa) throw new Error('Siswa tidak ditemukan');
+
+    const periodeRec = await prisma.periodeAjaran.findUnique({
+        where: { id: numericTahunAjaranId },
+        include: { master_tahun_ajaran: true },
+    });
+    const masterTaId = periodeRec?.master_tahun_ajaran_id;
+
+    let history = null;
+    if (masterTaId) {
+        history = await prisma.riwayatKelasSiswa.findFirst({
+            where: { siswa_id: numericSiswaId, master_tahun_ajaran_id: masterTaId },
+        });
     }
-  })
-  if (!siswa) throw new Error('Siswa tidak ditemukan')
 
-  // Resolve periode/master TA and semester from provided tahunAjaranId
-  const periodeRec = await prisma.periodeAjaran.findUnique({
-    where: { id: numericTahunAjaranId },
-    include: { master_tahun_ajaran: true }
-  })
-  const derivedSemester = periodeRec ? periodeRec.semester : semester
-  const masterTaId = periodeRec ? (periodeRec.master_tahun_ajaran_id || (periodeRec.master_tahun_ajaran && periodeRec.master_tahun_ajaran.id)) : null
-
-  let history = null
-  if (masterTaId) {
-    history = await prisma.riwayatKelasSiswa.findFirst({
-      where: {
+    const kepalaPesantren = null;
+    const contextTahunAjaranId = numericTahunAjaranId;
+    const commonWhere = {
         siswa_id: numericSiswaId,
-        master_tahun_ajaran_id: masterTaId,
-      }
-    })
-    if (!history) {
-      console.warn('RiwayatKelasSiswa not found for siswa %s with master_ta %s - falling back to other lookup', numericSiswaId, masterTaId)
-    }
-  }
+        periode_ajaran_id: contextTahunAjaranId,
+    };
+    const studentTingkatanId = siswa.kelas?.tingkatan_id;
 
-  const kepalaPesantren = null
+    const [nilaiUjians, nilaiHafalans, sikaps, kehadirans, kurikulums] = await Promise.all([
+        prisma.nilaiUjian.findMany({
+            where: { ...commonWhere, mata_pelajaran: { jenis: "Ujian" } },
+            include: { mata_pelajaran: { include: { kurikulum: { where: { tingkatan_id: studentTingkatanId }, include: { kitab: true } } } } },
+            orderBy: { mata_pelajaran: { nama_mapel: 'asc' } },
+        }),
+        prisma.nilaiHafalan.findMany({
+            where: { ...commonWhere, mata_pelajaran: { jenis: "Hafalan" } },
+            include: { mata_pelajaran: { select: { nama_mapel: true } } },
+            orderBy: { mata_pelajaran: { nama_mapel: 'asc' } },
+        }),
+        prisma.penilaianSikap.findMany({ where: commonWhere, include: { indikator_sikap: true }, orderBy: { id: 'asc' } }),
+        prisma.kehadiran.findMany({ where: commonWhere, include: { indikator_kehadiran: true }, orderBy: { indikator_kehadiran: { nama_indikator: 'asc' } } }),
+        studentTingkatanId ? prisma.kurikulum.findMany({ where: { tingkatan_id: studentTingkatanId }, include: { kitab: true, mata_pelajaran: true } }) : Promise.resolve([]),
+    ]);
 
-  const contextKelasId = history ? history.kelas_id : siswa.kelas_id
-  const contextTahunAjaranId = numericTahunAjaranId
-
-  const commonWhere = {
-    siswa_id: numericSiswaId,
-    periode_ajaran_id: contextTahunAjaranId
-  }
-
-  const [nilaiUjians, nilaiHafalans, sikaps, kehadirans, kurikulums] = await Promise.all([
-    prisma.nilaiUjian.findMany({
-      where: {
-        ...commonWhere,
-        mata_pelajaran: {
-          jenis: "Ujian"
-        }
-      },
-      include: { mata_pelajaran: true },
-      orderBy: { mata_pelajaran: { nama_mapel: 'asc' } }
-    }),
-    // [PERBAIKAN] Query nilaiHafalan disederhanakan agar tidak error jika kurikulum tidak ada
-    prisma.nilaiHafalan.findMany({
-      where: {
-        ...commonWhere,
-        mata_pelajaran: {
-          jenis: "Hafalan",
-        }
-      },
-      include: { mata_pelajaran: true },
-      orderBy: { mata_pelajaran: { nama_mapel: 'asc' } }
-    }),
-    prisma.penilaianSikap.findMany({
-      where: commonWhere,
-      include: { indikator_sikap: true },
-      orderBy: { id: 'asc' }
-    }),
-    prisma.kehadiran.findMany({
-      where: commonWhere,
-      include: { indikator_kehadiran: true },
-      orderBy: { indikator_kehadiran: { nama_indikator: 'asc' } }
-    }),
-    (async () => {
-      const kelasRec = contextKelasId ? await prisma.kelas.findUnique({
-        where: { id: contextKelasId },
-        include: { tingkatan: true }
-      }) : null
-      const tingkatanId = kelasRec?.tingkatan_id
-      const where: any = {}
-      if (tingkatanId) where.tingkatan_id = tingkatanId
-      return prisma.kurikulum.findMany({
-        where,
-        include: { kitab: true, mata_pelajaran: true }
-      })
-    })()
-  ])
-
-  return {
-    siswa,
-    tahunAjaran: await prisma.periodeAjaran.findUnique({ where: { id: contextTahunAjaranId } }),
-    kepalaPesantren,
-    nilaiUjians,
-    nilaiHafalans,
-    sikaps,
-    kehadirans,
-    kurikulums,
-    history
-  }
+    return { siswa, tahunAjaran: await prisma.periodeAjaran.findUnique({ where: { id: contextTahunAjaranId } }), kepalaPesantren, nilaiUjians, nilaiHafalans, sikaps, kehadirans, kurikulums, history };
 }
+
 
 export { getPredicate, getSikapPredicate, formatTanggal, calculateAverage }
 
@@ -182,13 +123,10 @@ export function convertToHijriah(masehiYear: number): number {
   return moment(`${masehiYear}-07-01`, 'YYYY-MM-DD').iYear()
 }
 
-// Generate complete nilai rapor data
 export async function generateLaporanNilai(
   siswaId: string,
   periodeAjaranId: string,
-  options: {
-    isAdmin?: boolean
-  } = {}
+  options: { isAdmin?: boolean } = {}
 ): Promise<{
   canGenerate: boolean
   error?: string
@@ -223,102 +161,70 @@ export async function generateLaporanNilai(
 
     const periodeAjaran = await prisma.periodeAjaran.findUnique({
       where: { id: parseInt(periodeAjaranId) },
-      include: {
-        master_tahun_ajaran: true
-      }
+      include: { master_tahun_ajaran: true }
     })
 
     if (!periodeAjaran) {
       return { canGenerate: false, error: "Periode ajaran tidak ditemukan" }
     }
     
-    // [PERBAIKAN] Query untuk nilaiUjian disederhanakan
-    const nilaiUjian = await prisma.nilaiUjian.findMany({
-      where: {
-        siswa_id: parseInt(siswaId),
-        periode_ajaran_id: parseInt(periodeAjaranId),
-        mata_pelajaran: {
-          jenis: "Ujian",
-        },
-      },
-      include: {
-        mata_pelajaran: true,
-      },
-      orderBy: {
-        mata_pelajaran: {
-          nama_mapel: "asc",
-        },
-      },
-    });
+    const studentTingkatanId = siswa.kelas?.tingkatan_id;
+
+    const [nilaiUjian, nilaiHafalan, kehadiran, catatanSiswa] = await Promise.all([
+        // [REVISI 1] Query Nilai Ujian sekarang mengambil kurikulum yang relevan
+        prisma.nilaiUjian.findMany({
+            where: {
+                siswa_id: parseInt(siswaId),
+                periode_ajaran_id: parseInt(periodeAjaranId),
+                mata_pelajaran: { jenis: "Ujian" },
+            },
+            include: {
+                mata_pelajaran: {
+                    include: {
+                        kurikulum: {
+                            where: { tingkatan_id: studentTingkatanId },
+                            include: { kitab: true },
+                        },
+                    },
+                },
+            },
+            orderBy: { mata_pelajaran: { nama_mapel: 'asc' } },
+        }),
+        // [REVISI 2] Query Nilai Hafalan disederhanakan
+        prisma.nilaiHafalan.findMany({
+            where: {
+                siswa_id: parseInt(siswaId),
+                periode_ajaran_id: parseInt(periodeAjaranId),
+                mata_pelajaran: { jenis: "Hafalan" },
+            },
+            include: {
+                mata_pelajaran: { select: { nama_mapel: true } },
+            },
+            orderBy: { mata_pelajaran: { nama_mapel: "asc" } },
+        }),
+        prisma.kehadiran.findMany({
+            where: { siswa_id: parseInt(siswaId), periode_ajaran_id: parseInt(periodeAjaranId) },
+            include: { indikator_kehadiran: true },
+            orderBy: { indikator_kehadiran: { nama_indikator: 'asc' } },
+        }),
+        prisma.catatanSiswa.findUnique({
+            where: {
+                siswa_id_periode_ajaran_id: {
+                    siswa_id: parseInt(siswaId),
+                    periode_ajaran_id: parseInt(periodeAjaranId),
+                },
+            },
+        }),
+    ]);
 
     const warnings: string[] = []
-
-    const kehadiran = await prisma.kehadiran.findMany({
-      where: {
-        siswa_id: parseInt(siswaId),
-        periode_ajaran_id: parseInt(periodeAjaranId)
-      },
-      include: {
-        indikator_kehadiran: true
-      },
-      orderBy: {
-        indikator_kehadiran: {
-          nama_indikator: 'asc'
-        }
-      }
-    })
-
-    if (kehadiran.length === 0) {
-      warnings.push("Belum ada data kehadiran")
-    }
-    
-    // [PERBAIKAN] Query untuk nilaiHafalan disederhanakan
-    const nilaiHafalan = await prisma.nilaiHafalan.findMany({
-      where: {
-        siswa_id: parseInt(siswaId),
-        periode_ajaran_id: parseInt(periodeAjaranId),
-        mata_pelajaran: {
-          jenis: "Hafalan",
-        },
-      },
-      include: {
-        mata_pelajaran: {
-          select: {
-            nama_mapel: true,
-          },
-        },
-      },
-      orderBy: {
-        mata_pelajaran: {
-          nama_mapel: "asc",
-        },
-      },
-    })
-
-    if (nilaiHafalan.length === 0) {
-      warnings.push("Belum ada data nilai hafalan")
-    }
-
-    const catatanSiswa = await prisma.catatanSiswa.findUnique({
-      where: {
-        siswa_id_periode_ajaran_id: {
-          siswa_id: parseInt(siswaId),
-          periode_ajaran_id: parseInt(periodeAjaranId)
-        }
-      }
-    })
-
-    if (!catatanSiswa?.catatan_akademik) {
-      warnings.push("Belum ada catatan akademik")
-    }
+    if (kehadiran.length === 0) warnings.push("Belum ada data kehadiran")
+    if (nilaiHafalan.length === 0) warnings.push("Belum ada data nilai hafalan")
+    if (!catatanSiswa?.catatan_akademik) warnings.push("Belum ada catatan akademik")
 
     let reportStatus: 'ready' | 'partial' | 'not_ready' = 'not_ready'
     if (nilaiUjian.length > 0) {
-      const hasKehadiran = kehadiran.length > 0
-      const hasHafalan = nilaiHafalan.length > 0
-      const hasCatatan = !!catatanSiswa?.catatan_akademik
-
-      if (hasKehadiran && hasHafalan && hasCatatan) {
+      if (kehadiran.length > 0 && nilaiHafalan.length > 0 && !!catatanSiswa?.catatan_akademik) {
         reportStatus = 'ready'
       } else {
         reportStatus = 'partial'
@@ -326,17 +232,10 @@ export async function generateLaporanNilai(
     }
 
     if (!options.isAdmin && nilaiUjian.length === 0) {
-      return {
-        canGenerate: false,
-        error: "Siswa aktif harus memiliki minimal 1 nilai ujian untuk generate laporan",
-        reportStatus
-      }
+      return { canGenerate: false, error: "Siswa aktif harus memiliki minimal 1 nilai ujian untuk generate laporan", reportStatus }
     }
 
-    if (options.isAdmin && nilaiUjian.length === 0) {
-      warnings.push("Belum ada nilai ujian - rapor akan kosong")
-      reportStatus = 'not_ready'
-    }
+    if (options.isAdmin && nilaiUjian.length === 0) warnings.push("Belum ada nilai ujian - rapor akan kosong")
 
     const totalNilaiUjian = nilaiUjian.reduce((sum, n) => sum + n.nilai_angka.toNumber(), 0)
     const rataRataUjian = nilaiUjian.length > 0 ? totalNilaiUjian / nilaiUjian.length : 0
@@ -348,19 +247,13 @@ export async function generateLaporanNilai(
     const semester_text = periodeAjaran.semester === "SATU" ? "GANJIL" : "GENAP"
     const tahunAjaranParts = periodeAjaran.nama_ajaran.split('/')
     let tahunAjaranHijriah = 'N/A'
-
     if (tahunAjaranParts.length === 2) {
       const startYearMasehi = parseInt(tahunAjaranParts[0], 10)
       const endYearMasehi = parseInt(tahunAjaranParts[1], 10)
       const moment = require('moment-hijri')
       const startHijri = moment(`${startYearMasehi}-07-01`, 'YYYY-MM-DD').iYear()
       const endHijri = moment(`${endYearMasehi}-06-30`, 'YYYY-MM-DD').iYear()
-      
-      if (startHijri === endHijri) {
-        tahunAjaranHijriah = `${startHijri} H.`
-      } else {
-        tahunAjaranHijriah = `${startHijri}/${endHijri} H.`
-      }
+      tahunAjaranHijriah = (startHijri === endHijri) ? `${startHijri} H.` : `${startHijri}/${endHijri} H.`
     }
     
     const reportData = {
@@ -372,20 +265,19 @@ export async function generateLaporanNilai(
         tahunAjaran: periodeAjaran.nama_ajaran,
         tahunAjaranHijriah: tahunAjaranHijriah
       },
+      // [REVISI 3] Mapping Nilai Ujian sekarang membaca dari relasi kurikulum
       nilaiUjian: nilaiUjian.map(n => ({
         mataPelajaran: n.mata_pelajaran.nama_mapel,
-        kitab: "-", // Kolom kitab tidak relevan untuk nilai ujian
+        kitab: n.mata_pelajaran.kurikulum?.[0]?.kitab?.nama_kitab || n.mata_pelajaran.kurikulum?.[0]?.batas_hafalan || "-",
         nilai: n.nilai_angka.toNumber(),
         predikat: n.predikat || getPredicate(n.nilai_angka.toNumber())
       })),
       totalNilaiUjian: Math.round(totalNilaiUjian * 100) / 100,
       rataRataUjian: Math.round(rataRataUjian * 100) / 100,
       rataRataPredikatUjian: rataRataPredikatUjian,
-      peringkat: rankingData
-        ? (rankingData.isComplete ? rankingData.rank : `Sementara (${rankingData.rank})`)
-        : (nilaiUjian.length > 0 ? "-" : null),
+      peringkat: rankingData ? (rankingData.isComplete ? rankingData.rank : `Sementara (${rankingData.rank})`) : (nilaiUjian.length > 0 ? "-" : null),
       totalSiswa: rankingData ? rankingData.totalActiveStudents : 0,
-      // [PERBAIKAN] Mapping nilaiHafalan diubah agar membaca `target_hafalan`
+      // [REVISI 4] Mapping Nilai Hafalan sekarang membaca dari `target_hafalan`
       nilaiHafalan: nilaiHafalan.map(h => ({
         mataPelajaran: h.mata_pelajaran.nama_mapel,
         kitab: h.target_hafalan || "Tidak ada data kitab",
@@ -425,7 +317,9 @@ export async function generateLaporanNilai(
   }
 }
 
-// Calculate class ranking for active students only
+// ... Sisa file (fungsi calculateClassRanking, dll.) tetap sama ...
+// (Pastikan sisa file Anda dari sini ke bawah tidak berubah)
+
 export async function calculateClassRanking(
   siswaId: string,
   periodeAjaranId: string
@@ -498,7 +392,6 @@ export async function calculateClassRanking(
   }
 }
 
-// Calculate average predikat from exam scores
 export function calculateAveragePredikat(nilaiUjian: any[]): string {
   if (nilaiUjian.length === 0) return "-"
 
@@ -529,11 +422,9 @@ export function calculateAveragePredikat(nilaiUjian: any[]): string {
   return getPredicate(averageScore)
 }
 
-// Calculate overall hafalan status
 export function calculateHafalanStatus(nilaiHafalan: any[]): string {
   if (nilaiHafalan.length === 0) return "Belum ada data"
 
-  // [PENJELASAN] 'predikat' pada nilaiHafalan adalah enum ('TERCAPAI'/'TIDAK_TERCAPAI')
   const tercapaiCount = nilaiHafalan.filter(h => h.predikat === "TERCAPAI").length
   const totalCount = nilaiHafalan.length
 
@@ -542,7 +433,6 @@ export function calculateHafalanStatus(nilaiHafalan: any[]): string {
   return `Sebagian (${tercapaiCount}/${totalCount} tercapai)`
 }
 
-// Calculate total ketidakhadiran (total absences)
 export function calculateTotalKetidakhadiran(kehadiran: any[]): number {
   if (kehadiran.length === 0) return 0
 
@@ -551,7 +441,6 @@ export function calculateTotalKetidakhadiran(kehadiran: any[]): number {
   }, 0)
 }
 
-// Normalize hafalan predikat to proper capitalization
 export function normalizeHafalanPredikat(predikat: string): string {
   if (!predikat) return "-"
 
@@ -561,7 +450,6 @@ export function normalizeHafalanPredikat(predikat: string): string {
   return predikat
 }
 
-// Calculate attendance summary
 export function calculateAttendanceSummary(kehadiran: any[]): {
   totalSakit: number
   totalIzin: number
@@ -598,3 +486,4 @@ export function calculateAttendanceSummary(kehadiran: any[]): {
     persentaseKehadiran
   }
 }
+
