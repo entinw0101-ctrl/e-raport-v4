@@ -25,6 +25,9 @@ model Admin {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relasi
+  audit_logs AuditLog[]
+
   @@map("admin")
 }
 
@@ -651,5 +654,32 @@ enum AdminRole {
 enum AdminStatus {
   active
   inactive
+}
+
+// =====================================================
+// TABEL AUDIT LOG
+// =====================================================
+
+// Tabel Audit Log
+model AuditLog {
+  id              Int      @id @default(autoincrement())
+  admin_id        Int?
+  action          String   @db.VarChar(255) // CREATE, UPDATE, DELETE
+  table_name      String   @db.VarChar(255) // nama tabel yang diubah
+  record_id       String?  @db.VarChar(255) // ID record yang diubah
+  old_values      String?  @db.Text // nilai lama dalam JSON
+  new_values      String?  @db.Text // nilai baru dalam JSON
+  description     String?  @db.Text // deskripsi perubahan
+  ip_address      String?  @db.VarChar(45)
+  user_agent      String?  @db.Text
+  created_at      DateTime @default(now())
+
+  // Relasi
+  admin Admin? @relation(fields: [admin_id], references: [id], onDelete: SetNull)
+
+  @@index([admin_id])
+  @@index([table_name])
+  @@index([created_at])
+  @@map("audit_log")
 }
 

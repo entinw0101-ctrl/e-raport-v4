@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+import { createAuditLog, getClientInfo } from "@/lib/audit-log"
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,6 +57,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+
+    if (!session || session.user.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini." },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
     const { siswa_id, periode_ajaran_id, catatan_sikap, catatan_akademik } = body
 
@@ -63,6 +75,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Check if record exists for audit logging
+    const existingRecord = await prisma.catatanSiswa.findUnique({
+      where: {
+        siswa_id_periode_ajaran_id: {
+          siswa_id: parseInt(siswa_id),
+          periode_ajaran_id: parseInt(periode_ajaran_id),
+        },
+      },
+    })
 
     const catatanSiswa = await prisma.catatanSiswa.upsert({
       where: {
@@ -89,6 +111,25 @@ export async function POST(request: NextRequest) {
         },
         periode_ajaran: true,
       },
+    })
+
+    // Audit logging
+    const clientInfo = getClientInfo(request)
+    await createAuditLog({
+      admin_id: session.id,
+      action: existingRecord ? 'UPDATE' : 'CREATE',
+      table_name: 'catatan_siswa',
+      record_id: catatanSiswa.id.toString(),
+      old_values: existingRecord ? {
+        catatan_akademik: existingRecord.catatan_akademik,
+        catatan_sikap: existingRecord.catatan_sikap
+      } : null,
+      new_values: {
+        catatan_akademik: catatanSiswa.catatan_akademik,
+        catatan_sikap: catatanSiswa.catatan_sikap
+      },
+      description: `Catatan siswa ${catatanSiswa.siswa.nama} ${existingRecord ? 'diperbarui' : 'dibuat'}`,
+      ...clientInfo,
     })
 
     return NextResponse.json({

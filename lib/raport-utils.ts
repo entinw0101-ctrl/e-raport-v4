@@ -7,10 +7,10 @@ const getPredicate = (nilai: number | null): string => {
   if (nilai === null || nilai === undefined) return '-'
   const n = parseFloat(nilai.toString())
   if (isNaN(n)) return '-'
-  if (n === 100) return 'Sempurna'
-  if (n >= 90) return 'Sangat Baik'
-  if (n >= 80) return 'Baik'
-  if (n >= 70) return 'Cukup'
+  if (n === 10) return 'Sempurna'
+  if (n >= 9) return 'Sangat Baik'
+  if (n >= 8) return 'Baik'
+  if (n >= 7) return 'Cukup'
   return 'Kurang'
 }
 
@@ -78,14 +78,12 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
   const derivedSemester = periodeRec ? periodeRec.semester : semester
   const masterTaId = periodeRec ? (periodeRec.master_tahun_ajaran_id || (periodeRec.master_tahun_ajaran && periodeRec.master_tahun_ajaran.id)) : null
 
-  // find the siswa_kelas_history record that matches this siswa and the resolved master_tahun_ajaran_id + semester
   let history = null
   if (masterTaId) {
     history = await prisma.riwayatKelasSiswa.findFirst({
       where: {
         siswa_id: numericSiswaId,
         master_tahun_ajaran_id: masterTaId,
-        // Note: semester field might not exist in RiwayatKelasSiswa, adjust accordingly
       }
     })
     if (!history) {
@@ -93,11 +91,9 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
     }
   }
 
-  // For now, we'll use a placeholder for kepalaPesantren since it's not in the schema
-  const kepalaPesantren = null // TODO: Add KepalaPesantren model if needed
+  const kepalaPesantren = null
 
   const contextKelasId = history ? history.kelas_id : siswa.kelas_id
-  // prefer the periode id passed in; keep contextTahunAjaranId as the original param for template header
   const contextTahunAjaranId = numericTahunAjaranId
 
   const commonWhere = {
@@ -107,12 +103,23 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
 
   const [nilaiUjians, nilaiHafalans, sikaps, kehadirans, kurikulums] = await Promise.all([
     prisma.nilaiUjian.findMany({
-      where: commonWhere,
+      where: {
+        ...commonWhere,
+        mata_pelajaran: {
+          jenis: "Ujian"
+        }
+      },
       include: { mata_pelajaran: true },
       orderBy: { mata_pelajaran: { nama_mapel: 'asc' } }
     }),
+    // [PERBAIKAN] Query nilaiHafalan disederhanakan agar tidak error jika kurikulum tidak ada
     prisma.nilaiHafalan.findMany({
-      where: commonWhere,
+      where: {
+        ...commonWhere,
+        mata_pelajaran: {
+          jenis: "Hafalan",
+        }
+      },
       include: { mata_pelajaran: true },
       orderBy: { mata_pelajaran: { nama_mapel: 'asc' } }
     }),
@@ -126,7 +133,6 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
       include: { indikator_kehadiran: true },
       orderBy: { indikator_kehadiran: { nama_indikator: 'asc' } }
     }),
-    // Kurikulum for the kelas/tingkatan
     (async () => {
       const kelasRec = contextKelasId ? await prisma.kelas.findUnique({
         where: { id: contextKelasId },
@@ -142,7 +148,6 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
     })()
   ])
 
-  // Include history record so callers can read catatan wali kelas etc.
   return {
     siswa,
     tahunAjaran: await prisma.periodeAjaran.findUnique({ where: { id: contextTahunAjaranId } }),
@@ -158,10 +163,8 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
 
 export { getPredicate, formatTanggal, calculateAverage }
 
-// Convert Masehi year to Hijriah year using moment-hijri
 export function convertToHijriah(masehiYear: number): number {
   const moment = require('moment-hijri')
-  // Use July 1st as reference date for academic year start
   return moment(`${masehiYear}-07-01`, 'YYYY-MM-DD').iYear()
 }
 
@@ -170,7 +173,7 @@ export async function generateLaporanNilai(
   siswaId: string,
   periodeAjaranId: string,
   options: {
-    isAdmin?: boolean // For admin mode with flexible validation
+    isAdmin?: boolean
   } = {}
 ): Promise<{
   canGenerate: boolean
@@ -182,7 +185,6 @@ export async function generateLaporanNilai(
   const prisma = (await import("@/lib/prisma")).prisma
 
   try {
-    // 1. Validate student and get basic info
     const siswa = await prisma.siswa.findUnique({
       where: { id: parseInt(siswaId) },
       include: {
@@ -198,7 +200,6 @@ export async function generateLaporanNilai(
       return { canGenerate: false, error: "Siswa tidak ditemukan" }
     }
 
-    // 2. Check if student is active
     if (siswa.status !== "Aktif") {
       return {
         canGenerate: false,
@@ -206,7 +207,6 @@ export async function generateLaporanNilai(
       }
     }
 
-    // 3. Get periode ajaran info
     const periodeAjaran = await prisma.periodeAjaran.findUnique({
       where: { id: parseInt(periodeAjaranId) },
       include: {
@@ -217,44 +217,26 @@ export async function generateLaporanNilai(
     if (!periodeAjaran) {
       return { canGenerate: false, error: "Periode ajaran tidak ditemukan" }
     }
-
-    // 4. Get exam scores (required for basic validation)
+    
+    // [PERBAIKAN] Query untuk nilaiUjian disederhanakan
     const nilaiUjian = await prisma.nilaiUjian.findMany({
       where: {
         siswa_id: parseInt(siswaId),
         periode_ajaran_id: parseInt(periodeAjaranId),
-        // Filter to only include mapel with jenis "Ujian" assigned to student's tingkatan
         mata_pelajaran: {
           jenis: "Ujian",
-          kurikulum: {
-            some: {
-              tingkatan_id: siswa.kelas?.tingkatan?.id
-            }
-          }
-        }
+        },
       },
       include: {
-        mata_pelajaran: {
-          include: {
-            kurikulum: {
-              where: {
-                tingkatan_id: siswa.kelas?.tingkatan?.id
-              },
-              include: {
-                kitab: true
-              }
-            }
-          }
-        }
+        mata_pelajaran: true,
       },
       orderBy: {
         mata_pelajaran: {
-          nama_mapel: 'asc'
-        }
-      }
-    })
+          nama_mapel: "asc",
+        },
+      },
+    });
 
-    // 5. Get optional data with warnings
     const warnings: string[] = []
 
     const kehadiran = await prisma.kehadiran.findMany({
@@ -275,40 +257,28 @@ export async function generateLaporanNilai(
     if (kehadiran.length === 0) {
       warnings.push("Belum ada data kehadiran")
     }
-
+    
+    // [PERBAIKAN] Query untuk nilaiHafalan disederhanakan
     const nilaiHafalan = await prisma.nilaiHafalan.findMany({
       where: {
         siswa_id: parseInt(siswaId),
         periode_ajaran_id: parseInt(periodeAjaranId),
-        // Filter to only include mapel with jenis "Hafalan" assigned to student's tingkatan
         mata_pelajaran: {
           jenis: "Hafalan",
-          kurikulum: {
-            some: {
-              tingkatan_id: siswa.kelas?.tingkatan?.id
-            }
-          }
-        }
+        },
       },
       include: {
         mata_pelajaran: {
-          include: {
-            kurikulum: {
-              where: {
-                tingkatan_id: siswa.kelas?.tingkatan?.id
-              },
-              include: {
-                kitab: true
-              }
-            }
-          }
-        }
+          select: {
+            nama_mapel: true,
+          },
+        },
       },
       orderBy: {
         mata_pelajaran: {
-          nama_mapel: 'asc'
-        }
-      }
+          nama_mapel: "asc",
+        },
+      },
     })
 
     if (nilaiHafalan.length === 0) {
@@ -328,7 +298,6 @@ export async function generateLaporanNilai(
       warnings.push("Belum ada catatan akademik")
     }
 
-    // 6. Validate data completeness and determine report status
     let reportStatus: 'ready' | 'partial' | 'not_ready' = 'not_ready'
     if (nilaiUjian.length > 0) {
       const hasKehadiran = kehadiran.length > 0
@@ -342,7 +311,6 @@ export async function generateLaporanNilai(
       }
     }
 
-    // Flexible validation for admin mode
     if (!options.isAdmin && nilaiUjian.length === 0) {
       return {
         canGenerate: false,
@@ -351,62 +319,48 @@ export async function generateLaporanNilai(
       }
     }
 
-    // For admin mode, allow generation even without exam scores
     if (options.isAdmin && nilaiUjian.length === 0) {
       warnings.push("Belum ada nilai ujian - rapor akan kosong")
       reportStatus = 'not_ready'
     }
 
-    // 7. Calculate averages and rankings
     const totalNilaiUjian = nilaiUjian.reduce((sum, n) => sum + n.nilai_angka.toNumber(), 0)
     const rataRataUjian = nilaiUjian.length > 0 ? totalNilaiUjian / nilaiUjian.length : 0
-
-    // Calculate rata-rata predikat ujian
     const rataRataPredikatUjian = calculateAveragePredikat(nilaiUjian)
-
     const rankingData = await calculateClassRanking(siswaId, periodeAjaranId)
-
-    // 8. Calculate hafalan status
     const hafalanStatus = calculateHafalanStatus(nilaiHafalan)
-
-    // 8. Calculate attendance summary
     const attendanceSummary = calculateAttendanceSummary(kehadiran)
     const totalKetidakhadiran = calculateTotalKetidakhadiran(kehadiran)
-
-    // 8. Prepare header data with GANJIL/GENAP semester text
     const semester_text = periodeAjaran.semester === "SATU" ? "GANJIL" : "GENAP"
-
     const tahunAjaranParts = periodeAjaran.nama_ajaran.split('/')
     let tahunAjaranHijriah = 'N/A'
+
     if (tahunAjaranParts.length === 2) {
       const startYearMasehi = parseInt(tahunAjaranParts[0], 10)
       const endYearMasehi = parseInt(tahunAjaranParts[1], 10)
-
-      // Use moment-hijri for precise conversion with academic year dates
       const moment = require('moment-hijri')
-      const startHijri = moment(`${startYearMasehi}-07-01`, 'YYYY-MM-DD').iYear() // July 1st
-      const endHijri = moment(`${endYearMasehi}-06-30`, 'YYYY-MM-DD').iYear()   // June 30th
-
+      const startHijri = moment(`${startYearMasehi}-07-01`, 'YYYY-MM-DD').iYear()
+      const endHijri = moment(`${endYearMasehi}-06-30`, 'YYYY-MM-DD').iYear()
+      
       if (startHijri === endHijri) {
         tahunAjaranHijriah = `${startHijri} H.`
       } else {
         tahunAjaranHijriah = `${startHijri}/${endHijri} H.`
       }
     }
-
-    // 9. Build complete report data
+    
     const reportData = {
       header: {
         nama: siswa.nama,
         nis: siswa.nis,
         kotaAsal: siswa.kota_asal || "-",
-        semester: semester_text, // GANJIL or GENAP
+        semester: semester_text,
         tahunAjaran: periodeAjaran.nama_ajaran,
         tahunAjaranHijriah: tahunAjaranHijriah
       },
       nilaiUjian: nilaiUjian.map(n => ({
         mataPelajaran: n.mata_pelajaran.nama_mapel,
-        kitab: n.mata_pelajaran.kurikulum?.[0]?.kitab?.nama_kitab || "-",
+        kitab: "-", // Kolom kitab tidak relevan untuk nilai ujian
         nilai: n.nilai_angka.toNumber(),
         predikat: n.predikat || getPredicate(n.nilai_angka.toNumber())
       })),
@@ -417,16 +371,14 @@ export async function generateLaporanNilai(
         ? (rankingData.isComplete ? rankingData.rank : `Sementara (${rankingData.rank})`)
         : (nilaiUjian.length > 0 ? "-" : null),
       totalSiswa: rankingData ? rankingData.totalActiveStudents : 0,
-      nilaiHafalan: nilaiHafalan.map(h => {
-        const kurikulumData = h.mata_pelajaran.kurikulum?.[0]
-        return {
-          mataPelajaran: h.mata_pelajaran.nama_mapel,
-          kitab: kurikulumData?.kitab?.nama_kitab || "-",
-          batasHafalan: kurikulumData?.batas_hafalan || "-",
-          targetHafalan: h.target_hafalan || "-",
-          predikat: normalizeHafalanPredikat(h.predikat)
-        }
-      }),
+      // [PERBAIKAN] Mapping nilaiHafalan diubah agar membaca `target_hafalan`
+      nilaiHafalan: nilaiHafalan.map(h => ({
+        mataPelajaran: h.mata_pelajaran.nama_mapel,
+        kitab: h.target_hafalan || "Tidak ada data kitab",
+        batasHafalan: h.target_hafalan || "-",
+        targetHafalan: h.target_hafalan || "-",
+        predikat: normalizeHafalanPredikat(h.predikat)
+      })),
       statusHafalan: hafalanStatus,
       kehadiran: kehadiran.map(k => ({
         indikatorKehadiran: k.indikator_kehadiran.nama_indikator,
@@ -467,12 +419,11 @@ export async function calculateClassRanking(
   rank: number
   totalActiveStudents: number
   average: number
-  isComplete: boolean // True if all students have exam scores
+  isComplete: boolean
 } | null> {
   const prisma = (await import("@/lib/prisma")).prisma
 
   try {
-    // Get target student info
     const targetSiswa = await prisma.siswa.findUnique({
       where: { id: parseInt(siswaId) },
       select: { kelas_id: true }
@@ -480,7 +431,6 @@ export async function calculateClassRanking(
 
     if (!targetSiswa?.kelas_id) return null
 
-    // 1. Get ALL active students in the class (regardless of exam scores)
     const allActiveStudents = await prisma.siswa.findMany({
       where: {
         kelas_id: targetSiswa.kelas_id,
@@ -491,7 +441,6 @@ export async function calculateClassRanking(
 
     if (allActiveStudents.length === 0) return null
 
-    // 2. Get exam scores for students who have them
     const examScores = await prisma.nilaiUjian.groupBy({
       by: ['siswa_id'],
       where: {
@@ -504,26 +453,21 @@ export async function calculateClassRanking(
       _avg: { nilai_angka: true }
     })
 
-    // 3. Create ranking data for ALL active students
     const rankingData = allActiveStudents.map(student => {
       const examData = examScores.find(score => score.siswa_id === student.id)
       return {
         siswa_id: student.id,
-        average: examData?._avg.nilai_angka?.toNumber() || 0  // 0 for students without scores
+        average: examData?._avg.nilai_angka?.toNumber() || 0
       }
     })
 
-    // 4. Sort by average descending (higher scores = better rank)
     const sortedByAverage = rankingData
       .sort((a, b) => b.average - a.average)
 
-    // 5. Find target student's rank
     const targetIndex = sortedByAverage.findIndex(item => item.siswa_id === parseInt(siswaId))
     if (targetIndex === -1) return null
 
     const targetStudent = sortedByAverage[targetIndex]
-
-    // 6. Check if ranking is complete (all students have scores)
     const studentsWithScores = examScores.length
     const isComplete = studentsWithScores === allActiveStudents.length
 
@@ -544,13 +488,12 @@ export async function calculateClassRanking(
 export function calculateAveragePredikat(nilaiUjian: any[]): string {
   if (nilaiUjian.length === 0) return "-"
 
-  // Convert predicates to numerical values for averaging
   const predikatValues: { [key: string]: number } = {
-    "Sempurna": 100,
-    "Sangat Baik": 90,
-    "Baik": 80,
-    "Cukup": 70,
-    "Kurang": 60
+    "Sempurna": 10,
+    "Sangat Baik": 9,
+    "Baik": 8,
+    "Cukup": 7,
+    "Kurang": 6
   }
 
   let totalScore = 0
@@ -569,8 +512,6 @@ export function calculateAveragePredikat(nilaiUjian: any[]): string {
   if (validCount === 0) return "-"
 
   const averageScore = totalScore / validCount
-
-  // Convert back to predicate
   return getPredicate(averageScore)
 }
 
@@ -578,7 +519,8 @@ export function calculateAveragePredikat(nilaiUjian: any[]): string {
 export function calculateHafalanStatus(nilaiHafalan: any[]): string {
   if (nilaiHafalan.length === 0) return "Belum ada data"
 
-  const tercapaiCount = nilaiHafalan.filter(h => h.predikat === "Tercapai").length
+  // [PENJELASAN] 'predikat' pada nilaiHafalan adalah enum ('TERCAPAI'/'TIDAK_TERCAPAI')
+  const tercapaiCount = nilaiHafalan.filter(h => h.predikat === "TERCAPAI").length
   const totalCount = nilaiHafalan.length
 
   if (tercapaiCount === totalCount) return "Tercapai"
@@ -599,11 +541,9 @@ export function calculateTotalKetidakhadiran(kehadiran: any[]): number {
 export function normalizeHafalanPredikat(predikat: string): string {
   if (!predikat) return "-"
 
-  // Handle uppercase versions from database
   if (predikat === "TERCAPAI") return "Tercapai"
   if (predikat === "TIDAK_TERCAPAI") return "Tidak Tercapai"
 
-  // Return as-is if already properly formatted
   return predikat
 }
 
@@ -630,9 +570,7 @@ export function calculateAttendanceSummary(kehadiran: any[]): {
   const totalAlpha = kehadiran.reduce((sum, k) => sum + k.alpha, 0)
   const totalTidakHadir = totalSakit + totalIzin + totalAlpha
 
-  // Assuming each indicator represents 1 day of attendance
-  // This is a simplification - in reality, you'd need to know total school days
-  const totalHariSekolah = kehadiran.length * 5 // Rough estimate: 5 days per week per indicator
+  const totalHariSekolah = kehadiran.length * 5
   const totalHadir = Math.max(0, totalHariSekolah - totalTidakHadir)
   const persentaseKehadiran = totalHariSekolah > 0
     ? ((totalHadir / totalHariSekolah) * 100).toFixed(2) + "%"

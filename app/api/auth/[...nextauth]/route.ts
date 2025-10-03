@@ -1,11 +1,9 @@
 import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
 export const authOptions = {
-  adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -58,7 +56,7 @@ export const authOptions = {
     },
     async session({ session, token }: any) {
       if (token) {
-        session.user.id = token.sub!
+        session.user.id = token.sub || token.id
         session.user.role = token.role as string
       }
       return session

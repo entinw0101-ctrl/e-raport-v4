@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+
+    if (!session || session.user.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini." },
+        { status: 403 }
+      )
+    }
+
     const { ids, deleteAll } = await request.json()
 
     if (deleteAll) {

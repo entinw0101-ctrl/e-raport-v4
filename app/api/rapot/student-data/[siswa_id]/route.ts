@@ -32,12 +32,13 @@ export async function GET(
       include: {
         kelas: {
           include: {
-            wali_kelas: true
-          }
+            wali_kelas: true,
+            tingkatan: true, // <-- TAMBAHKAN BARIS INI
+          },
         },
-        kamar: true
-      }
-    })
+        kamar: true,
+      },
+    });
 
     if (!siswa) {
       return NextResponse.json(
@@ -58,12 +59,19 @@ export async function GET(
       )
     }
 
+    // Get student tingkatan_id for filtering
+    const studentTingkatanId = siswa.kelas?.tingkatan_id
+
     // Get all related data
-    const [nilaiUjian, nilaiHafalan, kehadiran, penilaianSikap] = await Promise.all([
+    const [nilaiUjian, nilaiHafalan, kehadiran, penilaianSikap, catatanSiswa] = await Promise.all([
+      // NilaiUjian: Filter hanya berdasarkan jenis, TIDAK perlu filter kurikulum
       prisma.nilaiUjian.findMany({
         where: {
           siswa_id: parseInt(siswaId),
-          periode_ajaran_id: parseInt(periodeAjaranId)
+          periode_ajaran_id: parseInt(periodeAjaranId),
+          mata_pelajaran: {
+            jenis: "Ujian"
+          }
         },
         include: {
           mata_pelajaran: true
@@ -74,30 +82,28 @@ export async function GET(
           }
         }
       }),
+      // NilaiHafalan: Filter berdasarkan jenis DAN tingkatan melalui kurikulum
       prisma.nilaiHafalan.findMany({
         where: {
           siswa_id: parseInt(siswaId),
-          periode_ajaran_id: parseInt(periodeAjaranId)
+          periode_ajaran_id: parseInt(periodeAjaranId),
+          mata_pelajaran: {
+            jenis: "Hafalan",
+          },
         },
         include: {
+          // Kita hanya butuh nama mapel, tidak perlu kurikulum lagi
           mata_pelajaran: {
-            include: {
-              kurikulum: {
-                where: {
-                  tingkatan_id: siswa.kelas?.tingkatan_id || undefined // Filter by student's tingkatan
-                },
-                include: {
-                  kitab: true
-                }
-              }
-            }
-          }
+            select: {
+              nama_mapel: true,
+            },
+          },
         },
         orderBy: {
           mata_pelajaran: {
-            nama_mapel: 'asc'
-          }
-        }
+            nama_mapel: "asc",
+          },
+        },
       }),
       prisma.kehadiran.findMany({
         where: {
@@ -124,6 +130,14 @@ export async function GET(
         orderBy: {
           indikator_sikap: {
             indikator: 'asc'
+          }
+        }
+      }),
+      prisma.catatanSiswa.findUnique({
+        where: {
+          siswa_id_periode_ajaran_id: {
+            siswa_id: parseInt(siswaId),
+            periode_ajaran_id: parseInt(periodeAjaranId)
           }
         }
       })
@@ -162,19 +176,24 @@ export async function GET(
           nama_mapel: n.mata_pelajaran.nama_mapel
         }
       })),
-      nilaiHafalan: nilaiHafalan.map((h: any) => ({
+      nilaiHafalan: nilaiHafalan.map((h) => ({
         id: h.id.toString(),
-        predikat: h.predikat || '',
+        predikat: h.predikat || "",
         mata_pelajaran: {
-          nama_mapel: h.mata_pelajaran.nama_mapel
+          nama_mapel: h.mata_pelajaran.nama_mapel,
         },
-        kurikulum: h.mata_pelajaran.kurikulum?.[0] ? {
+        // Langsung ambil data dari kolom yang benar
+        // dan sesuaikan strukturnya agar cocok dengan frontend
+        kurikulum: {
           kitab: {
-            nama_kitab: h.mata_pelajaran.kurikulum[0].kitab?.nama_kitab || ''
+            // Kita gunakan target_hafalan sebagai nama kitab
+            nama_kitab: h.target_hafalan || "",
           },
-          batas_hafalan: h.mata_pelajaran.kurikulum[0].batas_hafalan || ''
-        } : null
+          // batas_hafalan bisa diisi dengan data yang sama jika diperlukan
+          batas_hafalan: h.target_hafalan || "",
+        },
       })),
+
       kehadiran: kehadiran.map(k => ({
         id: k.id.toString(),
         sakit: k.sakit || 0,
@@ -192,6 +211,11 @@ export async function GET(
           indikator: s.indikator_sikap.indikator
         }
       })),
+      catatanSiswa: catatanSiswa ? {
+        id: catatanSiswa.id.toString(),
+        catatan_akademik: catatanSiswa.catatan_akademik || '',
+        catatan_sikap: catatanSiswa.catatan_sikap || ''
+      } : null,
       periodeAjaran: {
         nama_ajaran: periodeAjaran.nama_ajaran,
         semester: periodeAjaran.semester

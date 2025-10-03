@@ -9,13 +9,16 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { PageHeader } from "@/src/components/PageHeader"
 import { useToast } from "@/hooks/use-toast"
-import { FileText, Download, Eye, ArrowLeft } from "lucide-react"
+import { FileText, Download, Eye, ArrowLeft, Edit, Save, X, Trash2 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useParams } from "next/navigation"
 import { getPredicate } from "@/lib/raport-utils"
 import { getNilaiColor } from "@/lib/utils"
+import { useSession } from "next-auth/react"
 
 interface StudentData {
   siswa: {
@@ -76,6 +79,11 @@ interface StudentData {
       indikator: string
     }
   }>
+  catatanSiswa: {
+    id: string
+    catatan_akademik: string
+    catatan_sikap: string
+  } | null
   periodeAjaran: {
     nama_ajaran: string
     semester: string
@@ -92,8 +100,16 @@ export default function StudentRaportPage() {
   const [data, setData] = useState<StudentData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState<string | null>(null)
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notesData, setNotesData] = useState({
+    catatan_akademik: '',
+    catatan_sikap: ''
+  })
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const { toast } = useToast()
+  const { data: session } = useSession()
 
   useEffect(() => {
     if (siswaId && periodeAjaranId) {
@@ -108,6 +124,13 @@ export default function StudentRaportPage() {
 
       if (result.success) {
         setData(result.data)
+        // Set notes data for editing
+        if (result.data.catatanSiswa) {
+          setNotesData({
+            catatan_akademik: result.data.catatanSiswa.catatan_akademik,
+            catatan_sikap: result.data.catatanSiswa.catatan_sikap
+          })
+        }
       } else {
         throw new Error(result.message || "Gagal memuat data siswa")
       }
@@ -182,6 +205,131 @@ export default function StudentRaportPage() {
     const date = new Date(tanggal)
     const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
     return `${date.getDate()} ${bulan[date.getMonth()]} ${date.getFullYear()}`
+  }
+
+  const handleSaveNotes = async () => {
+    if (!periodeAjaranId || !session?.user?.role?.includes('admin')) return
+
+    setSavingNotes(true)
+    try {
+      const response = await fetch('/api/catatan-siswa', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          siswa_id: siswaId,
+          periode_ajaran_id: periodeAjaranId,
+          catatan_akademik: notesData.catatan_akademik,
+          catatan_sikap: notesData.catatan_sikap
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Refresh data
+        await fetchStudentData()
+        setEditingNotes(false)
+        toast({
+          title: "Berhasil",
+          description: "Catatan siswa berhasil disimpan",
+        })
+      } else {
+        throw new Error(result.error || "Gagal menyimpan catatan")
+      }
+    } catch (error) {
+      console.error("Error saving notes:", error)
+      toast({
+        title: "Error",
+        description: "Gagal menyimpan catatan siswa",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingNotes(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    if (data?.catatanSiswa) {
+      setNotesData({
+        catatan_akademik: data.catatanSiswa.catatan_akademik,
+        catatan_sikap: data.catatanSiswa.catatan_sikap
+      })
+    } else {
+      setNotesData({
+        catatan_akademik: '',
+        catatan_sikap: ''
+      })
+    }
+    setEditingNotes(false)
+  }
+
+  const handleDeleteData = async (type: 'nilai-ujian' | 'nilai-hafalan' | 'kehadiran' | 'penilaian-sikap' | 'catatan-siswa', ids?: string[]) => {
+    if (!periodeAjaranId || session?.user?.role !== 'admin') return
+
+    setDeleting(type)
+    try {
+      let endpoint = ''
+      let body: any = {}
+
+      switch (type) {
+        case 'nilai-ujian':
+          endpoint = '/api/nilai-ujian/bulk-delete'
+          body = ids ? { ids } : { deleteAll: true }
+          break
+        case 'nilai-hafalan':
+          endpoint = '/api/nilai-hafalan/bulk-delete'
+          body = ids ? { ids } : { deleteAll: true }
+          break
+        case 'kehadiran':
+          endpoint = '/api/kehadiran/bulk-delete'
+          body = ids ? { ids } : { deleteAll: true }
+          break
+        case 'penilaian-sikap':
+          endpoint = '/api/penilaian-sikap/bulk-delete'
+          body = ids ? { ids } : { deleteAll: true }
+          break
+        case 'catatan-siswa':
+          if (data?.catatanSiswa?.id) {
+            endpoint = `/api/catatan-siswa/${data.catatanSiswa.id}`
+            // DELETE request doesn't need body
+          } else {
+            throw new Error("Tidak ada catatan siswa untuk dihapus")
+          }
+          break
+      }
+
+      const response = await fetch(endpoint, {
+        method: type === 'catatan-siswa' ? 'DELETE' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: type === 'catatan-siswa' ? undefined : JSON.stringify(body),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // Refresh data
+        await fetchStudentData()
+        toast({
+          title: "Berhasil",
+          description: `Data berhasil dihapus`,
+        })
+      } else {
+        throw new Error(result.error || "Gagal menghapus data")
+      }
+    } catch (error) {
+      console.error(`Error deleting ${type}:`, error)
+      toast({
+        title: "Error",
+        description: `Gagal menghapus data ${type}`,
+        variant: "destructive",
+      })
+    } finally {
+      setDeleting(null)
+    }
   }
 
   if (loading) {
@@ -284,7 +432,33 @@ export default function StudentRaportPage() {
         {/* Nilai Ujian */}
         <Card>
           <CardHeader>
-            <CardTitle>Nilai Ujian ({data.nilaiUjian.length} mata pelajaran)</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Nilai Ujian ({data.nilaiUjian.length} mata pelajaran)</CardTitle>
+              {session?.user?.role === 'admin' && data.nilaiUjian.length > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={deleting === 'nilai-ujian'}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleting === 'nilai-ujian' ? 'Menghapus...' : 'Hapus Semua'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Apakah Anda yakin ingin menghapus semua nilai ujian siswa ini? Tindakan ini tidak dapat dibatalkan.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Batal</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteData('nilai-ujian')}>
+                        Hapus
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -307,7 +481,33 @@ export default function StudentRaportPage() {
         {/* Nilai Hafalan */}
         <Card>
           <CardHeader>
-            <CardTitle>Nilai Hafalan ({data.nilaiHafalan.length} mata pelajaran)</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Nilai Hafalan ({data.nilaiHafalan.length} mata pelajaran)</CardTitle>
+              {session?.user?.role === 'admin' && data.nilaiHafalan.length > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={deleting === 'nilai-hafalan'}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleting === 'nilai-hafalan' ? 'Menghapus...' : 'Hapus Semua'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Apakah Anda yakin ingin menghapus semua nilai hafalan siswa ini? Tindakan ini tidak dapat dibatalkan.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Batal</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteData('nilai-hafalan')}>
+                        Hapus
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -317,8 +517,13 @@ export default function StudentRaportPage() {
                     <div>
                       <p className="text-sm font-medium">{nilai.mata_pelajaran.nama_mapel}</p>
                       <p className="text-xs text-muted-foreground">
-                        Kitab: {nilai.kurikulum?.kitab?.nama_kitab || '-'}
+                        Kitab: {nilai.kurikulum?.kitab?.nama_kitab || nilai.kurikulum?.batas_hafalan || 'Tidak ada data kitab'}
                       </p>
+                      {nilai.kurikulum?.batas_hafalan && nilai.kurikulum?.batas_hafalan !== nilai.kurikulum?.kitab?.nama_kitab && (
+                        <p className="text-xs text-muted-foreground">
+                          Target Hafalan: {nilai.kurikulum.batas_hafalan}
+                        </p>
+                      )}
                     </div>
                     <Badge variant="outline">{nilai.predikat}</Badge>
                   </div>
@@ -334,7 +539,33 @@ export default function StudentRaportPage() {
         {/* Kehadiran */}
         <Card>
           <CardHeader>
-            <CardTitle>Kehadiran ({data.kehadiran.length} indikator)</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Kehadiran ({data.kehadiran.length} indikator)</CardTitle>
+              {session?.user?.role === 'admin' && data.kehadiran.length > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={deleting === 'kehadiran'}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleting === 'kehadiran' ? 'Menghapus...' : 'Hapus Semua'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Apakah Anda yakin ingin menghapus semua data kehadiran siswa ini? Tindakan ini tidak dapat dibatalkan.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Batal</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteData('kehadiran')}>
+                        Hapus
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -359,7 +590,33 @@ export default function StudentRaportPage() {
         {/* Penilaian Sikap */}
         <Card>
           <CardHeader>
-            <CardTitle>Penilaian Sikap ({data.penilaianSikap.length} indikator)</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Penilaian Sikap ({data.penilaianSikap.length} indikator)</CardTitle>
+              {session?.user?.role === 'admin' && data.penilaianSikap.length > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={deleting === 'penilaian-sikap'}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleting === 'penilaian-sikap' ? 'Menghapus...' : 'Hapus Semua'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Apakah Anda yakin ingin menghapus semua penilaian sikap siswa ini? Tindakan ini tidak dapat dibatalkan.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Batal</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteData('penilaian-sikap')}>
+                        Hapus
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -384,6 +641,110 @@ export default function StudentRaportPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Student Notes */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Catatan Siswa</CardTitle>
+              <CardDescription>Catatan akademik dan sikap siswa untuk periode ini</CardDescription>
+            </div>
+            {session?.user?.role === 'admin' && (
+              <div className="flex gap-2">
+                {!editingNotes ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingNotes(true)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Catatan
+                    </Button>
+                    {data?.catatanSiswa && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm" disabled={deleting === 'catatan-siswa'}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            {deleting === 'catatan-siswa' ? 'Menghapus...' : 'Hapus Catatan'}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Apakah Anda yakin ingin menghapus catatan siswa ini? Tindakan ini tidak dapat dibatalkan.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Batal</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteData('catatan-siswa')}>
+                              Hapus
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      disabled={savingNotes}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Batal
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveNotes}
+                      disabled={savingNotes}
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {savingNotes ? 'Menyimpan...' : 'Simpan'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium mb-2 block">Catatan Akademik</label>
+            {editingNotes ? (
+              <Textarea
+                value={notesData.catatan_akademik}
+                onChange={(e) => setNotesData(prev => ({ ...prev, catatan_akademik: e.target.value }))}
+                placeholder="Masukkan catatan akademik siswa..."
+                rows={4}
+              />
+            ) : (
+              <div className="p-3 border rounded-md min-h-[100px] bg-muted/50">
+                {data?.catatanSiswa?.catatan_akademik || 'Belum ada catatan akademik'}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-2 block">Catatan Sikap</label>
+            {editingNotes ? (
+              <Textarea
+                value={notesData.catatan_sikap}
+                onChange={(e) => setNotesData(prev => ({ ...prev, catatan_sikap: e.target.value }))}
+                placeholder="Masukkan catatan sikap siswa..."
+                rows={4}
+              />
+            ) : (
+              <div className="p-3 border rounded-md min-h-[100px] bg-muted/50">
+                {data?.catatanSiswa?.catatan_sikap || 'Belum ada catatan sikap'}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
