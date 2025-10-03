@@ -104,7 +104,16 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
         }),
         prisma.nilaiHafalan.findMany({
             where: { ...commonWhere, mata_pelajaran: { jenis: "Hafalan" } },
-            include: { mata_pelajaran: { select: { nama_mapel: true } } },
+            include: {
+              mata_pelajaran: {
+                include: {
+                  kurikulum: {
+                    where: { tingkatan_id: studentTingkatanId },
+                    include: { kitab: true }
+                  }
+                }
+              }
+            },
             orderBy: { mata_pelajaran: { nama_mapel: 'asc' } },
         }),
         prisma.penilaianSikap.findMany({ where: commonWhere, include: { indikator_sikap: true }, orderBy: { id: 'asc' } }),
@@ -123,6 +132,9 @@ export function convertToHijriah(masehiYear: number): number {
   return moment(`${masehiYear}-07-01`, 'YYYY-MM-DD').iYear()
 }
 
+// =================================================================
+// INTI PERBAIKAN ADA DI DALAM FUNGSI INI
+// =================================================================
 export async function generateLaporanNilai(
   siswaId: string,
   periodeAjaranId: string,
@@ -168,10 +180,25 @@ export async function generateLaporanNilai(
       return { canGenerate: false, error: "Periode ajaran tidak ditemukan" }
     }
     
-    const studentTingkatanId = siswa.kelas?.tingkatan_id;
+    const studentTingkatanId = siswa.kelas?.tingkatan?.id;
+
+    // Query kurikulum terpisah untuk mapping yang lebih reliable
+    const kurikulums = studentTingkatanId ? await prisma.kurikulum.findMany({
+        where: { tingkatan_id: studentTingkatanId },
+        include: {
+            kitab: true,
+            mata_pelajaran: true
+        }
+    }) : [];
+
+    // Buat map untuk lookup cepat kurikulum berdasarkan mapel_id
+    const kurikulumMap = new Map();
+    kurikulums.forEach(k => {
+        kurikulumMap.set(k.mapel_id, k);
+    });
+
 
     const [nilaiUjian, nilaiHafalan, kehadiran, catatanSiswa] = await Promise.all([
-        // [REVISI 1] Query Nilai Ujian sekarang mengambil kurikulum yang relevan
         prisma.nilaiUjian.findMany({
             where: {
                 siswa_id: parseInt(siswaId),
@@ -179,18 +206,10 @@ export async function generateLaporanNilai(
                 mata_pelajaran: { jenis: "Ujian" },
             },
             include: {
-                mata_pelajaran: {
-                    include: {
-                        kurikulum: {
-                            where: { tingkatan_id: studentTingkatanId },
-                            include: { kitab: true },
-                        },
-                    },
-                },
+                mata_pelajaran: true, // Simplified include tanpa nested kurikulum
             },
             orderBy: { mata_pelajaran: { nama_mapel: 'asc' } },
         }),
-        // [REVISI 2] Query Nilai Hafalan disederhanakan
         prisma.nilaiHafalan.findMany({
             where: {
                 siswa_id: parseInt(siswaId),
@@ -198,7 +217,7 @@ export async function generateLaporanNilai(
                 mata_pelajaran: { jenis: "Hafalan" },
             },
             include: {
-                mata_pelajaran: { select: { nama_mapel: true } },
+                mata_pelajaran: true, // Simplified include tanpa nested kurikulum
             },
             orderBy: { mata_pelajaran: { nama_mapel: "asc" } },
         }),
@@ -257,34 +276,38 @@ export async function generateLaporanNilai(
     }
     
     const reportData = {
-      header: {
-        nama: siswa.nama,
-        nis: siswa.nis,
-        kotaAsal: siswa.kota_asal || "-",
-        semester: semester_text,
-        tahunAjaran: periodeAjaran.nama_ajaran,
-        tahunAjaranHijriah: tahunAjaranHijriah
-      },
-      // [REVISI 3] Mapping Nilai Ujian sekarang membaca dari relasi kurikulum
-      nilaiUjian: nilaiUjian.map(n => ({
-        mataPelajaran: n.mata_pelajaran.nama_mapel,
-        kitab: n.mata_pelajaran.kurikulum?.[0]?.kitab?.nama_kitab || n.mata_pelajaran.kurikulum?.[0]?.batas_hafalan || "-",
-        nilai: n.nilai_angka.toNumber(),
-        predikat: n.predikat || getPredicate(n.nilai_angka.toNumber())
-      })),
-      totalNilaiUjian: Math.round(totalNilaiUjian * 100) / 100,
-      rataRataUjian: Math.round(rataRataUjian * 100) / 100,
-      rataRataPredikatUjian: rataRataPredikatUjian,
-      peringkat: rankingData ? (rankingData.isComplete ? rankingData.rank : `Sementara (${rankingData.rank})`) : (nilaiUjian.length > 0 ? "-" : null),
-      totalSiswa: rankingData ? rankingData.totalActiveStudents : 0,
-      // [REVISI 4] Mapping Nilai Hafalan sekarang membaca dari `target_hafalan`
-      nilaiHafalan: nilaiHafalan.map(h => ({
-        mataPelajaran: h.mata_pelajaran.nama_mapel,
-        kitab: h.target_hafalan || "Tidak ada data kitab",
-        batasHafalan: h.target_hafalan || "-",
-        targetHafalan: h.target_hafalan || "-",
-        predikat: normalizeHafalanPredikat(h.predikat)
-      })),
+       header: {
+         nama: siswa.nama,
+         nis: siswa.nis,
+         kotaAsal: siswa.kota_asal || "-",
+         semester: semester_text,
+         tahunAjaran: periodeAjaran.nama_ajaran,
+         tahunAjaranHijriah: tahunAjaranHijriah
+       },
+       nilaiUjian: nilaiUjian.map(n => {
+         const kurikulum = kurikulumMap.get(n.mata_pelajaran.id);
+         return {
+           mataPelajaran: n.mata_pelajaran.nama_mapel,
+           kitab: kurikulum?.kitab?.nama_kitab || kurikulum?.batas_hafalan || "-",
+           nilai: n.nilai_angka.toNumber(),
+           predikat: n.predikat || getPredicate(n.nilai_angka.toNumber())
+         };
+       }),
+       totalNilaiUjian: Math.round(totalNilaiUjian * 100) / 100,
+       rataRataUjian: Math.round(rataRataUjian * 100) / 100,
+       rataRataPredikatUjian: rataRataPredikatUjian,
+       peringkat: rankingData ? (rankingData.isComplete ? rankingData.rank : `Sementara (${rankingData.rank})`) : (nilaiUjian.length > 0 ? "-" : null),
+       totalSiswa: rankingData ? rankingData.totalActiveStudents : 0,
+       nilaiHafalan: nilaiHafalan.map(h => {
+         const kurikulum = kurikulumMap.get(h.mata_pelajaran.id);
+         return {
+           mataPelajaran: h.mata_pelajaran.nama_mapel,
+           kitab: kurikulum?.kitab?.nama_kitab || "Kitab tidak terdefinisi",
+           batasHafalan: kurikulum?.batas_hafalan || "-",
+           targetHafalan: h.target_hafalan || "Belum ada capaian",
+           predikat: normalizeHafalanPredikat(h.predikat)
+         };
+       }),
       statusHafalan: hafalanStatus,
       kehadiran: kehadiran.map(k => ({
         indikatorKehadiran: k.indikator_kehadiran.nama_indikator,
@@ -318,7 +341,6 @@ export async function generateLaporanNilai(
 }
 
 // ... Sisa file (fungsi calculateClassRanking, dll.) tetap sama ...
-// (Pastikan sisa file Anda dari sini ke bawah tidak berubah)
 
 export async function calculateClassRanking(
   siswaId: string,
@@ -486,4 +508,3 @@ export function calculateAttendanceSummary(kehadiran: any[]): {
     persentaseKehadiran
   }
 }
-

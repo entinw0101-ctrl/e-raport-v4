@@ -92,10 +92,12 @@ export async function GET(
           },
         },
         include: {
-          // Kita hanya butuh nama mapel, tidak perlu kurikulum lagi
           mata_pelajaran: {
-            select: {
-              nama_mapel: true,
+            include: {
+              kurikulum: studentTingkatanId ? {
+                where: { tingkatan_id: studentTingkatanId },
+                include: { kitab: true },
+              } : false,
             },
           },
         },
@@ -176,23 +178,23 @@ export async function GET(
           nama_mapel: n.mata_pelajaran.nama_mapel
         }
       })),
-      nilaiHafalan: nilaiHafalan.map((h) => ({
-        id: h.id.toString(),
-        predikat: h.predikat || "",
-        mata_pelajaran: {
-          nama_mapel: h.mata_pelajaran.nama_mapel,
-        },
-        // Langsung ambil data dari kolom yang benar
-        // dan sesuaikan strukturnya agar cocok dengan frontend
-        kurikulum: {
-          kitab: {
-            // Kita gunakan target_hafalan sebagai nama kitab
-            nama_kitab: h.target_hafalan || "",
+      nilaiHafalan: nilaiHafalan.map((h) => {
+        const kurikulumHafalan = h.mata_pelajaran.kurikulum?.[0];
+        return {
+          id: h.id.toString(),
+          predikat: h.predikat || "",
+          mata_pelajaran: {
+            nama_mapel: h.mata_pelajaran.nama_mapel,
           },
-          // batas_hafalan bisa diisi dengan data yang sama jika diperlukan
-          batas_hafalan: h.target_hafalan || "",
-        },
-      })),
+          kurikulum: {
+            kitab: {
+              nama_kitab: (kurikulumHafalan as any)?.kitab?.nama_kitab || "Kitab tidak terdefinisi",
+            },
+            batas_hafalan: kurikulumHafalan?.batas_hafalan || "-",
+          },
+          target_hafalan: h.target_hafalan || "Belum ada capaian",
+        };
+      }),
 
       kehadiran: kehadiran.map(k => ({
         id: k.id.toString(),

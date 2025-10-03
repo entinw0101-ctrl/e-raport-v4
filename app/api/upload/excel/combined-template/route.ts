@@ -246,17 +246,22 @@ async function performImport(validatedData: any, kelasId: string, periodeAjaranI
       }
     })
 
-    // Get all unique mapel names
+    // Get all unique mapel names with jenis context
     const allMapelNames = new Set([
-      ...validatedData.nilaiUjian?.map((item: any) => item.mataPelajaran) || [],
-      ...validatedData.nilaiHafalan?.map((item: any) => item.mataPelajaran) || []
+      ...validatedData.nilaiUjian?.map((item: any) => `${item.mataPelajaran}|Ujian`) || [],
+      ...validatedData.nilaiHafalan?.map((item: any) => `${item.mataPelajaran}|Hafalan`) || []
     ].filter(Boolean))
 
-    // Bulk load mapel
+    // Bulk load mapel with jenis filtering
     const mapelList = await prisma.mataPelajaran.findMany({
-      where: { nama_mapel: { in: Array.from(allMapelNames) } }
+      where: {
+        OR: Array.from(allMapelNames).map(nameWithJenis => {
+          const [nama, jenis] = nameWithJenis.split('|')
+          return { nama_mapel: nama, jenis: jenis as any }
+        })
+      }
     })
-    mapelList.forEach(mapel => mapelMap.set(mapel.nama_mapel, mapel))
+    mapelList.forEach(mapel => mapelMap.set(`${mapel.nama_mapel}|${mapel.jenis}`, mapel))
 
     // Get all unique indikator
     const allIndikatorKehadiran = new Set(
@@ -353,7 +358,7 @@ async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelM
   // Collect all valid upsert operations
   for (const item of data) {
     const siswa = siswaMap.get(item.nis)
-    const mapel = mapelMap.get(item.mataPelajaran)
+    const mapel = mapelMap.get(`${item.mataPelajaran}|Ujian`)
 
     if (siswa && mapel) {
       // Validate that mata pelajaran is assigned to student's current tingkatan
@@ -432,7 +437,7 @@ async function processNilaiHafalan(data: any[], siswaMap: Map<string, any>, mape
     }
 
     const siswa = siswaMap.get(trimmedItem.nis)
-    const mapel = mapelMap.get(trimmedItem.mataPelajaran)
+    const mapel = mapelMap.get(`${trimmedItem.mataPelajaran}|Hafalan`)
 
     if (siswa && mapel) {
       // Validate that mata pelajaran is assigned to student's current tingkatan
