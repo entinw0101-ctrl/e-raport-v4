@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { generateLaporanNilai } from "@/lib/raport-utils"
+import { generateLaporanNilai, getSikapPredicate } from "@/lib/raport-utils"
 
 export async function GET(
   request: NextRequest,
@@ -206,6 +206,7 @@ export async function GET(
       penilaianSikap: penilaianSikap.map(s => ({
         id: s.id.toString(),
         nilai: s.nilai || 0,
+        predikat: getSikapPredicate(s.nilai),
         indikator_sikap: {
           jenis_sikap: s.indikator_sikap.jenis_sikap || '',
           indikator: s.indikator_sikap.indikator

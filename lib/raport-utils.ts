@@ -7,11 +7,25 @@ const getPredicate = (nilai: number | null): string => {
   if (nilai === null || nilai === undefined) return '-'
   const n = parseFloat(nilai.toString())
   if (isNaN(n)) return '-'
-  if (n === 10) return 'Sempurna'
-  if (n >= 9) return 'Sangat Baik'
-  if (n >= 8) return 'Baik'
-  if (n >= 7) return 'Cukup'
-  return 'Kurang'
+  if (n === 10) return 'Istimewa'
+  if (n >= 9) return 'Baik Sekali'
+  if (n >= 7) return 'Baik'
+  if (n >= 6) return 'Cukup'
+  if (n >= 5) return 'Kurang'
+  return 'Kurang Sekali'
+}
+
+// Predicate function for penilaian sikap (1-100 scale)
+const getSikapPredicate = (nilai: number | null): string => {
+  if (nilai === null || nilai === undefined) return '-'
+  const n = parseFloat(nilai.toString())
+  if (isNaN(n)) return '-'
+  if (n === 100) return 'Istimewa'
+  if (n >= 90) return 'Baik Sekali'
+  if (n >= 70) return 'Baik'
+  if (n >= 60) return 'Cukup'
+  if (n >= 50) return 'Kurang'
+  return 'Kurang Sekali'
 }
 
 const formatTanggal = (tanggal: Date | string | null): string => {
@@ -161,7 +175,7 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
   }
 }
 
-export { getPredicate, formatTanggal, calculateAverage }
+export { getPredicate, getSikapPredicate, formatTanggal, calculateAverage }
 
 export function convertToHijriah(masehiYear: number): number {
   const moment = require('moment-hijri')

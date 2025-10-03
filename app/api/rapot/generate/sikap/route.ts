@@ -5,7 +5,7 @@ import PizZip from "pizzip"
 import ImageModule from "docxtemplater-image-module-free"
 import fs from "fs"
 import path from "path"
-import { getPredicate, formatTanggal } from "@/lib/raport-utils"
+import { getPredicate, getSikapPredicate, formatTanggal } from "@/lib/raport-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,9 +130,9 @@ export async function POST(request: NextRequest) {
       // Basic info
       nama: siswa.nama || "",
       no_induk: siswa.nis || "",
-      ttl: siswa.tanggal_lahir
-        ? new Date(siswa.tanggal_lahir).toLocaleDateString('id-ID')
-        : "",
+      ttl: siswa.tempat_lahir && siswa.tanggal_lahir
+        ? `${siswa.tempat_lahir}, ${formatTanggal(siswa.tanggal_lahir)}`
+        : siswa.tempat_lahir || formatTanggal(siswa.tanggal_lahir) || "",
       kamar: siswa.kamar?.nama_kamar || "",
 
       // Semester info
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
         no: index + 1,
         indikator: item.indikator_sikap.indikator || "",
         angka: item.nilai,
-        predikat: getPredicate(item.nilai)
+        predikat: getSikapPredicate(item.nilai)
       })),
 
       // Sosial sikap items (with numbering)
@@ -152,16 +152,16 @@ export async function POST(request: NextRequest) {
         no: index + 1,
         indikator: item.indikator_sikap.indikator || "",
         angka: item.nilai,
-        predikat: getPredicate(item.nilai)
+        predikat: getSikapPredicate(item.nilai)
       })),
 
       // Averages and final scores
       rata_ss: Math.round(rataSs * 100) / 100,
-      pred_ss: getPredicate(rataSs),
+      pred_ss: getSikapPredicate(rataSs),
       rata_so: Math.round(rataSo * 100) / 100,
-      pred_so: getPredicate(rataSo),
+      pred_so: getSikapPredicate(rataSo),
       nilai_akhir_sikap: Math.round(nilaiAkhirSikap * 100) / 100,
-      pred_akhir_sikap: getPredicate(nilaiAkhirSikap),
+      pred_akhir_sikap: getSikapPredicate(nilaiAkhirSikap),
 
       // Catatan sikap
       catatan_sikap: catatanSiswa?.catatan_sikap || "",

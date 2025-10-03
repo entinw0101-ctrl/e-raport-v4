@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 import { FileText, Download, Eye, ArrowLeft, Edit, Save, X, Trash2 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useParams } from "next/navigation"
-import { getPredicate } from "@/lib/raport-utils"
+import { getPredicate, getSikapPredicate } from "@/lib/raport-utils"
 import { getNilaiColor } from "@/lib/utils"
 import { useSession } from "next-auth/react"
 
@@ -74,6 +74,7 @@ interface StudentData {
   penilaianSikap: Array<{
     id: string
     nilai: number
+    predikat: string
     indikator_sikap: {
       jenis_sikap: string
       indikator: string
@@ -629,7 +630,7 @@ export default function StudentRaportPage() {
                   <div className="flex items-center gap-2">
                     <span className={`font-medium ${getNilaiColor(sikap.nilai)}`}>{sikap.nilai}</span>
                     <Badge variant="outline">
-                      {getPredicate(sikap.nilai)}
+                      {sikap.predikat}
                     </Badge>
                   </div>
                 </div>
