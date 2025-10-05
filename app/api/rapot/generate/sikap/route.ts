@@ -5,6 +5,7 @@ import PizZip from "pizzip"
 import ImageModule from "docxtemplater-image-module-free"
 import fs from "fs"
 import path from "path"
+import sizeOf from 'image-size'
 import { getPredicate, getSikapPredicate, formatTanggal } from "@/lib/raport-utils"
 
 export async function POST(request: NextRequest) {
@@ -170,27 +171,62 @@ export async function POST(request: NextRequest) {
       jabatan_penanggung_jawab: penanggungJawab.jabatan,
       nama_penanggung_jawab: penanggungJawab.nama_pejabat,
       nip_penanggung_jawab: penanggungJawab.nip || "",
-      // Image placeholder - path relative to public folder
-      tanda_tangan_penanggung_jawab: penanggungJawab.tanda_tangan?.replace('/uploads/', 'uploads/') || "",
+      // Image placeholder
+      tanda_tangan_penanggung_jawab: 'tanda_tangan_penanggung_jawab',
 
       // Metadata
       tgl_raport: `Sumedang, ${formatTanggal(new Date())}`
     }
 
     // Setup image module for signature
+    let penanggungJawabSignatureBuffer: Buffer = Buffer.alloc(0)
+    const signature = penanggungJawab.tanda_tangan
+    if (signature) {
+      if (signature.startsWith('https://')) {
+        try {
+          const response = await fetch(signature)
+          if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer()
+            penanggungJawabSignatureBuffer = Buffer.from(arrayBuffer)
+          }
+        } catch (error) {
+          console.error('Error fetching signature from blob:', error)
+        }
+      } else {
+        try {
+          const localPath = path.join(process.cwd(), 'public', signature.replace(/^\//, ''))
+          penanggungJawabSignatureBuffer = fs.readFileSync(localPath)
+        } catch (error) {
+          console.error('Error reading local signature:', error)
+        }
+      }
+    }
+
     const imageOpts = {
       getImage: (tagValue: string) => {
-        try {
-          // tagValue should be the path to the signature image
-          const imagePath = path.join(process.cwd(), 'public', tagValue)
-          return fs.readFileSync(imagePath)
-        } catch (error) {
-          console.error('Error loading signature image:', error)
-          // Return empty buffer if image not found
-          return Buffer.alloc(0)
+        if (tagValue === 'tanda_tangan_penanggung_jawab') {
+          return penanggungJawabSignatureBuffer
         }
+        return Buffer.alloc(0)
       },
-      getSize: () => [150, 75], // width, height in pixels
+      getSize: (imgBuffer: Buffer) => {
+        if (!imgBuffer || imgBuffer.length === 0) {
+            return [150, 75]; // Fallback jika buffer kosong
+        }
+        try {
+          const dimensions = sizeOf(imgBuffer);
+          const maxWidth = 150;
+
+          if (dimensions.width && dimensions.height) {
+            const ratio = dimensions.width / dimensions.height;
+            const newHeight = Math.round(maxWidth / ratio);
+            return [maxWidth, newHeight];
+          }
+        } catch (e) {
+          console.error("Gagal membaca dimensi gambar:", e);
+        }
+        return [150, 75]; // Fallback jika terjadi error
+      },
     }
 
     // Load template

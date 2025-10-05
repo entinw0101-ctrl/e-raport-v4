@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { DataTable, type Column } from "@/src/components/DataTable"
+import { useState, useEffect } from "react"
 import { FormModal, type FormField } from "@/src/components/FormModal"
 import { ConfirmDialog } from "@/src/components/ConfirmDialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Upload, Trash2, FileImage } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Upload, Trash2, FileImage, Save } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface PenanggungJawabRapot {
@@ -22,161 +25,57 @@ interface PenanggungJawabRapot {
 }
 
 export default function PenanggungJawabRapotPage() {
-  const [data, setData] = useState<PenanggungJawabRapot[]>([])
+  const [lakiData, setLakiData] = useState<PenanggungJawabRapot | null>(null)
+  const [perempuanData, setPerempuanData] = useState<PenanggungJawabRapot | null>(null)
   const [loading, setLoading] = useState(false)
-  const [pagination, setPagination] = useState({
-    page: 1,
-    per_page: 10,
-    total: 0,
-    total_pages: 0,
+
+  // Form states
+  const [lakiForm, setLakiForm] = useState({
+    jabatan: "",
+    nama_pejabat: "",
+    nip: "",
+    status: "aktif" as "aktif" | "nonaktif",
+  })
+  const [perempuanForm, setPerempuanForm] = useState({
+    jabatan: "",
+    nama_pejabat: "",
+    nip: "",
+    status: "aktif" as "aktif" | "nonaktif",
   })
 
-  // Modal states
-  const [showFormModal, setShowFormModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [selectedPenanggungJawabRapot, setSelectedPenanggungJawabRapot] = useState<PenanggungJawabRapot | null>(null)
-  const [formLoading, setFormLoading] = useState(false)
+  const [selectedToDelete, setSelectedToDelete] = useState<PenanggungJawabRapot | null>(null)
 
-  // Filter states
-  const [searchTerm, setSearchTerm] = useState("")
-
-  const columns: Column<PenanggungJawabRapot>[] = [
-    {
-      key: "jabatan",
-      label: "Jabatan",
-      className: "font-medium",
-    },
-    {
-      key: "nama_pejabat",
-      label: "Nama Pejabat",
-      className: "font-medium",
-    },
-    {
-      key: "nip",
-      label: "NIP",
-      render: (value) => value || "-",
-    },
-    {
-      key: "jenis_kelamin_target",
-      label: "Target Gender",
-      render: (value) => {
-        const labels = {
-          LAKI_LAKI: "Laki-laki",
-          PEREMPUAN: "Perempuan",
-          Semua: "Semua",
-        }
-        return (
-          <Badge variant="outline">
-            {labels[value as keyof typeof labels]}
-          </Badge>
-        )
-      },
-    },
-    {
-      key: "status",
-      label: "Status",
-      render: (value) => (
-        <Badge variant={value === "aktif" ? "default" : "secondary"}>
-          {value === "aktif" ? "Aktif" : "Non-aktif"}
-        </Badge>
-      ),
-    },
-    {
-      key: "tanda_tangan",
-      label: "Tanda Tangan",
-      render: (value, row) => (
-        <div className="flex items-center gap-2">
-          {value ? <Badge variant="default">Ada</Badge> : <Badge variant="secondary">Belum</Badge>}
-          <Button size="sm" variant="outline" onClick={() => handleUploadSignature(row)}>
-            <Upload className="h-3 w-3" />
-          </Button>
-        </div>
-      ),
-    },
-    {
-      key: "dibuat_pada",
-      label: "Dibuat Pada",
-      render: (value) => new Date(value).toLocaleDateString("id-ID"),
-    },
-  ]
-
-  const getFormFields = (): FormField[] => [
-    {
-      name: "jabatan",
-      label: "Jabatan",
-      type: "text",
-      required: true,
-      placeholder: "Contoh: Kepala Sekolah, Wali Kelas",
-    },
-    {
-      name: "nama_pejabat",
-      label: "Nama Pejabat",
-      type: "text",
-      required: true,
-      placeholder: "Nama lengkap pejabat",
-    },
-    {
-      name: "nip",
-      label: "NIP",
-      type: "text",
-      placeholder: "Nomor Induk Pegawai (opsional)",
-    },
-    {
-      name: "jenis_kelamin_target",
-      label: "Target Jenis Kelamin",
-      type: "select",
-      required: true,
-      options: [
-        { value: "LAKI_LAKI", label: "Laki-laki" },
-        { value: "PEREMPUAN", label: "Perempuan" },
-        { value: "Semua", label: "Semua" },
-      ],
-    },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "aktif", label: "Aktif" },
-        { value: "nonaktif", label: "Non-aktif" },
-      ],
-    },
-    {
-      name: "signature_file",
-      label: "Tanda Tangan",
-      type: "signature",
-      accept: "image/jpeg,image/jpg,image/png",
-      signatureUrl: selectedPenanggungJawabRapot?.tanda_tangan || undefined,
-      onViewSignature: () => {
-        if (selectedPenanggungJawabRapot?.tanda_tangan) {
-          setSelectedPenanggungJawabRapot(selectedPenanggungJawabRapot) // Trigger signature preview modal
-        }
-      },
-      onDeleteSignature: () => {
-        if (selectedPenanggungJawabRapot) {
-          handleDeleteSignature(selectedPenanggungJawabRapot.id)
-        }
-      },
-      required: !selectedPenanggungJawabRapot?.tanda_tangan,
-    },
-  ]
-
-  const fetchData = useCallback(async (page = 1, search = "") => {
+  const fetchData = async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        per_page: pagination.per_page.toString(),
-        ...(search && { search }),
-      })
-
-      const response = await fetch(`/api/penanggung-jawab-rapot?${params}`)
+      const response = await fetch("/api/penanggung-jawab-rapot")
       const result = await response.json()
 
       if (result.success) {
-        setData(result.data)
-        setPagination(result.pagination)
+        const laki = result.data.find((item: PenanggungJawabRapot) => item.jenis_kelamin_target === "LAKI_LAKI")
+        const perempuan = result.data.find((item: PenanggungJawabRapot) => item.jenis_kelamin_target === "PEREMPUAN")
+
+        setLakiData(laki || null)
+        setPerempuanData(perempuan || null)
+
+        if (laki) {
+          setLakiForm({
+            jabatan: laki.jabatan,
+            nama_pejabat: laki.nama_pejabat,
+            nip: laki.nip || "",
+            status: laki.status,
+          })
+        }
+
+        if (perempuan) {
+          setPerempuanForm({
+            jabatan: perempuan.jabatan,
+            nama_pejabat: perempuan.nama_pejabat,
+            nip: perempuan.nip || "",
+            status: perempuan.status,
+          })
+        }
       } else {
         toast({
           title: "Error",
@@ -193,37 +92,66 @@ export default function PenanggungJawabRapotPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.per_page])
+  }
 
   useEffect(() => {
     fetchData()
-  }, [fetchData])
+  }, [])
 
-  const handlePageChange = useCallback((page: number) => {
-    fetchData(page, searchTerm)
-  }, [fetchData, searchTerm])
+  const handleSave = async (gender: "laki" | "perempuan") => {
+    const form = gender === "laki" ? lakiForm : perempuanForm
+    const data = gender === "laki" ? lakiData : perempuanData
+    const jenis_kelamin_target = gender === "laki" ? "LAKI_LAKI" : "PEREMPUAN"
 
-  const handleSearch = useCallback((search: string) => {
-    setSearchTerm(search)
-    fetchData(1, search)
-  }, [fetchData])
+    if (!form.jabatan || !form.nama_pejabat) {
+      toast({
+        title: "Error",
+        description: "Jabatan dan nama pejabat wajib diisi",
+        variant: "destructive",
+      })
+      return
+    }
 
-  const handleAdd = () => {
-    setSelectedPenanggungJawabRapot(null)
-    setShowFormModal(true)
+    try {
+      const url = data ? `/api/penanggung-jawab-rapot/${data.id}` : "/api/penanggung-jawab-rapot"
+      const method = data ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...form,
+          jenis_kelamin_target,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Berhasil",
+          description: `Penanggung jawab rapot ${gender === "laki" ? "Laki-laki" : "Perempuan"} berhasil ${data ? "diperbarui" : "ditambahkan"}`,
+        })
+        fetchData()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Terjadi kesalahan",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat menyimpan data",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleEdit = (penanggungJawabRapot: PenanggungJawabRapot) => {
-    setSelectedPenanggungJawabRapot(penanggungJawabRapot)
-    setShowFormModal(true)
-  }
-
-  const handleDelete = (penanggungJawabRapot: PenanggungJawabRapot) => {
-    setSelectedPenanggungJawabRapot(penanggungJawabRapot)
-    setShowDeleteDialog(true)
-  }
-
-  const handleUploadSignature = (penanggungJawabRapot: PenanggungJawabRapot) => {
+  const handleUploadSignature = (data: PenanggungJawabRapot) => {
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
@@ -235,7 +163,7 @@ export default function PenanggungJawabRapotPage() {
         const formData = new FormData()
         formData.append("signature", file)
 
-        const response = await fetch(`/api/penanggung-jawab-rapot/${penanggungJawabRapot.id}/signature`, {
+        const response = await fetch(`/api/penanggung-jawab-rapot/${data.id}/signature`, {
           method: "POST",
           body: formData,
         })
@@ -247,7 +175,7 @@ export default function PenanggungJawabRapotPage() {
             title: "Berhasil",
             description: "Tanda tangan berhasil diupload",
           })
-          fetchData(pagination.page, searchTerm)
+          fetchData()
         } else {
           toast({
             title: "Error",
@@ -266,114 +194,17 @@ export default function PenanggungJawabRapotPage() {
     input.click()
   }
 
-  const handleDeleteSignature = async (id: number) => {
-    try {
-      const response = await fetch(`/api/penanggung-jawab-rapot/${id}/signature`, {
-        method: "DELETE",
-      })
 
-      const result = await response.json()
-
-      if (result.success) {
-        toast({
-          title: "Berhasil",
-          description: "Tanda tangan berhasil dihapus",
-        })
-        fetchData(pagination.page, searchTerm)
-        setShowFormModal(false) // Close modal after deletion
-      } else {
-        toast({
-          title: "Error",
-          description: result.error || "Gagal menghapus tanda tangan",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat menghapus tanda tangan",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleFormSubmit = async (formData: Record<string, any>) => {
-    setFormLoading(true)
-    try {
-      // Handle signature upload separately
-      const signatureFile = formData.signature_file
-      delete formData.signature_file // Remove from form data as it's handled separately
-
-      const url = selectedPenanggungJawabRapot ? `/api/penanggung-jawab-rapot/${selectedPenanggungJawabRapot.id}` : "/api/penanggung-jawab-rapot"
-      const method = selectedPenanggungJawabRapot ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        // If there's a signature file to upload, upload it after creating/updating
-        if (signatureFile && signatureFile.length > 0) {
-          const penanggungJawabRapotId = selectedPenanggungJawabRapot ? selectedPenanggungJawabRapot.id : result.data?.id
-          if (penanggungJawabRapotId) {
-            const uploadResult = await uploadSignature(penanggungJawabRapotId, signatureFile[0])
-            if (!uploadResult.success) {
-              toast({
-                title: "Peringatan",
-                description: "Data berhasil disimpan, tetapi upload tanda tangan gagal",
-                variant: "destructive",
-              })
-            }
-          }
-        }
-
-        toast({
-          title: "Berhasil",
-          description: result.message || `Penanggung jawab rapot berhasil ${selectedPenanggungJawabRapot ? "diperbarui" : "ditambahkan"}`,
-        })
-        fetchData(pagination.page, searchTerm)
-        setShowFormModal(false)
-      } else {
-        toast({
-          title: "Error",
-          description: result.error || "Terjadi kesalahan",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat menyimpan data",
-        variant: "destructive",
-      })
-    } finally {
-      setFormLoading(false)
-    }
-  }
-
-  const uploadSignature = async (id: number, file: File) => {
-    const formData = new FormData()
-    formData.append("signature", file)
-
-    const response = await fetch(`/api/penanggung-jawab-rapot/${id}/signature`, {
-      method: "POST",
-      body: formData,
-    })
-
-    return response.json()
+  const handleDelete = (data: PenanggungJawabRapot) => {
+    setSelectedToDelete(data)
+    setShowDeleteDialog(true)
   }
 
   const handleDeleteConfirm = async () => {
-    if (!selectedPenanggungJawabRapot) return
+    if (!selectedToDelete) return
 
     try {
-      const response = await fetch(`/api/penanggung-jawab-rapot/${selectedPenanggungJawabRapot.id}`, {
+      const response = await fetch(`/api/penanggung-jawab-rapot/${selectedToDelete.id}`, {
         method: "DELETE",
       })
 
@@ -384,7 +215,8 @@ export default function PenanggungJawabRapotPage() {
           title: "Berhasil",
           description: "Penanggung jawab rapot berhasil dihapus",
         })
-        fetchData(pagination.page, searchTerm)
+        fetchData()
+        setShowDeleteDialog(false)
       } else {
         toast({
           title: "Error",
@@ -400,52 +232,200 @@ export default function PenanggungJawabRapotPage() {
       })
     }
   }
-const getInitialFormData = () => {
-  if (!selectedPenanggungJawabRapot) return { status: "aktif", jenis_kelamin_target: "Semua" }
 
-  return {
-    jabatan: selectedPenanggungJawabRapot.jabatan,
-    nama_pejabat: selectedPenanggungJawabRapot.nama_pejabat,
-    nip: selectedPenanggungJawabRapot.nip || "",
-    jenis_kelamin_target: selectedPenanggungJawabRapot.jenis_kelamin_target,
-    status: selectedPenanggungJawabRapot.status,
-  }
-}
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <DataTable
-        title="Penanggung Jawab Rapot"
-        columns={columns}
-        data={data}
-        loading={loading}
-        pagination={pagination}
-        onPageChange={handlePageChange}
-        onSearch={handleSearch}
-        onAdd={handleAdd}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        searchPlaceholder="Cari jabatan, nama pejabat, atau NIP..."
-        addButtonText="Tambah Penanggung Jawab"
-        emptyMessage="Belum ada data penanggung jawab rapot"
-      />
+      <h1 className="text-2xl font-bold mb-6">Penanggung Jawab Rapot</h1>
 
-      <FormModal
-        title={selectedPenanggungJawabRapot ? "Edit Penanggung Jawab Rapot" : "Tambah Penanggung Jawab Rapot"}
-        fields={getFormFields()}
-        initialData={getInitialFormData()}
-        open={showFormModal}
-        onClose={() => setShowFormModal(false)}
-        onSubmit={handleFormSubmit}
-        loading={formLoading}
-      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Laki-laki Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              Penanggung Jawab Laki-laki
+              {lakiData && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDelete(lakiData)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="laki-jabatan">Jabatan</Label>
+              <Input
+                id="laki-jabatan"
+                value={lakiForm.jabatan}
+                onChange={(e) => setLakiForm({ ...lakiForm, jabatan: e.target.value })}
+                placeholder="Contoh: Kepala Sekolah"
+              />
+            </div>
+            <div>
+              <Label htmlFor="laki-nama">Nama Pejabat</Label>
+              <Input
+                id="laki-nama"
+                value={lakiForm.nama_pejabat}
+                onChange={(e) => setLakiForm({ ...lakiForm, nama_pejabat: e.target.value })}
+                placeholder="Nama lengkap pejabat"
+              />
+            </div>
+            <div>
+              <Label htmlFor="laki-nip">NIP</Label>
+              <Input
+                id="laki-nip"
+                value={lakiForm.nip}
+                onChange={(e) => setLakiForm({ ...lakiForm, nip: e.target.value })}
+                placeholder="Nomor Induk Pegawai (opsional)"
+              />
+            </div>
+            <div>
+              <Label htmlFor="laki-status">Status</Label>
+              <Select
+                value={lakiForm.status}
+                onValueChange={(value: "aktif" | "nonaktif") => setLakiForm({ ...lakiForm, status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="aktif">Aktif</SelectItem>
+                  <SelectItem value="nonaktif">Non-aktif</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Tanda Tangan</Label>
+              <div className="flex items-center gap-2 mt-2">
+                {lakiData ? (
+                  lakiData.tanda_tangan ? (
+                    <>
+                      <img src={lakiData.tanda_tangan} alt="Tanda Tangan" className="max-w-32 max-h-16 border rounded" />
+                      <Button size="sm" variant="outline" onClick={() => handleUploadSignature(lakiData)}>
+                        <Upload className="h-3 w-3 mr-1" />
+                        Ganti
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => handleUploadSignature(lakiData)}>
+                      <Upload className="h-3 w-3 mr-1" />
+                      Upload
+                    </Button>
+                  )
+                ) : (
+                  <Badge variant="secondary">Simpan data terlebih dahulu</Badge>
+                )}
+              </div>
+            </div>
+            <Button onClick={() => handleSave("laki")} className="w-full">
+              <Save className="h-4 w-4 mr-2" />
+              Simpan
+            </Button>
+          </CardContent>
+        </Card>
 
+        {/* Perempuan Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              Penanggung Jawab Perempuan
+              {perempuanData && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDelete(perempuanData)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="perempuan-jabatan">Jabatan</Label>
+              <Input
+                id="perempuan-jabatan"
+                value={perempuanForm.jabatan}
+                onChange={(e) => setPerempuanForm({ ...perempuanForm, jabatan: e.target.value })}
+                placeholder="Contoh: Wakil Kepala Sekolah"
+              />
+            </div>
+            <div>
+              <Label htmlFor="perempuan-nama">Nama Pejabat</Label>
+              <Input
+                id="perempuan-nama"
+                value={perempuanForm.nama_pejabat}
+                onChange={(e) => setPerempuanForm({ ...perempuanForm, nama_pejabat: e.target.value })}
+                placeholder="Nama lengkap pejabat"
+              />
+            </div>
+            <div>
+              <Label htmlFor="perempuan-nip">NIP</Label>
+              <Input
+                id="perempuan-nip"
+                value={perempuanForm.nip}
+                onChange={(e) => setPerempuanForm({ ...perempuanForm, nip: e.target.value })}
+                placeholder="Nomor Induk Pegawai (opsional)"
+              />
+            </div>
+            <div>
+              <Label htmlFor="perempuan-status">Status</Label>
+              <Select
+                value={perempuanForm.status}
+                onValueChange={(value: "aktif" | "nonaktif") => setPerempuanForm({ ...perempuanForm, status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="aktif">Aktif</SelectItem>
+                  <SelectItem value="nonaktif">Non-aktif</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Tanda Tangan</Label>
+              <div className="flex items-center gap-2 mt-2">
+                {perempuanData ? (
+                  perempuanData.tanda_tangan ? (
+                    <>
+                      <img src={perempuanData.tanda_tangan} alt="Tanda Tangan" className="max-w-32 max-h-16 border rounded" />
+                      <Button size="sm" variant="outline" onClick={() => handleUploadSignature(perempuanData)}>
+                        <Upload className="h-3 w-3 mr-1" />
+                        Ganti
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => handleUploadSignature(perempuanData)}>
+                      <Upload className="h-3 w-3 mr-1" />
+                      Upload
+                    </Button>
+                  )
+                ) : (
+                  <Badge variant="secondary">Simpan data terlebih dahulu</Badge>
+                )}
+              </div>
+            </div>
+            <Button onClick={() => handleSave("perempuan")} className="w-full">
+              <Save className="h-4 w-4 mr-2" />
+              Simpan
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+
+      {/* Delete Dialog */}
       <ConfirmDialog
         open={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
         title="Hapus Penanggung Jawab Rapot"
-        description={`Apakah Anda yakin ingin menghapus penanggung jawab rapot "${selectedPenanggungJawabRapot?.nama_pejabat}"? Tindakan ini tidak dapat dibatalkan.`}
+        description={`Apakah Anda yakin ingin menghapus penanggung jawab rapot "${selectedToDelete?.nama_pejabat}"? Tindakan ini tidak dapat dibatalkan.`}
         confirmText="Hapus"
         variant="destructive"
       />

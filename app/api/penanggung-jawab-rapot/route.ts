@@ -53,8 +53,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Validate required fields
-    if (!body.jabatan || !body.nama_pejabat) {
-      return NextResponse.json({ success: false, error: "Jabatan dan nama pejabat wajib diisi" }, { status: 400 })
+    if (!body.jabatan || !body.nama_pejabat || !body.jenis_kelamin_target) {
+      return NextResponse.json({ success: false, error: "Jabatan, nama pejabat, dan target jenis kelamin wajib diisi" }, { status: 400 })
+    }
+
+    // Validate uniqueness for LAKI_LAKI and PEREMPUAN
+    if (body.jenis_kelamin_target === "LAKI_LAKI" || body.jenis_kelamin_target === "PEREMPUAN") {
+      const existing = await prisma.penanggungJawabRapot.findFirst({
+        where: { jenis_kelamin_target: body.jenis_kelamin_target },
+      })
+      if (existing) {
+        return NextResponse.json({
+          success: false,
+          error: `Penanggung jawab rapot untuk target ${body.jenis_kelamin_target === "LAKI_LAKI" ? "Laki-laki" : "Perempuan"} sudah ada. Hanya boleh satu per target jenis kelamin.`
+        }, { status: 400 })
+      }
     }
 
     const penanggungJawabRapot = await prisma.penanggungJawabRapot.create({
@@ -63,7 +76,7 @@ export async function POST(request: NextRequest) {
         nama_pejabat: body.nama_pejabat,
         nip: body.nip,
         tanda_tangan: body.tanda_tangan,
-        jenis_kelamin_target: body.jenis_kelamin_target || "Semua",
+        jenis_kelamin_target: body.jenis_kelamin_target,
         status: body.status || "aktif",
       },
     })
