@@ -59,6 +59,7 @@
     "geist": "latest",
     "image-size": "^2.0.2",
     "input-otp": "1.4.1",
+    "jszip": "^3.10.1",
     "libreoffice-convert": "^1.7.0",
     "lucide-react": "^0.454.0",
     "moment-hijri": "^3.0.0",

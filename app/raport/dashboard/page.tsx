@@ -197,7 +197,7 @@ export default function RaportDashboardPage() {
     }
   }
 
-  const handleDownloadBulk = async (filterStatus?: string) => {
+  const handleDownloadBulk = async (filterStatus?: string, type: 'nilai' | 'identitas' | 'sikap' = 'nilai') => {
     const targetStudents = filterStatus
       ? students.filter(s => s.report_status === filterStatus && s.can_generate)
       : students.filter(s => s.can_generate)
@@ -216,9 +216,17 @@ export default function RaportDashboardPage() {
     let successCount = 0
     let errorCount = 0
 
+    const endpoint = type === 'nilai' ? '/api/rapot/generate/nilai' :
+                    type === 'identitas' ? '/api/rapot/generate/identitas' :
+                    '/api/rapot/generate/sikap'
+
+    const filePrefix = type === 'nilai' ? 'Rapor_Nilai' :
+                      type === 'identitas' ? 'Identitas' :
+                      'Sikap'
+
     for (const student of targetStudents) {
       try {
-        const response = await fetch('/api/rapot/generate/nilai', {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -237,7 +245,7 @@ export default function RaportDashboardPage() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `Rapor_Nilai_${student.nama.replace(/\s+/g, '_')}.docx`
+        a.download = `${filePrefix}_${student.nama.replace(/\s+/g, '_')}.docx`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -254,7 +262,7 @@ export default function RaportDashboardPage() {
 
     toast({
       title: "Download Selesai",
-      description: `${successCount} rapor berhasil didownload${errorCount > 0 ? `, ${errorCount} gagal` : ''}`,
+      description: `${successCount} ${type} berhasil didownload${errorCount > 0 ? `, ${errorCount} gagal` : ''}`,
     })
   }
 
@@ -378,7 +386,7 @@ export default function RaportDashboardPage() {
               className="bg-green-600 hover:bg-green-700"
             >
               <Download className="h-4 w-4 mr-2" />
-              Download Siap ({summary.ready})
+              Download Nilai Siap ({summary.ready})
             </Button>
             <Button
               onClick={() => handleDownloadBulk()}
@@ -386,7 +394,25 @@ export default function RaportDashboardPage() {
               variant="outline"
             >
               <Download className="h-4 w-4 mr-2" />
-              Download Semua yang Bisa ({students.filter(s => s.can_generate).length})
+              Download Nilai Semua ({students.filter(s => s.can_generate).length})
+            </Button>
+            <Button
+              onClick={() => handleDownloadBulk(undefined, 'identitas')}
+              disabled={students.length === 0 || downloading.size > 0}
+              variant="secondary"
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Generate Identitas ({students.length})
+            </Button>
+            <Button
+              onClick={() => handleDownloadBulk(undefined, 'sikap')}
+              disabled={students.length === 0 || downloading.size > 0}
+              variant="secondary"
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Generate Sikap ({students.length})
             </Button>
             <Button
               onClick={fetchStudentStatuses}
