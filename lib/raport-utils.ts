@@ -96,22 +96,24 @@ export async function getFullRaportData(siswaId: string, semester: string, tahun
     };
     const studentTingkatanId = siswa.kelas?.tingkatan_id;
 
+    // PERBAIKAN: Buat klausa 'where' kurikulum secara kondisional
+    const kurikulumWhere = studentTingkatanId
+      ? { where: { tingkatan_id: studentTingkatanId }, include: { kitab: true } }
+      : undefined;
+
     const [nilaiUjians, nilaiHafalans, sikaps, kehadirans, kurikulums] = await Promise.all([
         prisma.nilaiUjian.findMany({
             where: { ...commonWhere, mata_pelajaran: { jenis: "Ujian" } },
-            include: { mata_pelajaran: { include: { kurikulum: { where: { tingkatan_id: studentTingkatanId }, include: { kitab: true } } } } },
+            // PERBAIKAN: Terapkan klausa kondisional
+            include: { mata_pelajaran: { include: { kurikulum: kurikulumWhere } } },
             orderBy: { mata_pelajaran: { nama_mapel: 'asc' } },
         }),
         prisma.nilaiHafalan.findMany({
             where: { ...commonWhere, mata_pelajaran: { jenis: "Hafalan" } },
             include: {
               mata_pelajaran: {
-                include: {
-                  kurikulum: {
-                    where: { tingkatan_id: studentTingkatanId },
-                    include: { kitab: true }
-                  }
-                }
+                // PERBAIKAN: Terapkan klausa kondisional
+                include: { kurikulum: kurikulumWhere }
               }
             },
             orderBy: { mata_pelajaran: { nama_mapel: 'asc' } },
@@ -302,7 +304,8 @@ export async function generateLaporanNilai(
          const kurikulum = kurikulumMap.get(h.mata_pelajaran.id);
          return {
            mataPelajaran: h.mata_pelajaran.nama_mapel,
-           kitab: kurikulum?.kitab?.nama_kitab || "Kitab tidak terdefinisi",
+           // PERBAIKAN LOGIKA: Samakan dengan logika nilaiUjian
+           kitab: kurikulum?.kitab?.nama_kitab || kurikulum?.batas_hafalan || "-",
            batasHafalan: kurikulum?.batas_hafalan || "-",
            targetHafalan: h.target_hafalan || "Belum ada capaian",
            predikat: normalizeHafalanPredikat(h.predikat)
@@ -387,7 +390,8 @@ export async function calculateClassRanking(
       const examData = examScores.find(score => score.siswa_id === student.id)
       return {
         siswa_id: student.id,
-        average: examData?._avg.nilai_angka?.toNumber() || 0
+        // PERBAIKAN: Konversi Decimal/null ke number dengan aman
+        average: Number(examData?._avg.nilai_angka) || 0
       }
     })
 

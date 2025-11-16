@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
 import { generatePredikat } from "@/lib/utils"
-import { getPredicate } from "@/lib/raport-utils"
+// DIUBAH: Impor getSikapPredicate juga
+import { getPredicate, getSikapPredicate } from "@/lib/raport-utils"
 import { PredikatHafalan } from "@prisma/client"
 
 interface ValidationResult {
@@ -172,11 +173,13 @@ async function validateNilaiUjianSheet(worksheet: ExcelJS.Worksheet | undefined,
 
       if (!nis || !mataPelajaran) continue
 
-      // Validate nilai range (0-100)
+      // DIUBAH: Validate nilai range (0-10)
       if (nilai !== null && nilai !== undefined && nilai !== '') {
         const nilaiNum = parseFloat(nilai)
-        if (isNaN(nilaiNum) || nilaiNum < 0 || nilaiNum > 100) {
-          details.push(`Baris ${i + 2}: Nilai untuk ${mataPelajaran} harus antara 0-100`)
+        // DIUBAH: Validasi dari 0-10
+        if (isNaN(nilaiNum) || nilaiNum < 0 || nilaiNum > 10) {
+          // DIUBAH: Pesan error
+          details.push(`Baris ${i + 2}: Nilai untuk ${mataPelajaran} harus antara 0-10`)
         } else {
           validCount++
           validatedData.push({
@@ -393,14 +396,14 @@ async function processNilaiUjian(data: any[], siswaMap: Map<string, any>, mapelM
         },
         update: {
           nilai_angka: item.nilai,
-          predikat: generatePredikat(item.nilai)
+          predikat: getPredicate(item.nilai) // DIUBAH: Menggunakan getPredicate
         },
         create: {
           siswa_id: siswa.id,
           mapel_id: mapel.id,
           periode_ajaran_id: parseInt(periodeAjaranId),
           nilai_angka: item.nilai,
-          predikat: generatePredikat(item.nilai)
+          predikat: getPredicate(item.nilai) // DIUBAH: Menggunakan getPredicate
         }
       }).catch((error: any) => {
         console.error('Upsert error for nilai ujian:', error)
@@ -586,7 +589,8 @@ async function processPenilaianSikap(data: any[], siswaMap: Map<string, any>, in
 
     if (siswa && indikator) {
       const nilaiNum = parseInt(item.nilai)
-      const predikat = getPredicate(nilaiNum)
+      // DIUBAH: Menggunakan getSikapPredicate
+      const predikat = getSikapPredicate(nilaiNum)
 
       console.log('Creating upsert for penilaian sikap:', {
         siswa_id: siswa.id,
@@ -859,11 +863,13 @@ async function validatePenilaianSikapSheet(worksheet: ExcelJS.Worksheet | undefi
 
       if (!nis || !jenisSikap || !indikator) continue
 
-      // Validate nilai range (1-100 for sikap)
+      // DIUBAH: Validate nilai range (0-100 for sikap)
       if (nilai !== null && nilai !== undefined && nilai !== '') {
         const nilaiNum = parseInt(nilai)
-        if (isNaN(nilaiNum) || nilaiNum < 1 || nilaiNum > 100) {
-          details.push(`Baris ${i + 2}: Nilai sikap harus antara 1-100`)
+        // DIUBAH: Validasi dari 0-100
+        if (isNaN(nilaiNum) || nilaiNum < 0 || nilaiNum > 100) {
+          // DIUBAH: Pesan error
+          details.push(`Baris ${i + 2}: Nilai sikap harus antara 0-100`)
         } else {
           validCount++
           validatedData.push({

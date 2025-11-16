@@ -198,7 +198,11 @@ export async function POST(request: NextRequest) {
     headers.set('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     headers.set('Content-Disposition', `attachment; filename="Nilai_${reportData.header.nama?.replace(/\s+/g, '_') || 'Siswa'}_${reportData.header.tahunAjaran}.docx"`)
 
-    return new NextResponse(outputBuffer, {
+    // DIUBAH: Konversi Node.js Buffer ke Uint8Array, yang merupakan BlobPart valid
+    const uint8Array = Uint8Array.from(outputBuffer);
+    const blob = new Blob([uint8Array]);
+
+    return new NextResponse(blob, {
       status: 200,
       headers,
     })
@@ -211,4 +215,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
