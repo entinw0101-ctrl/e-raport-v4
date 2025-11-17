@@ -9,6 +9,8 @@
     "start": "next start",
     "postinstall": "prisma generate",
      "test": "jest",
+    "test:generate": "jest --testPathPatterns=\"generate/.*route.test.ts\"",
+    "test:upload": "jest --testPathPatterns=\"upload/.*route.test.ts\"",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
