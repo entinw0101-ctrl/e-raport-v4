@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { PredikatHafalan } from "@prisma/client";
 
 // GET (Detail Nilai Hafalan)
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  try {
     const id = Number.parseInt(params.id);
     if (isNaN(id)) {
         return NextResponse.json({ success: false, error: "ID tidak valid" }, { status: 400 });
@@ -32,8 +33,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 // PUT (Update Nilai Hafalan)
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  try {
     const id = Number.parseInt(params.id);
      if (isNaN(id)) {
         return NextResponse.json({ success: false, error: "ID tidak valid" }, { status: 400 });
@@ -74,8 +76,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE (Hapus Nilai Hafalan)
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  try {
     const id = Number.parseInt(params.id);
     if (isNaN(id)) {
         return NextResponse.json({ success: false, error: "ID tidak valid" }, { status: 400 });

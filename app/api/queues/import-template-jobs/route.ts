@@ -9,9 +9,13 @@ type ImportTemplateQueueMessage = {
 export const runtime = "nodejs"
 export const maxDuration = 60
 
-export const POST = handleCallback<ImportTemplateQueueMessage>(async (message) => {
+const consumeImportTemplateJob = handleCallback<ImportTemplateQueueMessage>(async (message) => {
   const job = await processNextImportTemplateBatch(message.jobId)
   if (job?.status === "PENDING" || job?.status === "PROCESSING") {
     await send(IMPORT_TEMPLATE_TOPIC, { jobId: message.jobId })
   }
 })
+
+export async function POST(request: Request) {
+  return consumeImportTemplateJob(request)
+}

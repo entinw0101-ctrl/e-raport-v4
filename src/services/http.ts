@@ -1,6 +1,6 @@
 // Generic HTTP wrapper untuk API calls
 export interface ApiResponse<T = any> {
-  data?: T
+  data?: T | null
   error?: string
   message?: string
   success: boolean

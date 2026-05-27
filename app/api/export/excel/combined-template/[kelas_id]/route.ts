@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
 
-export async function GET(request: NextRequest, { params }: { params: { kelas_id: string } }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ kelas_id: string }> }) {
+  const params = await props.params;
   try {
     const kelasId = parseInt(params.kelas_id)
     const { searchParams } = new URL(request.url)

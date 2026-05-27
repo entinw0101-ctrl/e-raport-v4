@@ -43,7 +43,7 @@ describe("import job processing routes", () => {
       catatanSiswa: { inserted: 0, updated: 0, errors: 0 },
     })
 
-    const response = await processJob(new Request("http://localhost/process", { method: "POST" }), { params: { job_id: "job-1" } })
+    const response = await processJob(new Request("http://localhost/process", { method: "POST" }), { params: Promise.resolve({ job_id: "job-1" }) })
 
     expect(response.status).toBe(200)
     expect(mockProcessImportTemplateBatch).toHaveBeenCalledWith(expect.anything(), 1, 2)
@@ -55,7 +55,7 @@ describe("import job processing routes", () => {
   test("retry mengembalikan batch failed ke pending", async () => {
     mockSynchronizeImportTemplateJob.mockResolvedValue({ id: "job-1", status: "PROCESSING" } as any)
 
-    const response = await retryJob(new Request("http://localhost/retry", { method: "POST" }), { params: { job_id: "job-1" } })
+    const response = await retryJob(new Request("http://localhost/retry", { method: "POST" }), { params: Promise.resolve({ job_id: "job-1" }) })
 
     expect(response.status).toBe(200)
     expect(mockPrisma.importTemplateBatch.updateMany).toHaveBeenCalledWith({

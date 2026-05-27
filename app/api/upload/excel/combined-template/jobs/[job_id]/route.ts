@@ -3,7 +3,8 @@ import { synchronizeImportTemplateJob } from "@/lib/import-template-progress"
 
 export const maxDuration = 30
 
-export async function GET(_request: Request, { params }: { params: { job_id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ job_id: string }> }) {
+  const params = await props.params;
   const job = await synchronizeImportTemplateJob(params.job_id)
 
   if (!job) {

@@ -82,7 +82,7 @@ class GuruService {
     const response = await httpService.get<Guru>(`${this.baseUrl}/${id}`)
     return {
       success: response.success,
-      data: response.data,
+      data: response.data ?? undefined,
       message: response.message,
       error: response.error,
     }
@@ -92,7 +92,7 @@ class GuruService {
     const response = await httpService.post<Guru>(this.baseUrl, data)
     return {
       success: response.success,
-      data: response.data,
+      data: response.data ?? undefined,
       message: response.message,
       error: response.error,
     }
@@ -102,7 +102,7 @@ class GuruService {
     const response = await httpService.put<Guru>(`${this.baseUrl}/${id}`, data)
     return {
       success: response.success,
-      data: response.data,
+      data: response.data ?? undefined,
       message: response.message,
       error: response.error,
     }
@@ -112,7 +112,7 @@ class GuruService {
     const response = await httpService.delete<Guru>(`${this.baseUrl}/${id}`)
     return {
       success: response.success,
-      data: response.data,
+      data: response.data ?? undefined,
       message: response.message,
       error: response.error,
     }
@@ -126,7 +126,7 @@ class GuruService {
     const response = await httpService.upload<Guru>("/upload/signature", formData)
     return {
       success: response.success,
-      data: response.data,
+      data: response.data ?? undefined,
       message: response.message,
       error: response.error,
     }
@@ -136,7 +136,7 @@ class GuruService {
     const response = await httpService.delete<Guru>(`/upload/signature?guru_id=${id}`)
     return {
       success: response.success,
-      data: response.data,
+      data: response.data ?? undefined,
       message: response.message,
       error: response.error,
     }
