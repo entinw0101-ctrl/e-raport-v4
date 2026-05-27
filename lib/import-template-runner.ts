@@ -62,6 +62,7 @@ export async function processNextImportTemplateBatch(jobId: string) {
       batch.payload as unknown as CombinedTemplatePayload,
       job.kelas_id,
       job.periode_ajaran_id,
+      job.is_simulasi ? { simulationJobId: job.id } : {},
     )
     await prisma.importTemplateBatch.update({
       where: { id: batch.id },

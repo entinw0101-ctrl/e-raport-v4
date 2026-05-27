@@ -22,6 +22,7 @@ describe("import job processing routes", () => {
       status: "PENDING",
       kelas_id: 1,
       periode_ajaran_id: 2,
+      is_simulasi: false,
     } as any)
     mockSynchronizeImportTemplateJob.mockResolvedValue({ id: "job-1", status: "PROCESSING" } as any)
   })
@@ -46,10 +47,39 @@ describe("import job processing routes", () => {
     const response = await processJob(new Request("http://localhost/process", { method: "POST" }), { params: Promise.resolve({ job_id: "job-1" }) })
 
     expect(response.status).toBe(200)
-    expect(mockProcessImportTemplateBatch).toHaveBeenCalledWith(expect.anything(), 1, 2)
+    expect(mockProcessImportTemplateBatch).toHaveBeenCalledWith(expect.anything(), 1, 2, {})
     expect(mockPrisma.importTemplateBatch.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "COMPLETED" }),
     }))
+  })
+
+  test("process job simulasi mengalihkan processor ke snapshot simulasi", async () => {
+    mockPrisma.importTemplateJob.findUnique.mockResolvedValue({
+      id: "job-simulation",
+      status: "PENDING",
+      kelas_id: 1,
+      periode_ajaran_id: 2,
+      is_simulasi: true,
+    } as any)
+    mockPrisma.importTemplateBatch.findFirst.mockResolvedValue({
+      id: "batch-1",
+      job_id: "job-simulation",
+      status: "PENDING",
+      percobaan: 0,
+      payload: { nilaiUjian: [], nilaiHafalan: [], kehadiran: [], penilaianSikap: [], catatanSiswa: [] },
+    } as any)
+    mockPrisma.importTemplateBatch.updateMany.mockResolvedValue({ count: 1 } as any)
+    mockProcessImportTemplateBatch.mockResolvedValue({
+      nilaiUjian: { inserted: 0, updated: 0, errors: 0 },
+      nilaiHafalan: { inserted: 0, updated: 0, errors: 0 },
+      kehadiran: { inserted: 0, updated: 0, errors: 0 },
+      penilaianSikap: { inserted: 0, updated: 0, errors: 0 },
+      catatanSiswa: { inserted: 0, updated: 0, errors: 0 },
+    })
+
+    await processJob(new Request("http://localhost/process", { method: "POST" }), { params: Promise.resolve({ job_id: "job-simulation" }) })
+
+    expect(mockProcessImportTemplateBatch).toHaveBeenCalledWith(expect.anything(), 1, 2, { simulationJobId: "job-simulation" })
   })
 
   test("retry mengembalikan batch failed ke pending", async () => {

@@ -33,6 +33,7 @@ interface ImportResult {
 
 interface ImportJob {
   id: string
+  is_simulasi?: boolean
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL_FAILED' | 'FAILED'
   total_siswa: number
   processed_siswa: number
@@ -51,6 +52,7 @@ interface ImportJob {
 }
 
 const ACTIVE_IMPORT_JOB_KEY = "active-combined-template-import-job"
+const IMPORT_SIMULATION_ENABLED = process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_IMPORT_SIMULATION === "true"
 
 export default function TemplateLengkapPage() {
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
@@ -68,6 +70,7 @@ export default function TemplateLengkapPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [activeJob, setActiveJob] = useState<ImportJob | null>(null)
   const [isProcessingBatches, setIsProcessingBatches] = useState(false)
+  const [validationMode, setValidationMode] = useState<"production" | "simulation">("production")
   const [showValidation, setShowValidation] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set())
 
@@ -116,7 +119,7 @@ export default function TemplateLengkapPage() {
     }
   }
 
-  const handleDownloadTemplate = async () => {
+  const handleDownloadTemplate = async (simulation = false) => {
     if (!selectedKelas || !selectedPeriode) {
       toast({
         title: "Pilih Lengkap",
@@ -129,7 +132,7 @@ export default function TemplateLengkapPage() {
     setIsDownloading(true)
 
     try {
-      const response = await fetch(`/api/export/excel/combined-template/${selectedKelas}?periode_ajaran_id=${selectedPeriode}`)
+      const response = await fetch(`/api/export/excel/combined-template/${selectedKelas}?periode_ajaran_id=${selectedPeriode}${simulation ? "&simulation=true" : ""}`)
       if (!response.ok) {
         throw new Error("Failed to download template")
       }
@@ -137,7 +140,7 @@ export default function TemplateLengkapPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `template_lengkap_${new Date().toISOString().split("T")[0]}.xlsx`
+      a.download = `${simulation ? "simulasi_" : ""}template_lengkap_${new Date().toISOString().split("T")[0]}.xlsx`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -145,12 +148,14 @@ export default function TemplateLengkapPage() {
 
       toast({
         title: "Berhasil",
-        description: "Template lengkap berhasil diunduh",
+        description: simulation
+          ? "File simulasi dengan nilai otomatis berhasil diunduh"
+          : "Template lengkap berhasil diunduh",
       })
     } catch (error) {
       toast({
         title: "Error",
-        description: "Gagal mengunduh template lengkap",
+        description: simulation ? "Gagal mengunduh file simulasi" : "Gagal mengunduh template lengkap",
         variant: "destructive",
       })
     } finally {
@@ -158,11 +163,11 @@ export default function TemplateLengkapPage() {
     }
   }
 
-  const handleUploadTemplate = async () => {
-    if (!selectedFile || !selectedKelas || !selectedPeriode) {
+  const handleUploadTemplate = async (simulation = false) => {
+    if (!selectedFile) {
       toast({
-        title: "Pilih Lengkap",
-        description: "Silakan pilih file, kelas, dan periode ajaran terlebih dahulu",
+        title: "Pilih File",
+        description: "Silakan pilih file Excel terlebih dahulu",
         variant: "destructive",
       })
       return
@@ -173,12 +178,14 @@ export default function TemplateLengkapPage() {
     setImportResult(null)
     setActiveJob(null)
     setShowValidation(false)
+    setValidationMode(simulation ? "simulation" : "production")
 
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
-      formData.append("kelas_id", selectedKelas)
-      formData.append("periode_ajaran_id", selectedPeriode)
+      if (selectedKelas) formData.append("kelas_id", selectedKelas)
+      if (selectedPeriode) formData.append("periode_ajaran_id", selectedPeriode)
+      if (simulation) formData.append("simulation", "true")
 
       const response = await fetch("/api/upload/excel/combined-template", {
         method: "POST",
@@ -188,6 +195,12 @@ export default function TemplateLengkapPage() {
       const result = await response.json()
 
       if (result.validation) {
+        if (result.importContext) {
+          setSelectedKelas(result.importContext.kelasId)
+          setSelectedPeriode(result.importContext.periodeAjaranId)
+        }
+        const effectiveSimulation = Boolean(result.isSimulation)
+        setValidationMode(effectiveSimulation ? "simulation" : "production")
         setValidationResults(result.validation)
         setShowValidation(true)
 
@@ -200,7 +213,9 @@ export default function TemplateLengkapPage() {
         } else if (result.canProceed) {
           toast({
             title: "Validasi Berhasil",
-            description: "Data dapat diimport. Klik 'Import ke Database' untuk melanjutkan.",
+            description: effectiveSimulation
+              ? "Data valid. Klik 'Jalankan Simulasi Batch' untuk memproses tanpa mengubah nilai asli."
+              : "Data dapat diimport. Klik 'Import ke Database' untuk melanjutkan.",
           })
         } else {
           toast({
@@ -213,9 +228,10 @@ export default function TemplateLengkapPage() {
         throw new Error(result.error || "Upload gagal")
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Gagal mengupload template"
       toast({
         title: "Error",
-        description: "Gagal mengupload template",
+        description: message,
         variant: "destructive",
       })
     } finally {
@@ -224,16 +240,17 @@ export default function TemplateLengkapPage() {
   }
 
   const handleImportToDatabase = async () => {
-    if (!selectedFile || !selectedKelas || !selectedPeriode) return
+    if (!selectedFile) return
 
     setIsUploading(true)
 
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
-      formData.append("kelas_id", selectedKelas)
-      formData.append("periode_ajaran_id", selectedPeriode)
+      if (selectedKelas) formData.append("kelas_id", selectedKelas)
+      if (selectedPeriode) formData.append("periode_ajaran_id", selectedPeriode)
       formData.append("import", "true")
+      if (validationMode === "simulation") formData.append("simulation", "true")
 
       const response = await fetch("/api/upload/excel/combined-template", {
         method: "POST",
@@ -246,8 +263,10 @@ export default function TemplateLengkapPage() {
         setActiveJob(result.job)
         window.localStorage.setItem(ACTIVE_IMPORT_JOB_KEY, result.job.id)
         toast({
-          title: "Import Dimulai",
-          description: `Data dibagi menjadi ${result.job.total_batches} batch dan sedang diproses.`,
+          title: validationMode === "simulation" ? "Simulasi Dimulai" : "Import Dimulai",
+          description: validationMode === "simulation"
+            ? `Data uji dibagi menjadi ${result.job.total_batches} batch; nilai asli tidak akan diubah.`
+            : `Data dibagi menjadi ${result.job.total_batches} batch dan sedang diproses.`,
         })
         await processImportJob(result.job.id)
       } else {
@@ -256,7 +275,9 @@ export default function TemplateLengkapPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Gagal mengimport data ke database",
+        description: validationMode === "simulation"
+          ? "Gagal menjalankan simulasi upload"
+          : "Gagal mengimport data ke database",
         variant: "destructive",
       })
     } finally {
@@ -289,7 +310,9 @@ export default function TemplateLengkapPage() {
           window.localStorage.removeItem(ACTIVE_IMPORT_JOB_KEY)
           toast({
             title: "Berhasil",
-            description: "Seluruh batch data berhasil diproses.",
+            description: job.is_simulasi
+              ? "Seluruh batch simulasi berhasil diproses tanpa mengubah nilai asli."
+              : "Seluruh batch data berhasil diproses.",
           })
         } else if (job.status === "PARTIAL_FAILED" || job.status === "FAILED") {
           toast({
@@ -365,7 +388,7 @@ export default function TemplateLengkapPage() {
         <CardHeader>
           <CardTitle>Pilih Kelas & Periode</CardTitle>
           <CardDescription>
-            Pilih kelas dan periode ajaran untuk template yang akan di-download atau di-upload
+            Pilih kelas dan periode ajaran saat download. File export baru menyimpan pilihan ini untuk upload otomatis.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -415,7 +438,7 @@ export default function TemplateLengkapPage() {
         </CardHeader>
         <CardContent>
           <Button
-            onClick={handleDownloadTemplate}
+            onClick={() => void handleDownloadTemplate()}
             disabled={!selectedKelas || !selectedPeriode || isDownloading}
             className="w-full md:w-auto"
           >
@@ -425,12 +448,41 @@ export default function TemplateLengkapPage() {
         </CardContent>
       </Card>
 
+      {IMPORT_SIMULATION_ENABLED && (
+        <Card className="border-amber-300 bg-amber-50/40">
+          <CardHeader>
+            <CardTitle>Uji Upload Batch (Development)</CardTitle>
+            <CardDescription>
+              Download file berisi nilai otomatis lalu proses sebagai simulasi. Hasil batch disimpan terpisah dan tidak menimpa nilai siswa.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 md:flex-row">
+            <Button
+              onClick={() => void handleDownloadTemplate(true)}
+              disabled={!selectedKelas || !selectedPeriode || isDownloading}
+              variant="outline"
+            >
+              <FileDown className="w-4 h-4 mr-2" />
+              {isDownloading ? "Downloading..." : "Download Data Uji Otomatis"}
+            </Button>
+            <Button
+              onClick={() => void handleUploadTemplate(true)}
+              disabled={!selectedFile || isUploading}
+              variant="outline"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isUploading ? "Processing..." : "Validasi File Uji"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Upload Section */}
       <Card>
         <CardHeader>
           <CardTitle>Upload Template</CardTitle>
           <CardDescription>
-            Upload file Excel yang telah diisi untuk validasi dan import data
+            Upload file Excel yang telah diisi. Kelas dan periode otomatis dibaca dari file export terbaru.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -447,8 +499,8 @@ export default function TemplateLengkapPage() {
 
           <div className="flex gap-2">
             <Button
-              onClick={handleUploadTemplate}
-              disabled={!selectedFile || !selectedKelas || !selectedPeriode || isUploading}
+              onClick={() => void handleUploadTemplate(false)}
+              disabled={!selectedFile || isUploading}
               variant="outline"
             >
               <Upload className="w-4 h-4 mr-2" />
@@ -461,7 +513,7 @@ export default function TemplateLengkapPage() {
                 disabled={isUploading || !validationResults.every(r => r.status !== 'error')}
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Import ke Database
+                {validationMode === "simulation" ? "Jalankan Simulasi Batch" : "Import ke Database"}
               </Button>
             )}
           </div>
@@ -538,9 +590,11 @@ export default function TemplateLengkapPage() {
       {activeJob && (
         <Card>
           <CardHeader>
-            <CardTitle>Status Import Batch</CardTitle>
+            <CardTitle>{activeJob.is_simulasi ? "Status Simulasi Batch" : "Status Import Batch"}</CardTitle>
             <CardDescription>
-              Satu file diproses bertahap untuk Nilai Ujian, Nilai Hafalan, Kehadiran, Penilaian Sikap, dan Catatan Siswa.
+              {activeJob.is_simulasi
+                ? "Hasil lima jenis data disimpan sebagai snapshot simulasi; data nilai asli tidak disentuh."
+                : "Satu file diproses bertahap untuk Nilai Ujian, Nilai Hafalan, Kehadiran, Penilaian Sikap, dan Catatan Siswa."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -598,9 +652,11 @@ export default function TemplateLengkapPage() {
       {importResult && (
         <Card>
           <CardHeader>
-            <CardTitle>Hasil Import</CardTitle>
+            <CardTitle>{activeJob?.is_simulasi ? "Hasil Simulasi" : "Hasil Import"}</CardTitle>
             <CardDescription>
-              Ringkasan data yang berhasil diimport ke database
+              {activeJob?.is_simulasi
+                ? "Ringkasan snapshot data yang berhasil diproses di tabel simulasi"
+                : "Ringkasan data yang berhasil diimport ke database"}
             </CardDescription>
           </CardHeader>
           <CardContent>

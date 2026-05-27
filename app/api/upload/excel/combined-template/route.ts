@@ -7,6 +7,8 @@ import { getPredicate, getSikapPredicate } from "@/lib/raport-utils"
 import { PredikatHafalan } from "@prisma/client"
 import { createImportTemplateJob } from "@/lib/import-template-job"
 import { enqueueImportTemplateJob } from "@/lib/import-template-queue"
+import { isImportSimulationEnabled } from "@/lib/import-template-simulation"
+import { readImportTemplateContext } from "@/lib/import-template-context"
 
 interface ValidationResult {
   sheet: string
@@ -23,16 +25,17 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File
-    const kelasId = formData.get("kelas_id") as string
-    const periodeAjaranId = formData.get("periode_ajaran_id") as string
+    const selectedKelasId = formData.get("kelas_id") as string | null
+    const selectedPeriodeAjaranId = formData.get("periode_ajaran_id") as string | null
     const shouldImport = formData.get("import") === "true"
+    const requestedSimulation = formData.get("simulation") === "true"
+
+    if (requestedSimulation && !isImportSimulationEnabled()) {
+      return NextResponse.json({ success: false, error: "Mode simulasi hanya tersedia pada environment development" }, { status: 403 })
+    }
 
     if (!file) {
       return NextResponse.json({ success: false, error: "File tidak ditemukan" }, { status: 400 })
-    }
-
-    if (!kelasId || !periodeAjaranId) {
-      return NextResponse.json({ success: false, error: "Kelas ID dan Periode Ajaran ID diperlukan" }, { status: 400 })
     }
 
     // Validate file type
@@ -46,6 +49,26 @@ export async function POST(request: NextRequest) {
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer)
     console.timeEnd('Excel file loading')
+
+    const importContext = readImportTemplateContext(workbook)
+    const kelasId = importContext?.kelasId || selectedKelasId
+    const periodeAjaranId = importContext?.periodeAjaranId || selectedPeriodeAjaranId
+    const hasSimulationMarker = Boolean(workbook.getWorksheet("__IMPORT_SIMULATION__"))
+    const isSimulation = requestedSimulation || hasSimulationMarker || Boolean(importContext?.isSimulation)
+
+    if (isSimulation && !isImportSimulationEnabled()) {
+      return NextResponse.json({
+        success: false,
+        error: "File simulasi hanya dapat diproses pada environment development.",
+      }, { status: 403 })
+    }
+
+    if (!kelasId || !periodeAjaranId) {
+      return NextResponse.json({
+        success: false,
+        error: "Kelas dan periode ajaran tidak ditemukan dalam file. Pilih kelas/periode untuk template lama.",
+      }, { status: 400 })
+    }
 
     // Validate required sheets
     const requiredSheets = ['Nilai Ujian', 'Nilai Hafalan', 'Kehadiran', 'Penilaian Sikap', 'Catatan Siswa']
@@ -72,7 +95,8 @@ export async function POST(request: NextRequest) {
         validation: validationResults,
         message: "Beberapa sheet yang diperlukan tidak ditemukan",
         canProceed: false,
-        imported: false
+        imported: false,
+        importContext,
       })
     }
 
@@ -120,7 +144,8 @@ export async function POST(request: NextRequest) {
             validation: allValidations,
             message: "Terdapat error dalam validasi data: File Excel tidak berisi data.",
             canProceed: false,
-            imported: false
+            imported: false,
+            importContext,
         }, { status: 200 }); 
     }
     // --- AKHIR FIX ---
@@ -140,15 +165,21 @@ export async function POST(request: NextRequest) {
     }
     
     if (!hasErrors && shouldImport) {
-      const job = await createImportTemplateJob(validatedData, kelasId, periodeAjaranId, file.name)
+      const job = await createImportTemplateJob(validatedData, kelasId, periodeAjaranId, file.name, {
+        isSimulation,
+      })
       const backgroundQueued = await enqueueImportTemplateJob(job.id)
       console.timeEnd('Total processing time')
       return NextResponse.json({
         success: true,
         validation: allValidations,
-        message: "Import dijadwalkan dan akan diproses per batch",
+        message: isSimulation
+          ? "Simulasi upload dijadwalkan dan akan diproses per batch tanpa mengubah data nilai"
+          : "Import dijadwalkan dan akan diproses per batch",
         canProceed: true,
         imported: false,
+        isSimulation,
+        importContext,
         job,
         backgroundQueued,
       })
@@ -161,6 +192,8 @@ export async function POST(request: NextRequest) {
       message: hasErrors ? "Terdapat error dalam validasi data" : "Semua data berhasil divalidasi",
       canProceed: !hasErrors,
       imported: false,
+      isSimulation,
+      importContext,
     })
 
   } catch (error) {

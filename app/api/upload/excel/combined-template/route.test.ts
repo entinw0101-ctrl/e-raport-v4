@@ -15,6 +15,7 @@ function createMockRequest(
   kelasId: string,
   periodeAjaranId: string,
   shouldImport: string,
+  simulation = false,
 ) {
   const formData = new FormData()
   if (file) {
@@ -23,6 +24,7 @@ function createMockRequest(
   formData.append('kelas_id', kelasId)
   formData.append('periode_ajaran_id', periodeAjaranId)
   formData.append('import', shouldImport)
+  if (simulation) formData.append('simulation', 'true')
 
   // next-mocks-http tidak sepenuhnya kompatibel dengan NextRequest 13+
   // Cara termudah adalah membuat mock manual seperti ini
@@ -78,7 +80,11 @@ const mockIndikatorKehadiran = [{ id: 'ikh-id-1', nama_indikator: 'Harian' }]
 const mockIndikatorSikap = [{ id: 'iks-id-1', indikator: 'Berdoa' }]
 
 // Fungsi helper untuk mock ExcelJS
-function setupMockExcel(mockData: any) {
+function setupMockExcel(
+  mockData: any,
+  withSimulationMarker = false,
+  context?: { kelasId: string; periodeAjaranId: string; isSimulation: boolean },
+) {
   const mockWorkbook = {
     xlsx: { load: jest.fn().mockResolvedValue(undefined) },
     worksheets: [
@@ -89,6 +95,18 @@ function setupMockExcel(mockData: any) {
       { name: 'Catatan Siswa' },
     ],
     getWorksheet: jest.fn((sheetName: string) => {
+      if (withSimulationMarker && sheetName === '__IMPORT_SIMULATION__') {
+        return { name: '__IMPORT_SIMULATION__' }
+      }
+      if (context && sheetName === '__IMPORT_CONTEXT__') {
+        const values: Record<string, unknown> = {
+          A1: 'E_RAPOT_IMPORT_CONTEXT_V1',
+          B2: context.kelasId,
+          B3: context.periodeAjaranId,
+          B4: context.isSimulation,
+        }
+        return { getCell: (address: string) => ({ value: values[address] }) }
+      }
       const values = (mockData as any)[sheetName]
       if (values) {
         return { getSheetValues: () => values }
@@ -217,6 +235,61 @@ describe('API POST /api/upload/excel/combined-template (White-Box Test)', () => 
     expect(mockPrisma.nilaiHafalan.upsert).not.toHaveBeenCalled()
     expect(mockPrisma.kehadiran.upsert).not.toHaveBeenCalled()
     expect(mockPrisma.penilaianSikap.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.catatanSiswa.upsert).not.toHaveBeenCalled()
+  })
+
+  test('Harus memakai konteks kelas dan periode dari file export tanpa pilihan form', async () => {
+    setupMockExcel(mockSheetValues, false, { kelasId: '15', periodeAjaranId: '7', isSimulation: false })
+    const file = new File(['dummy'], 'template-context.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const request = createMockRequest(file, '', '', 'true')
+
+    const response = await POST(request)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.importContext).toEqual({ kelasId: '15', periodeAjaranId: '7', isSimulation: false })
+    expect(mockPrisma.importTemplateJob.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        kelas_id: 15,
+        periode_ajaran_id: 7,
+      }),
+    }))
+  })
+
+  test('Harus otomatis memproses file bertanda simulasi sebagai job simulasi', async () => {
+    setupMockExcel(mockSheetValues, true)
+    const file = new File(['dummy'], 'simulasi.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const request = createMockRequest(file, '1', '1', 'true')
+
+    const response = await POST(request)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.isSimulation).toBe(true)
+    expect(body.message).toContain('Simulasi upload')
+    expect(mockPrisma.importTemplateJob.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ is_simulasi: true }),
+    }))
+  })
+
+  test('Harus menjadwalkan job simulasi tanpa mengimport tabel nilai', async () => {
+    const file = new File(['dummy'], 'simulasi.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const request = createMockRequest(file, '1', '1', 'true', true)
+
+    const response = await POST(request)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.isSimulation).toBe(true)
+    expect(body.message).toContain('Simulasi upload')
+    expect(mockPrisma.importTemplateJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          is_simulasi: true,
+        }),
+      }),
+    )
+    expect(mockPrisma.nilaiUjian.upsert).not.toHaveBeenCalled()
     expect(mockPrisma.catatanSiswa.upsert).not.toHaveBeenCalled()
   })
 

@@ -23,6 +23,10 @@ type StudentRecord = {
   kelas?: { tingkatan?: { id: number } | null } | null
 }
 
+type ImportProcessorOptions = {
+  simulationJobId?: string
+}
+
 const WRITE_CONCURRENCY = 10
 
 function emptyResult(): ImportTableResult {
@@ -33,24 +37,60 @@ function normalize(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim()
 }
 
-async function settleWrites(tasks: Array<() => Promise<unknown>>, result: ImportTableResult) {
+async function settleWrites(label: string, tasks: Array<() => Promise<unknown>>, result: ImportTableResult) {
+  if (tasks.length === 0) return
+  const startTime = performance.now()
   for (let start = 0; start < tasks.length; start += WRITE_CONCURRENCY) {
-    const outcomes = await Promise.allSettled(tasks.slice(start, start + WRITE_CONCURRENCY).map((task) => task()))
+    const batchStartTime = performance.now()
+    const chunk = tasks.slice(start, start + WRITE_CONCURRENCY)
+    const outcomes = await Promise.allSettled(chunk.map((task) => task()))
+    const batchEndTime = performance.now()
+    console.log(`[DB Latency] [${label}] Batch of size ${chunk.length} took ${(batchEndTime - batchStartTime).toFixed(2)}ms`)
     outcomes.forEach((outcome) => {
       if (outcome.status === "fulfilled") {
         result.inserted++
       } else {
         result.errors++
-        console.error("Import batch write failed:", outcome.reason)
+        console.error(`Import batch write failed for ${label}:`, outcome.reason)
       }
     })
   }
+  const endTime = performance.now()
+  console.log(`[DB Latency] [${label}] Total settleWrites for ${tasks.length} tasks took ${(endTime - startTime).toFixed(2)}ms`)
+}
+
+function createWriteTask(
+  options: ImportProcessorOptions,
+  kategori: string,
+  kunci: string,
+  payload: Record<string, unknown>,
+  productionWrite: () => Promise<unknown>,
+) {
+  if (!options.simulationJobId) return productionWrite
+
+  return () => prisma.importTemplateSimulationResult.upsert({
+    where: {
+      job_id_kategori_kunci: {
+        job_id: options.simulationJobId!,
+        kategori,
+        kunci,
+      },
+    },
+    update: { payload: payload as any },
+    create: {
+      job_id: options.simulationJobId!,
+      kategori,
+      kunci,
+      payload: payload as any,
+    },
+  })
 }
 
 export async function processImportTemplateBatch(
   payload: CombinedTemplatePayload,
   kelasId: number,
   periodeAjaranId: number,
+  options: ImportProcessorOptions = {},
 ): Promise<ImportResult> {
   const studentNises = Array.from(new Set(
     Object.values(payload).flatMap((items) => items.map((item: any) => normalize(item.nis))).filter(Boolean),
@@ -126,13 +166,21 @@ export async function processImportTemplateBatch(
       results.nilaiUjian.errors++
       return
     }
-    nilaiUjianTasks.push(() => prisma.nilaiUjian.upsert({
+    const nilaiPayload = {
+      siswa_id: siswa.id,
+      nis: siswa.nis,
+      mapel_id: mapel.id,
+      periode_ajaran_id: periodeAjaranId,
+      nilai_angka: nilai,
+      predikat: getPredicate(nilai),
+    }
+    nilaiUjianTasks.push(createWriteTask(options, "nilai_ujian", `${siswa.id}:${mapel.id}:${periodeAjaranId}`, nilaiPayload, () => prisma.nilaiUjian.upsert({
       where: { siswa_id_mapel_id_periode_ajaran_id: { siswa_id: siswa.id, mapel_id: mapel.id, periode_ajaran_id: periodeAjaranId } },
       update: { nilai_angka: nilai, predikat: getPredicate(nilai) },
       create: { siswa_id: siswa.id, mapel_id: mapel.id, periode_ajaran_id: periodeAjaranId, nilai_angka: nilai, predikat: getPredicate(nilai) },
-    }))
+    })))
   })
-  await settleWrites(nilaiUjianTasks, results.nilaiUjian)
+  await settleWrites("nilai_ujian", nilaiUjianTasks, results.nilaiUjian)
 
   const nilaiHafalanTasks: Array<() => Promise<unknown>> = []
   payload.nilaiHafalan.forEach((item) => {
@@ -150,13 +198,21 @@ export async function processImportTemplateBatch(
       return
     }
     const targetHafalan = kurikulum.kitab?.nama_kitab || kurikulum.batas_hafalan || ""
-    nilaiHafalanTasks.push(() => prisma.nilaiHafalan.upsert({
+    const nilaiPayload = {
+      siswa_id: siswa.id,
+      nis: siswa.nis,
+      mapel_id: mapel.id,
+      periode_ajaran_id: periodeAjaranId,
+      target_hafalan: targetHafalan,
+      predikat,
+    }
+    nilaiHafalanTasks.push(createWriteTask(options, "nilai_hafalan", `${siswa.id}:${mapel.id}:${periodeAjaranId}`, nilaiPayload, () => prisma.nilaiHafalan.upsert({
       where: { siswa_id_mapel_id_periode_ajaran_id: { siswa_id: siswa.id, mapel_id: mapel.id, periode_ajaran_id: periodeAjaranId } },
       update: { target_hafalan: targetHafalan, predikat },
       create: { siswa_id: siswa.id, mapel_id: mapel.id, periode_ajaran_id: periodeAjaranId, target_hafalan: targetHafalan, predikat },
-    }))
+    })))
   })
-  await settleWrites(nilaiHafalanTasks, results.nilaiHafalan)
+  await settleWrites("nilai_hafalan", nilaiHafalanTasks, results.nilaiHafalan)
 
   const kehadiranTasks: Array<() => Promise<unknown>> = []
   payload.kehadiran.forEach((item) => {
@@ -169,13 +225,22 @@ export async function processImportTemplateBatch(
       results.kehadiran.errors++
       return
     }
-    kehadiranTasks.push(() => prisma.kehadiran.upsert({
+    const kehadiranPayload = {
+      siswa_id: siswa.id,
+      nis: siswa.nis,
+      periode_ajaran_id: periodeAjaranId,
+      indikator_kehadiran_id: indikator.id,
+      sakit,
+      izin,
+      alpha,
+    }
+    kehadiranTasks.push(createWriteTask(options, "kehadiran", `${siswa.id}:${indikator.id}:${periodeAjaranId}`, kehadiranPayload, () => prisma.kehadiran.upsert({
       where: { siswa_id_periode_ajaran_id_indikator_kehadiran_id: { siswa_id: siswa.id, periode_ajaran_id: periodeAjaranId, indikator_kehadiran_id: indikator.id } },
       update: { sakit, izin, alpha },
       create: { siswa_id: siswa.id, periode_ajaran_id: periodeAjaranId, indikator_kehadiran_id: indikator.id, sakit, izin, alpha },
-    }))
+    })))
   })
-  await settleWrites(kehadiranTasks, results.kehadiran)
+  await settleWrites("kehadiran", kehadiranTasks, results.kehadiran)
 
   const penilaianSikapTasks: Array<() => Promise<unknown>> = []
   payload.penilaianSikap.forEach((item) => {
@@ -187,13 +252,21 @@ export async function processImportTemplateBatch(
       return
     }
     const predikat = getSikapPredicate(nilai)
-    penilaianSikapTasks.push(() => prisma.penilaianSikap.upsert({
+    const sikapPayload = {
+      siswa_id: siswa.id,
+      nis: siswa.nis,
+      indikator_id: indikator.id,
+      periode_ajaran_id: periodeAjaranId,
+      nilai,
+      predikat,
+    }
+    penilaianSikapTasks.push(createWriteTask(options, "penilaian_sikap", `${siswa.id}:${indikator.id}:${periodeAjaranId}`, sikapPayload, () => prisma.penilaianSikap.upsert({
       where: { siswa_id_indikator_id_periode_ajaran_id: { siswa_id: siswa.id, indikator_id: indikator.id, periode_ajaran_id: periodeAjaranId } },
       update: { nilai, predikat },
       create: { siswa_id: siswa.id, indikator_id: indikator.id, periode_ajaran_id: periodeAjaranId, nilai, predikat },
-    }))
+    })))
   })
-  await settleWrites(penilaianSikapTasks, results.penilaianSikap)
+  await settleWrites("penilaian_sikap", penilaianSikapTasks, results.penilaianSikap)
 
   const catatanTasks: Array<() => Promise<unknown>> = []
   payload.catatanSiswa.forEach((item) => {
@@ -202,13 +275,20 @@ export async function processImportTemplateBatch(
       results.catatanSiswa.errors++
       return
     }
-    catatanTasks.push(() => prisma.catatanSiswa.upsert({
+    const catatanPayload = {
+      siswa_id: siswa.id,
+      nis: siswa.nis,
+      periode_ajaran_id: periodeAjaranId,
+      catatan_sikap: item.catatanSikap,
+      catatan_akademik: item.catatanAkademik,
+    }
+    catatanTasks.push(createWriteTask(options, "catatan_siswa", `${siswa.id}:${periodeAjaranId}`, catatanPayload, () => prisma.catatanSiswa.upsert({
       where: { siswa_id_periode_ajaran_id: { siswa_id: siswa.id, periode_ajaran_id: periodeAjaranId } },
       update: { catatan_sikap: item.catatanSikap, catatan_akademik: item.catatanAkademik },
       create: { siswa_id: siswa.id, periode_ajaran_id: periodeAjaranId, catatan_sikap: item.catatanSikap, catatan_akademik: item.catatanAkademik },
-    }))
+    })))
   })
-  await settleWrites(catatanTasks, results.catatanSiswa)
+  await settleWrites("catatan_siswa", catatanTasks, results.catatanSiswa)
 
   return results
 }

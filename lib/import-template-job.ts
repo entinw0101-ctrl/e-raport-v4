@@ -10,6 +10,11 @@ export interface CombinedTemplatePayload {
 
 const DEFAULT_STUDENTS_PER_BATCH = 10
 
+interface CreateImportTemplateJobOptions {
+  studentsPerBatch?: number
+  isSimulation?: boolean
+}
+
 export function createEmptyImportTemplatePayload(): CombinedTemplatePayload {
   return {
     nilaiUjian: [],
@@ -50,8 +55,9 @@ export async function createImportTemplateJob(
   kelasId: string,
   periodeAjaranId: string,
   fileName: string,
-  studentsPerBatch = DEFAULT_STUDENTS_PER_BATCH,
+  options: CreateImportTemplateJobOptions = {},
 ) {
+  const studentsPerBatch = options.studentsPerBatch ?? DEFAULT_STUDENTS_PER_BATCH
   const studentNises = getPayloadStudents(payload)
   const batches: Array<{ total_siswa: number; payload: CombinedTemplatePayload }> = []
 
@@ -72,6 +78,7 @@ export async function createImportTemplateJob(
       kelas_id: Number.parseInt(kelasId, 10),
       periode_ajaran_id: Number.parseInt(periodeAjaranId, 10),
       file_name: fileName,
+      is_simulasi: options.isSimulation ?? false,
       total_siswa: studentNises.length,
       total_batches: batches.length,
       batches: {

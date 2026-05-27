@@ -583,6 +583,7 @@ model ImportTemplateJob {
   kelas_id          Int
   periode_ajaran_id Int
   file_name         String          @db.VarChar(255)
+  is_simulasi       Boolean         @default(false)
   status            ImportJobStatus @default(PENDING)
   total_siswa       Int
   processed_siswa   Int             @default(0)
@@ -594,9 +595,10 @@ model ImportTemplateJob {
   dibuat_pada       DateTime        @default(now())
   diperbarui_pada   DateTime        @updatedAt
 
-  kelas          Kelas                 @relation(fields: [kelas_id], references: [id], onDelete: Cascade)
-  periode_ajaran PeriodeAjaran         @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
-  batches        ImportTemplateBatch[]
+  kelas              Kelas                            @relation(fields: [kelas_id], references: [id], onDelete: Cascade)
+  periode_ajaran     PeriodeAjaran                    @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
+  batches            ImportTemplateBatch[]
+  simulation_results ImportTemplateSimulationResult[]
 
   @@index([status])
   @@index([kelas_id])
@@ -622,6 +624,23 @@ model ImportTemplateBatch {
   @@unique([job_id, nomor_batch])
   @@index([job_id, status])
   @@map("import_template_batch")
+}
+
+// Snapshot output khusus uji upload. Data di sini tidak pernah menjadi nilai akademik siswa.
+model ImportTemplateSimulationResult {
+  id              String   @id @default(cuid())
+  job_id          String
+  kategori        String   @db.VarChar(50)
+  kunci           String   @db.VarChar(255)
+  payload         Json
+  dibuat_pada     DateTime @default(now())
+  diperbarui_pada DateTime @updatedAt
+
+  job ImportTemplateJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@unique([job_id, kategori, kunci])
+  @@index([job_id, kategori])
+  @@map("import_template_simulation_result")
 }
 
 // =====================================================

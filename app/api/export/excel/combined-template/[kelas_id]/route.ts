@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { prisma } from "@/lib/prisma"
+import {
+  generatedKehadiran,
+  generatedNilaiSikap,
+  generatedNilaiUjian,
+  isImportSimulationEnabled,
+} from "@/lib/import-template-simulation"
+import { addImportTemplateContext } from "@/lib/import-template-context"
 
 export async function GET(request: NextRequest, props: { params: Promise<{ kelas_id: string }> }) {
   const params = await props.params;
@@ -8,6 +15,11 @@ export async function GET(request: NextRequest, props: { params: Promise<{ kelas
     const kelasId = parseInt(params.kelas_id)
     const { searchParams } = new URL(request.url)
     const periodeAjaranId = searchParams.get("periode_ajaran_id")
+    const isSimulation = searchParams.get("simulation") === "true"
+
+    if (isSimulation && !isImportSimulationEnabled()) {
+      return NextResponse.json({ success: false, error: "Mode simulasi hanya tersedia pada environment development" }, { status: 403 })
+    }
 
     if (isNaN(kelasId)) {
       return NextResponse.json({ success: false, error: "ID kelas tidak valid" }, { status: 400 })
@@ -73,27 +85,39 @@ export async function GET(request: NextRequest, props: { params: Promise<{ kelas
     // ==========================================
     // SHEET 1: NILAI UJIAN
     // ==========================================
-    await createNilaiUjianSheet(workbook, kelas, periodeAjaran, siswaInKelas)
+    await createNilaiUjianSheet(workbook, kelas, periodeAjaran, siswaInKelas, isSimulation)
 
     // ==========================================
     // SHEET 2: NILAI HAFALAN
     // ==========================================
-    await createNilaiHafalanSheet(workbook, kelas, periodeAjaran, siswaInKelas)
+    await createNilaiHafalanSheet(workbook, kelas, periodeAjaran, siswaInKelas, isSimulation)
 
     // ==========================================
     // SHEET 3: KEHADIRAN
     // ==========================================
-    await createKehadiranSheet(workbook, kelas, periodeAjaran, siswaInKelas)
+    await createKehadiranSheet(workbook, kelas, periodeAjaran, siswaInKelas, isSimulation)
 
     // ==========================================
     // SHEET 4: PENILAIAN SIKAP
     // ==========================================
-    await createPenilaianSikapSheet(workbook, kelas, periodeAjaran, siswaInKelas)
+    await createPenilaianSikapSheet(workbook, kelas, periodeAjaran, siswaInKelas, isSimulation)
 
     // ==========================================
     // SHEET 5: CATATAN SISWA
     // ==========================================
-    await createCatatanSiswaSheet(workbook, kelas, periodeAjaran, siswaInKelas)
+    await createCatatanSiswaSheet(workbook, kelas, periodeAjaran, siswaInKelas, isSimulation)
+
+    addImportTemplateContext(workbook, {
+      kelasId: String(kelasId),
+      periodeAjaranId: String(periodeAjaran.id),
+      isSimulation,
+    })
+
+    if (isSimulation) {
+      const markerSheet = workbook.addWorksheet("__IMPORT_SIMULATION__")
+      markerSheet.getCell("A1").value = "SIMULATION_ONLY"
+      markerSheet.state = "veryHidden"
+    }
 
     // Set response headers
     const buffer = await workbook.xlsx.writeBuffer()
@@ -101,7 +125,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ kelas
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename=template_lengkap_${kelas.nama_kelas}_semester_${periodeAjaran.semester === "SATU" ? "1" : "2"}_${new Date().toISOString().split("T")[0]}.xlsx`,
+        "Content-Disposition": `attachment; filename=${isSimulation ? "simulasi_" : ""}template_lengkap_${kelas.nama_kelas}_semester_${periodeAjaran.semester === "SATU" ? "1" : "2"}_${new Date().toISOString().split("T")[0]}.xlsx`,
       },
     })
   } catch (error) {
@@ -111,7 +135,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ kelas
 }
 
 // Helper function to create Nilai Ujian sheet
-async function createNilaiUjianSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[]) {
+async function createNilaiUjianSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[], isSimulation = false) {
   const worksheet = workbook.addWorksheet("Nilai Ujian")
 
   // Get curriculum subjects for this level (only Ujian type)
@@ -182,12 +206,12 @@ async function createNilaiUjianSheet(workbook: ExcelJS.Workbook, kelas: any, per
       const isFirstSubject = subjectIndex === 0
 
       const row = worksheet.addRow({
-        nis: isFirstSubject ? siswa.nis : "",
-        nama: isFirstSubject ? siswa.nama : "",
+        nis: isSimulation || isFirstSubject ? siswa.nis : "",
+        nama: isSimulation || isFirstSubject ? siswa.nama : "",
         mata_pelajaran: item.mata_pelajaran!.nama_mapel,
-        nilai: "",
-        semester: isFirstSubject ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
-        periode_ajaran: isFirstSubject ? periodeAjaran.nama_ajaran : "",
+        nilai: isSimulation ? generatedNilaiUjian(siswa.id, item.mata_pelajaran!.id) : "",
+        semester: isSimulation || isFirstSubject ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
+        periode_ajaran: isSimulation || isFirstSubject ? periodeAjaran.nama_ajaran : "",
       })
 
       row.eachCell((cell) => {
@@ -203,7 +227,7 @@ async function createNilaiUjianSheet(workbook: ExcelJS.Workbook, kelas: any, per
     })
 
     // Merge cells for NIS, Nama, Semester, and Periode Ajaran
-    if (validKurikulum.length > 1) {
+    if (!isSimulation && validKurikulum.length > 1) {
       const endRow = currentRow - 1
 
       worksheet.mergeCells(`A${startRow}:A${endRow}`)
@@ -220,7 +244,7 @@ async function createNilaiUjianSheet(workbook: ExcelJS.Workbook, kelas: any, per
 }
 
 // Helper function to create Nilai Hafalan sheet
-async function createNilaiHafalanSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[]) {
+async function createNilaiHafalanSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[], isSimulation = false) {
   const worksheet = workbook.addWorksheet("Nilai Hafalan")
 
   // Get curriculum subjects for this level (only Hafalan type)
@@ -299,14 +323,14 @@ async function createNilaiHafalanSheet(workbook: ExcelJS.Workbook, kelas: any, p
       const isFirstSubject = subjectIndex === 0
 
       const row = {
-        nis: isFirstSubject ? siswa.nis : "",
-        nama: isFirstSubject ? siswa.nama : "",
+        nis: isSimulation || isFirstSubject ? siswa.nis : "",
+        nama: isSimulation || isFirstSubject ? siswa.nama : "",
         mata_pelajaran: item.mata_pelajaran!.nama_mapel,
         kitab: item.kitab?.nama_kitab || "",
         target_hafalan: item.batas_hafalan || "",
-        predikat: "",
-        periode_ajaran: isFirstSubject ? periodeAjaran.nama_ajaran : "",
-        semester: isFirstSubject ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
+        predikat: isSimulation ? (siswa.id % 2 === 0 ? "Tercapai" : "Tidak Tercapai") : "",
+        periode_ajaran: isSimulation || isFirstSubject ? periodeAjaran.nama_ajaran : "",
+        semester: isSimulation || isFirstSubject ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
       }
 
       const addedRow = worksheet.addRow(row)
@@ -323,7 +347,7 @@ async function createNilaiHafalanSheet(workbook: ExcelJS.Workbook, kelas: any, p
     })
 
     // Merge cells for NIS, Nama, Periode Ajaran, and Semester
-    if (validKurikulum.length > 1) {
+    if (!isSimulation && validKurikulum.length > 1) {
       const endRow = currentRow - 1
 
       worksheet.mergeCells(`A${startRow}:A${endRow}`)
@@ -358,7 +382,7 @@ async function createNilaiHafalanSheet(workbook: ExcelJS.Workbook, kelas: any, p
 }
 
 // Helper function to create Kehadiran sheet
-async function createKehadiranSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[]) {
+async function createKehadiranSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[], isSimulation = false) {
   const worksheet = workbook.addWorksheet("Kehadiran")
 
   // Get all attendance indicators
@@ -409,18 +433,19 @@ async function createKehadiranSheet(workbook: ExcelJS.Workbook, kelas: any, peri
   let currentRow = 2
   siswaInKelas.forEach((siswa) => {
     const startRow = currentRow
+    const simulatedValues = generatedKehadiran(siswa.id)
     indikatorKehadiran.forEach((indikator, indicatorIndex) => {
       const isFirstIndicator = indicatorIndex === 0
 
       const row = worksheet.addRow({
-        nis: isFirstIndicator ? siswa.nis : "",
-        nama: isFirstIndicator ? siswa.nama : "",
+        nis: isSimulation || isFirstIndicator ? siswa.nis : "",
+        nama: isSimulation || isFirstIndicator ? siswa.nama : "",
         indikator: indikator.nama_indikator,
-        sakit: "",
-        izin: "",
-        alpha: "",
-        semester: isFirstIndicator ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
-        periode_ajaran: isFirstIndicator ? periodeAjaran.nama_ajaran : "",
+        sakit: isSimulation ? simulatedValues.sakit : "",
+        izin: isSimulation ? simulatedValues.izin : "",
+        alpha: isSimulation ? simulatedValues.alpha : "",
+        semester: isSimulation || isFirstIndicator ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
+        periode_ajaran: isSimulation || isFirstIndicator ? periodeAjaran.nama_ajaran : "",
       })
 
       row.eachCell((cell) => {
@@ -436,7 +461,7 @@ async function createKehadiranSheet(workbook: ExcelJS.Workbook, kelas: any, peri
     })
 
     // Merge cells for NIS, Nama, Semester, and Periode Ajaran
-    if (indikatorKehadiran.length > 1) {
+    if (!isSimulation && indikatorKehadiran.length > 1) {
       const endRow = currentRow - 1
 
       worksheet.mergeCells(`A${startRow}:A${endRow}`)
@@ -453,7 +478,7 @@ async function createKehadiranSheet(workbook: ExcelJS.Workbook, kelas: any, peri
 }
 
 // Helper function to create Penilaian Sikap sheet
-async function createPenilaianSikapSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[]) {
+async function createPenilaianSikapSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[], isSimulation = false) {
   const worksheet = workbook.addWorksheet("Penilaian Sikap")
 
   // Get all sikap indicators
@@ -511,13 +536,13 @@ async function createPenilaianSikapSheet(workbook: ExcelJS.Workbook, kelas: any,
       const isFirstIndicator = indicatorIndex === 0
 
       const row = worksheet.addRow({
-        nis: isFirstIndicator ? siswa.nis : "",
-        nama: isFirstIndicator ? siswa.nama : "",
+        nis: isSimulation || isFirstIndicator ? siswa.nis : "",
+        nama: isSimulation || isFirstIndicator ? siswa.nama : "",
         jenis_sikap: indikator.jenis_sikap,
         indikator: indikator.indikator,
-        nilai: "",
-        semester: isFirstIndicator ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
-        periode_ajaran: isFirstIndicator ? periodeAjaran.nama_ajaran : "",
+        nilai: isSimulation ? generatedNilaiSikap(siswa.id, indikator.id) : "",
+        semester: isSimulation || isFirstIndicator ? `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}` : "",
+        periode_ajaran: isSimulation || isFirstIndicator ? periodeAjaran.nama_ajaran : "",
       })
 
       row.eachCell((cell) => {
@@ -533,7 +558,7 @@ async function createPenilaianSikapSheet(workbook: ExcelJS.Workbook, kelas: any,
     })
 
     // Merge cells for NIS, Nama, Semester, and Periode Ajaran
-    if (indikatorSikap.length > 1) {
+    if (!isSimulation && indikatorSikap.length > 1) {
       const endRow = currentRow - 1
 
       worksheet.mergeCells(`A${startRow}:A${endRow}`)
@@ -551,7 +576,7 @@ async function createPenilaianSikapSheet(workbook: ExcelJS.Workbook, kelas: any,
 }
 
 // Helper function to create Catatan Siswa sheet
-async function createCatatanSiswaSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[]) {
+async function createCatatanSiswaSheet(workbook: ExcelJS.Workbook, kelas: any, periodeAjaran: any, siswaInKelas: any[], isSimulation = false) {
   const worksheet = workbook.addWorksheet("Catatan Siswa")
 
   // Define columns
@@ -594,8 +619,8 @@ async function createCatatanSiswaSheet(workbook: ExcelJS.Workbook, kelas: any, p
     const row = {
       nis: siswa.nis,
       nama: siswa.nama,
-      catatan_sikap: "",
-      catatan_akademik: "",
+      catatan_sikap: isSimulation ? `SIMULASI: Sikap baik untuk ${siswa.nama || siswa.nis}` : "",
+      catatan_akademik: isSimulation ? `SIMULASI: Kemajuan akademik untuk ${siswa.nama || siswa.nis}` : "",
       semester: `Semester ${periodeAjaran.semester === "SATU" ? "1" : "2"}`,
       periode_ajaran: periodeAjaran.nama_ajaran,
     }

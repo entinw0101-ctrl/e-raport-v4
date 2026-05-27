@@ -21,6 +21,7 @@ describe("processImportTemplateBatch", () => {
     mockPrisma.kehadiran.upsert.mockResolvedValue({} as any)
     mockPrisma.penilaianSikap.upsert.mockResolvedValue({} as any)
     mockPrisma.catatanSiswa.upsert.mockResolvedValue({} as any)
+    mockPrisma.importTemplateSimulationResult.upsert.mockResolvedValue({} as any)
   })
 
   test("memproses seluruh sheet dalam satu batch siswa", async () => {
@@ -59,5 +60,27 @@ describe("processImportTemplateBatch", () => {
     expect(result.penilaianSikap.errors).toBe(1)
     expect(mockPrisma.nilaiUjian.upsert).not.toHaveBeenCalled()
     expect(mockPrisma.penilaianSikap.upsert).not.toHaveBeenCalled()
+  })
+
+  test("mode simulasi menulis snapshot tanpa menimpa tabel nilai asli", async () => {
+    const result = await processImportTemplateBatch({
+      nilaiUjian: [{ nis: "NIS-001", mataPelajaran: "Nahwu", nilai: 9 }],
+      nilaiHafalan: [{ nis: "NIS-001", mataPelajaran: "Hafalan", predikat: "Tercapai" }],
+      kehadiran: [{ nis: "NIS-001", indikator: "Harian", sakit: 1, izin: 0, alpha: 0 }],
+      penilaianSikap: [{ nis: "NIS-001", indikator: "Disiplin", nilai: 95 }],
+      catatanSiswa: [{ nis: "NIS-001", catatanSikap: "Baik", catatanAkademik: "Tekun" }],
+    }, 1, 2, { simulationJobId: "simulation-job" })
+
+    expect(result.nilaiUjian.inserted).toBe(1)
+    expect(result.penilaianSikap.inserted).toBe(1)
+    expect(mockPrisma.importTemplateSimulationResult.upsert).toHaveBeenCalledTimes(5)
+    expect(mockPrisma.importTemplateSimulationResult.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ job_id: "simulation-job", kategori: "nilai_ujian" }),
+    }))
+    expect(mockPrisma.nilaiUjian.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.nilaiHafalan.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.kehadiran.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.penilaianSikap.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.catatanSiswa.upsert).not.toHaveBeenCalled()
   })
 })
