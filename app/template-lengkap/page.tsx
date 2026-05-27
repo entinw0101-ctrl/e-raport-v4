@@ -311,6 +311,30 @@ export default function TemplateLengkapPage() {
     }
   }
 
+  const retryFailedBatches = async () => {
+    if (!activeJob) return
+    setIsProcessingBatches(true)
+    try {
+      const response = await fetch(`/api/upload/excel/combined-template/jobs/${activeJob.id}/retry`, {
+        method: "POST",
+      })
+      const result = await response.json()
+      if (!result.data) {
+        throw new Error(result.error || "Gagal menjadwalkan ulang batch")
+      }
+      setActiveJob(result.data)
+      await processImportJob(activeJob.id)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Gagal menjadwalkan ulang batch yang gagal.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingBatches(false)
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success': return <CheckCircle className="h-4 w-4 text-green-500" />
@@ -555,6 +579,15 @@ export default function TemplateLengkapPage() {
                 disabled={isProcessingBatches}
               >
                 {isProcessingBatches ? "Memproses Batch..." : "Lanjutkan Proses"}
+              </Button>
+            )}
+            {(activeJob.status === "PARTIAL_FAILED" || activeJob.status === "FAILED") && (
+              <Button
+                variant="outline"
+                onClick={retryFailedBatches}
+                disabled={isProcessingBatches}
+              >
+                {isProcessingBatches ? "Memproses Batch..." : "Ulangi Batch Gagal"}
               </Button>
             )}
           </CardContent>

@@ -121,14 +121,15 @@ export async function processImportTemplateBatch(
     const siswa = studentMap.get(normalize(item.nis))
     const mapel = subjectMap.get(`${normalize(item.mataPelajaran)}|Ujian`)
     const tingkatanId = siswa?.kelas?.tingkatan?.id
-    if (!siswa || !mapel || !tingkatanId || !curriculumMap.has(`${tingkatanId}|${mapel.id}`)) {
+    const nilai = Number.parseFloat(String(item.nilai))
+    if (!siswa || !mapel || !tingkatanId || !curriculumMap.has(`${tingkatanId}|${mapel.id}`) || Number.isNaN(nilai) || nilai < 0 || nilai > 10) {
       results.nilaiUjian.errors++
       return
     }
     nilaiUjianTasks.push(() => prisma.nilaiUjian.upsert({
       where: { siswa_id_mapel_id_periode_ajaran_id: { siswa_id: siswa.id, mapel_id: mapel.id, periode_ajaran_id: periodeAjaranId } },
-      update: { nilai_angka: item.nilai, predikat: getPredicate(item.nilai) },
-      create: { siswa_id: siswa.id, mapel_id: mapel.id, periode_ajaran_id: periodeAjaranId, nilai_angka: item.nilai, predikat: getPredicate(item.nilai) },
+      update: { nilai_angka: nilai, predikat: getPredicate(nilai) },
+      create: { siswa_id: siswa.id, mapel_id: mapel.id, periode_ajaran_id: periodeAjaranId, nilai_angka: nilai, predikat: getPredicate(nilai) },
     }))
   })
   await settleWrites(nilaiUjianTasks, results.nilaiUjian)
@@ -161,13 +162,13 @@ export async function processImportTemplateBatch(
   payload.kehadiran.forEach((item) => {
     const siswa = studentMap.get(normalize(item.nis))
     const indikator = attendanceMap.get(normalize(item.indikator))
-    if (!siswa || !indikator) {
+    const sakit = Number.parseInt(String(item.sakit ?? 0), 10)
+    const izin = Number.parseInt(String(item.izin ?? 0), 10)
+    const alpha = Number.parseInt(String(item.alpha ?? 0), 10)
+    if (!siswa || !indikator || [sakit, izin, alpha].some((value) => Number.isNaN(value) || value < 0)) {
       results.kehadiran.errors++
       return
     }
-    const sakit = Number.parseInt(item.sakit, 10) || 0
-    const izin = Number.parseInt(item.izin, 10) || 0
-    const alpha = Number.parseInt(item.alpha, 10) || 0
     kehadiranTasks.push(() => prisma.kehadiran.upsert({
       where: { siswa_id_periode_ajaran_id_indikator_kehadiran_id: { siswa_id: siswa.id, periode_ajaran_id: periodeAjaranId, indikator_kehadiran_id: indikator.id } },
       update: { sakit, izin, alpha },
@@ -180,8 +181,8 @@ export async function processImportTemplateBatch(
   payload.penilaianSikap.forEach((item) => {
     const siswa = studentMap.get(normalize(item.nis))
     const indikator = attitudeMap.get(normalize(item.indikator))
-    const nilai = Number.parseInt(item.nilai, 10)
-    if (!siswa || !indikator || Number.isNaN(nilai)) {
+    const nilai = Number.parseInt(String(item.nilai), 10)
+    if (!siswa || !indikator || Number.isNaN(nilai) || nilai < 0 || nilai > 100) {
       results.penilaianSikap.errors++
       return
     }

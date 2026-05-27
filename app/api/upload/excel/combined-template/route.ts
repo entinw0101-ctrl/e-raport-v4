@@ -6,6 +6,7 @@ import { generatePredikat } from "@/lib/utils"
 import { getPredicate, getSikapPredicate } from "@/lib/raport-utils"
 import { PredikatHafalan } from "@prisma/client"
 import { createImportTemplateJob } from "@/lib/import-template-job"
+import { enqueueImportTemplateJob } from "@/lib/import-template-queue"
 
 interface ValidationResult {
   sheet: string
@@ -140,6 +141,7 @@ export async function POST(request: NextRequest) {
     
     if (!hasErrors && shouldImport) {
       const job = await createImportTemplateJob(validatedData, kelasId, periodeAjaranId, file.name)
+      const backgroundQueued = await enqueueImportTemplateJob(job.id)
       console.timeEnd('Total processing time')
       return NextResponse.json({
         success: true,
@@ -148,6 +150,7 @@ export async function POST(request: NextRequest) {
         canProceed: true,
         imported: false,
         job,
+        backgroundQueued,
       })
     }
 

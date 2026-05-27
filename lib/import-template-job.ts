@@ -10,6 +10,16 @@ export interface CombinedTemplatePayload {
 
 const DEFAULT_STUDENTS_PER_BATCH = 10
 
+export function createEmptyImportTemplatePayload(): CombinedTemplatePayload {
+  return {
+    nilaiUjian: [],
+    nilaiHafalan: [],
+    kehadiran: [],
+    penilaianSikap: [],
+    catatanSiswa: [],
+  }
+}
+
 function normalizeNis(nis: unknown): string {
   return typeof nis === "string" ? nis.trim() : String(nis ?? "").trim()
 }

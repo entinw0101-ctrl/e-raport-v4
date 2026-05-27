@@ -2,6 +2,15 @@
   "functions": {
     "app/api/**/*.ts": {
       "maxDuration": 30
+    },
+    "app/api/queues/import-template-jobs/route.ts": {
+      "maxDuration": 60,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "import-template-jobs"
+        }
+      ]
     }
   },
   "crons": []

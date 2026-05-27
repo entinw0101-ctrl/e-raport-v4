@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast"
 import { Eye, FileDown, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
+import { ImportJobProgressCard } from "@/components/import-job-progress-card"
+import { useImportTemplateJob } from "@/hooks/use-import-template-job"
 
 interface Siswa {
   id: string
@@ -54,6 +56,10 @@ export default function NilaiHafalanPage() {
 
   const { toast } = useToast()
   const router = useRouter()
+  const { activeJob, isProcessingBatches, startImportJob, processImportJob, retryFailedBatches } = useImportTemplateJob(
+    "active-nilai-hafalan-import-job",
+    () => fetchData(),
+  )
 
   const columns = [
     { key: "nis", label: "NIS" },
@@ -251,11 +257,22 @@ export default function NilaiHafalanPage() {
       return
     }
 
+    if (!selectedPeriodeAjaran || !selectedKelasForTemplate) {
+      toast({
+        title: "Pilih Lengkap",
+        description: "Silakan pilih periode ajaran dan kelas terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsImporting(true)
 
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
+      formData.append("kelas_id", selectedKelasForTemplate)
+      formData.append("periode_ajaran_id", selectedPeriodeAjaran)
 
       const response = await fetch("/api/upload/excel/nilai-hafalan", {
         method: "POST",
@@ -270,7 +287,7 @@ export default function NilaiHafalanPage() {
           description: result.message,
         })
         setSelectedFile(null)
-        fetchData() // Refresh data
+        await startImportJob(result.job)
       } else {
         toast({
           title: "Error",
@@ -385,7 +402,7 @@ export default function NilaiHafalanPage() {
             <Button
               variant="outline"
               onClick={handleImportExcel}
-              disabled={!selectedFile || isImporting}
+              disabled={!selectedFile || isImporting || !selectedPeriodeAjaran || !selectedKelasForTemplate}
             >
               <Upload className="w-4 h-4 mr-2" />
               {isImporting ? "Importing..." : "Import Excel"}
@@ -393,6 +410,13 @@ export default function NilaiHafalanPage() {
           </div>
         </div>
       </div>
+
+      <ImportJobProgressCard
+        job={activeJob}
+        isProcessing={isProcessingBatches}
+        onResume={processImportJob}
+        onRetry={retryFailedBatches}
+      />
 
       <DataTable
         title="Daftar Siswa"

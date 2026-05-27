@@ -1,233 +1,61 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import ExcelJS from "exceljs";
+import { type NextRequest, NextResponse } from "next/server"
+import ExcelJS from "exceljs"
+import { createEmptyImportTemplatePayload, createImportTemplateJob } from "@/lib/import-template-job"
+import { enqueueImportTemplateJob } from "@/lib/import-template-queue"
 
-// Helper untuk mengambil nilai sel dengan aman
+export const maxDuration = 60
+
 function getCellValue(row: ExcelJS.Row, cellIndex: number): string {
-    const cell = row.getCell(cellIndex);
-    if (!cell || cell.value === null || cell.value === undefined) return '';
-    if (typeof cell.value === 'object' && 'richText' in cell.value) {
-        return (cell.value.richText as any[]).map(rt => rt.text).join('').trim();
-    }
-    if (typeof cell.value === 'object' && 'result' in cell.value) {
-        return String((cell.value as { result: any }).result).trim();
-    }
-    return String(cell.value).trim();
+  const value = row.getCell(cellIndex).value
+  if (value === null || value === undefined) return ""
+  if (typeof value === "object" && "richText" in value) return value.richText.map((text) => text.text).join("").trim()
+  if (typeof value === "object" && "result" in value) return String(value.result ?? "").trim()
+  return String(value).trim()
 }
 
-
 export async function POST(request: NextRequest) {
-    try {
-        const formData = await request.formData();
-        const file = formData.get("file") as File | null;
-
-        if (!file) {
-            return NextResponse.json({ success: false, error: "Tidak ada file yang diunggah." }, { status: 400 });
-        }
-
-        const buffer = Buffer.from(await file.arrayBuffer()) as any;
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(buffer);
-
-        // Find worksheet that contains "Template Nilai Hafalan"
-        const worksheet = workbook.worksheets.find(ws => ws.name.includes("Template Nilai Hafalan"));
-        if (!worksheet) {
-            return NextResponse.json({ success: false, error: "Sheet dengan nama 'Template Nilai Hafalan' tidak ditemukan di dalam file." }, { status: 400 });
-        }
-
-        const results = {
-            success: 0,
-            errors: 0,
-            errorDetails: [] as string[],
-        };
-        
-        // Pre-load lookups to avoid repeated queries
-        const allNis = new Set<string>()
-        const allMapel = new Set<string>()
-        const allPeriodeData = new Set<string>()
-
-        // Collect all unique values first
-        for (let i = 2; i <= worksheet.rowCount; i++) {
-            const row = worksheet.getRow(i);
-            const nis = getCellValue(row, 1);
-            const namaMapel = getCellValue(row, 3);
-            const semester = getCellValue(row, 7);
-            const tahunAjaranStr = getCellValue(row, 8);
-
-            if (nis) allNis.add(nis);
-            if (namaMapel) allMapel.add(namaMapel);
-            if (semester && tahunAjaranStr) allPeriodeData.add(`${tahunAjaranStr}:${semester}`);
-        }
-
-        // Load all data in parallel
-        const [siswaList, mapelList, periodeList] = await Promise.all([
-            prisma.siswa.findMany({
-                where: { nis: { in: Array.from(allNis) }, status: "Aktif" },
-                include: { kelas: { include: { tingkatan: true } } }
-            }),
-            prisma.mataPelajaran.findMany({
-                where: {
-                    nama_mapel: { in: Array.from(allMapel) },
-                    jenis: "Hafalan" // Ensure we only get hafalan subjects
-                }
-            }),
-            Promise.all(Array.from(allPeriodeData).map(async (periodeStr) => {
-                const [tahunAjaran, semester] = periodeStr.split(':');
-                return await prisma.periodeAjaran.findFirst({
-                    where: {
-                        semester: semester as any,
-                        master_tahun_ajaran: { nama_ajaran: tahunAjaran }
-                    },
-                    include: { master_tahun_ajaran: true }
-                });
-            }))
-        ]);
-
-        // Create lookup maps
-        const siswaMap = new Map(siswaList.map(s => [s.nis, s]));
-        const mapelMap = new Map(mapelList.map(m => [m.nama_mapel, m]));
-        const periodeMap = new Map(
-            periodeList.filter(p => p !== null && p.master_tahun_ajaran !== null).map(p => [`${p!.master_tahun_ajaran!.nama_ajaran}:${p!.semester}`, p!])
-        );
-
-        // Get all tingkatan mappings for validation
-        const siswaTingkatanMap = new Map()
-        for (const siswa of siswaList) {
-            if (siswa.kelas?.tingkatan?.id) {
-                siswaTingkatanMap.set(siswa.nis, siswa.kelas.tingkatan.id)
-            }
-        }
-
-        // Process upserts in parallel
-        const upsertPromises: Promise<any>[] = []
-
-        // Collect all valid upsert operations
-        for (let i = 2; i <= worksheet.rowCount; i++) {
-            const row = worksheet.getRow(i);
-
-            // Mengambil data dari setiap sel. NIS di-unmerge secara otomatis oleh ExcelJS.
-            const nis = getCellValue(row, 1);
-            const namaMapel = getCellValue(row, 3);
-            const targetHafalan = getCellValue(row, 5);
-            const predikat = getCellValue(row, 6);
-            const semester = getCellValue(row, 7);
-            const tahunAjaranStr = getCellValue(row, 8);
-
-            if (!nis || !namaMapel || !predikat) {
-                results.errors++;
-                results.errorDetails.push(`Baris ${i}: Data tidak lengkap (NIS, Nama Mapel, atau Predikat kosong).`);
-                continue;
-            }
-
-            // Get entities from pre-loaded maps
-            const siswa = siswaMap.get(nis);
-            const mataPelajaran = mapelMap.get(namaMapel);
-            const periodeAjaran = periodeMap.get(`${tahunAjaranStr}:${semester}`);
-
-            if (!siswa || !mataPelajaran || !periodeAjaran) {
-                results.errors++;
-                const missing = [
-                    !siswa ? `Siswa (NIS: ${nis})` : '',
-                    !mataPelajaran ? `Mapel (${namaMapel})` : '',
-                    !periodeAjaran ? `Periode (${tahunAjaranStr} Sem ${semester})` : ''
-                ].filter(Boolean).join(', ');
-                results.errorDetails.push(`Baris ${i}: ${missing} tidak ditemukan.`);
-                continue;
-            }
-
-            // Validate that mata pelajaran is assigned to student's current tingkatan
-            const studentTingkatanId = siswaTingkatanMap.get(nis);
-            if (!studentTingkatanId) {
-                results.errors++;
-                results.errorDetails.push(`Baris ${i}: Siswa ${nis} tidak memiliki tingkatan yang valid.`);
-                continue;
-            }
-
-            // Check kurikulum data (optional - allow import even if not in kurikulum)
-            const kurikulum = await prisma.kurikulum.findFirst({
-                where: {
-                    mapel_id: mataPelajaran.id,
-                    tingkatan_id: studentTingkatanId,
-                    mata_pelajaran: { jenis: "Hafalan" }
-                },
-                include: {
-                    kitab: true
-                }
-            });
-
-            // If kurikulum exists, validate kitab consistency, otherwise just warn
-            if (kurikulum) {
-                const kurikulumKitab = kurikulum.kitab?.nama_kitab || kurikulum.batas_hafalan || "";
-                if (kurikulumKitab && targetHafalan && kurikulumKitab !== targetHafalan) {
-                    console.log(`Warning: Excel target_hafalan "${targetHafalan}" doesn't match kurikulum "${kurikulumKitab}" for ${namaMapel}`);
-                }
-            } else {
-                console.log(`Warning: Mata pelajaran "${namaMapel}" tidak terdaftar di kurikulum tingkatan siswa ${nis}, tapi tetap diizinkan import`);
-            }
-
-            // Use target_hafalan directly from Excel as intended
-            console.log(`Using target_hafalan from Excel: "${targetHafalan}" for ${namaMapel}`)
-
-            // Mapping dari display value ke enum value
-            let enumPredikat: any;
-            if (predikat === "Tercapai") {
-                enumPredikat = "TERCAPAI";
-            } else if (predikat === "Tidak Tercapai") {
-                enumPredikat = "TIDAK_TERCAPAI";
-            } else {
-                results.errors++;
-                results.errorDetails.push(`Baris ${i}: Predikat '${predikat}' tidak valid. Gunakan 'Tercapai' atau 'Tidak Tercapai'.`);
-                continue;
-            }
-
-            // Create upsert promise
-            const upsertPromise = prisma.nilaiHafalan.upsert({
-                where: {
-                    siswa_id_mapel_id_periode_ajaran_id: {
-                        siswa_id: siswa.id,
-                        mapel_id: mataPelajaran.id,
-                        periode_ajaran_id: periodeAjaran.id,
-                    },
-                },
-                update: {
-                    predikat: enumPredikat,
-                    target_hafalan: targetHafalan || null,
-                },
-                create: {
-                    siswa_id: siswa.id,
-                    mapel_id: mataPelajaran.id,
-                    periode_ajaran_id: periodeAjaran.id,
-                    predikat: enumPredikat,
-                    target_hafalan: targetHafalan || null,
-                },
-            }).catch((error: any) => {
-                console.error('Upsert error for nilai hafalan:', error)
-                results.errors++
-                results.errorDetails.push(`Baris ${i}: Error menyimpan data - ${error.message}`)
-                return null
-            })
-
-            upsertPromises.push(upsertPromise)
-        }
-
-        // Execute all upserts in parallel
-        if (upsertPromises.length > 0) {
-            const upsertResults = await Promise.all(upsertPromises)
-            results.success = upsertResults.filter(r => r !== null).length
-        }
-
-
-        return NextResponse.json({
-            success: true,
-            message: `Berhasil mengimpor ${results.success} data nilai hafalan.`,
-            results,
-        });
-
-    } catch (error: any) {
-        console.error("Error processing uploaded file:", error);
-        return NextResponse.json(
-          { success: false, error: "Gagal memproses file Excel.", details: error.message },
-          { status: 500 }
-        );
+  try {
+    const formData = await request.formData()
+    const file = formData.get("file") as File | null
+    const kelasId = formData.get("kelas_id") as string | null
+    const periodeAjaranId = formData.get("periode_ajaran_id") as string | null
+    if (!file || !kelasId || !periodeAjaranId) {
+      return NextResponse.json({ success: false, error: "File, kelas ID, dan periode ajaran ID diperlukan" }, { status: 400 })
     }
+
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(await file.arrayBuffer())
+    const worksheet = workbook.worksheets.find((sheet) => sheet.name.includes("Template Nilai Hafalan")) || workbook.worksheets[0]
+    if (!worksheet) {
+      return NextResponse.json({ success: false, error: "Sheet nilai hafalan tidak ditemukan." }, { status: 400 })
+    }
+
+    const payload = createEmptyImportTemplatePayload()
+    const errors: string[] = []
+    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+      const row = worksheet.getRow(rowNumber)
+      const nis = getCellValue(row, 1)
+      const nama = getCellValue(row, 2)
+      const mataPelajaran = getCellValue(row, 3)
+      const targetHafalan = getCellValue(row, 5)
+      const predikat = getCellValue(row, 6)
+      if (!nis && !mataPelajaran && !predikat) continue
+      if (!nis || !mataPelajaran || !["Tercapai", "Tidak Tercapai"].includes(predikat)) {
+        errors.push(`Baris ${rowNumber}: NIS, mata pelajaran, atau predikat hafalan tidak valid.`)
+        continue
+      }
+      payload.nilaiHafalan.push({ nis, nama, mataPelajaran, targetHafalan, predikat })
+    }
+
+    if (errors.length > 0 || payload.nilaiHafalan.length === 0) {
+      return NextResponse.json({ success: false, error: "Validasi nilai hafalan gagal", details: errors }, { status: 400 })
+    }
+
+    const job = await createImportTemplateJob(payload, kelasId, periodeAjaranId, file.name)
+    const backgroundQueued = await enqueueImportTemplateJob(job.id)
+    return NextResponse.json({ success: true, message: "Import nilai hafalan dijadwalkan per batch.", job, backgroundQueued })
+  } catch (error) {
+    console.error("Error scheduling nilai hafalan import:", error)
+    return NextResponse.json({ success: false, error: "Gagal memproses file nilai hafalan" }, { status: 500 })
+  }
 }

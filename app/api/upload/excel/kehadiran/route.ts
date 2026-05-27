@@ -1,128 +1,57 @@
 import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
-import { prisma } from "@/lib/prisma"
+import { createEmptyImportTemplatePayload, createImportTemplateJob } from "@/lib/import-template-job"
+import { enqueueImportTemplateJob } from "@/lib/import-template-queue"
+
+export const maxDuration = 60
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    const file = formData.get("file") as File
-    const kelasId = formData.get("kelas_id") as string
-    const periodeAjaranId = formData.get("periode_ajaran_id") as string
+    const file = formData.get("file") as File | null
+    const kelasId = formData.get("kelas_id") as string | null
+    const periodeAjaranId = formData.get("periode_ajaran_id") as string | null
 
     if (!file || !kelasId || !periodeAjaranId) {
       return NextResponse.json({ success: false, error: "File, kelas ID, dan periode ajaran ID diperlukan" }, { status: 400 })
     }
-
-    // Validate file type
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
       return NextResponse.json({ success: false, error: "File harus berformat Excel (.xlsx atau .xls)" }, { status: 400 })
     }
 
-    // Read Excel file
-    const buffer = await file.arrayBuffer()
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.load(buffer)
-
-    // Get first worksheet (should be the kehadiran template)
+    await workbook.xlsx.load(await file.arrayBuffer())
     const worksheet = workbook.worksheets[0]
     if (!worksheet) {
       return NextResponse.json({ success: false, error: "Tidak ada sheet di file Excel" }, { status: 400 })
     }
 
-    // Parse data
-    const rows = worksheet.getSheetValues()
-    const dataRows = rows.slice(2) // Skip header
-    const results = { inserted: 0, updated: 0, errors: 0 }
-
-    // Pre-load lookups
-    const allNis = new Set(dataRows.map((row: any) => row?.[1]).filter(Boolean))
-    const allIndikator = new Set(dataRows.map((row: any) => row?.[3]).filter(Boolean))
-
-    const siswaList = await prisma.siswa.findMany({
-      where: { nis: { in: Array.from(allNis) }, status: "Aktif" }
-    })
-    const siswaMap = new Map(siswaList.map(s => [s.nis, s]))
-
-    const indikatorList = await prisma.indikatorKehadiran.findMany({
-      where: { nama_indikator: { in: Array.from(allIndikator) as string[] } }
-    })
-    const indikatorMap = new Map(indikatorList.map(i => [i.nama_indikator, i]))
-
-    // Process upserts in parallel
-    const upsertPromises: Promise<any>[] = []
-
-    // Collect all valid upsert operations
-    for (const row of dataRows) {
-      if (!row || !Array.isArray(row) || row.length < 8) continue
-
-      const nis = row[1] as string
-      const indikator = row[3] as string
-      const sakit = row[4]
-      const izin = row[5]
-      const alpha = row[6]
-
-      if (!nis || !indikator) continue
-
-      const siswa = siswaMap.get(nis)
-      const indikatorData = indikatorMap.get(indikator)
-
-      if (siswa && indikatorData) {
-        const sakitNum = parseInt(String(sakit || 0))
-        const izinNum = parseInt(String(izin || 0))
-        const alphaNum = parseInt(String(alpha || 0))
-
-        if (sakitNum >= 0 && izinNum >= 0 && alphaNum >= 0) {
-          const upsertPromise = prisma.kehadiran.upsert({
-            where: {
-              siswa_id_periode_ajaran_id_indikator_kehadiran_id: {
-                siswa_id: siswa.id,
-                periode_ajaran_id: parseInt(periodeAjaranId),
-                indikator_kehadiran_id: indikatorData.id
-              }
-            },
-            update: {
-              sakit: sakitNum,
-              izin: izinNum,
-              alpha: alphaNum
-            },
-            create: {
-              siswa_id: siswa.id,
-              periode_ajaran_id: parseInt(periodeAjaranId),
-              indikator_kehadiran_id: indikatorData.id,
-              sakit: sakitNum,
-              izin: izinNum,
-              alpha: alphaNum
-            }
-          }).catch((error: any) => {
-            console.error('Upsert error for kehadiran:', error)
-            results.errors++
-            return null
-          })
-
-          upsertPromises.push(upsertPromise)
-        } else {
-          results.errors++
-        }
-      } else {
-        results.errors++
+    const payload = createEmptyImportTemplatePayload()
+    const errors: string[] = []
+    worksheet.getSheetValues().slice(2).forEach((row, index) => {
+      if (!Array.isArray(row) || row.length < 7) return
+      const nis = String(row[1] ?? "").trim()
+      const nama = String(row[2] ?? "").trim()
+      const indikator = String(row[3] ?? "").trim()
+      const sakit = Number.parseInt(String(row[4] ?? 0), 10)
+      const izin = Number.parseInt(String(row[5] ?? 0), 10)
+      const alpha = Number.parseInt(String(row[6] ?? 0), 10)
+      if (!nis || !indikator || [sakit, izin, alpha].some((nilai) => Number.isNaN(nilai) || nilai < 0)) {
+        errors.push(`Baris ${index + 3}: NIS, indikator, dan jumlah kehadiran harus valid.`)
+        return
       }
-    }
-
-    // Execute all upserts in parallel
-    if (upsertPromises.length > 0) {
-      const upsertResults = await Promise.all(upsertPromises)
-      results.inserted = upsertResults.filter(r => r !== null).length
-      // Note: We can't easily distinguish between inserts and updates in parallel mode
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Kehadiran berhasil diproses: ${results.inserted} inserted, ${results.updated} updated, ${results.errors} errors`,
-      results
+      payload.kehadiran.push({ nis, nama, indikator, sakit, izin, alpha })
     })
 
+    if (errors.length > 0 || payload.kehadiran.length === 0) {
+      return NextResponse.json({ success: false, error: "Validasi kehadiran gagal", details: errors }, { status: 400 })
+    }
+
+    const job = await createImportTemplateJob(payload, kelasId, periodeAjaranId, file.name)
+    const backgroundQueued = await enqueueImportTemplateJob(job.id)
+    return NextResponse.json({ success: true, message: "Import kehadiran dijadwalkan per batch.", job, backgroundQueued })
   } catch (error) {
-    console.error("Error processing kehadiran:", error)
+    console.error("Error scheduling kehadiran import:", error)
     return NextResponse.json({ success: false, error: "Gagal memproses file kehadiran" }, { status: 500 })
   }
 }

@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast"
 import { Eye, FileDown, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
+import { ImportJobProgressCard } from "@/components/import-job-progress-card"
+import { useImportTemplateJob } from "@/hooks/use-import-template-job"
 
 interface Siswa {
   id: string
@@ -50,6 +52,10 @@ export default function NilaiUjianPage() {
 
   const { toast } = useToast()
   const router = useRouter()
+  const { activeJob, isProcessingBatches, startImportJob, processImportJob, retryFailedBatches } = useImportTemplateJob(
+    "active-nilai-ujian-import-job",
+    () => fetchData(),
+  )
 
   const columns = [
     { key: "nis", label: "NIS" },
@@ -228,7 +234,7 @@ export default function NilaiUjianPage() {
           description: result.message,
         })
         setSelectedFile(null)
-        fetchData() // Refresh data
+        await startImportJob(result.job)
       } else {
         toast({
           title: "Error",
@@ -351,6 +357,13 @@ export default function NilaiUjianPage() {
           </div>
         </div>
       </div>
+
+      <ImportJobProgressCard
+        job={activeJob}
+        isProcessing={isProcessingBatches}
+        onResume={processImportJob}
+        onRetry={retryFailedBatches}
+      />
 
       <DataTable
         title="Daftar Siswa"

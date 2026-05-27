@@ -45,4 +45,19 @@ describe("processImportTemplateBatch", () => {
       create: expect.objectContaining({ nilai: 95, predikat: "Baik Sekali" }),
     }))
   })
+
+  test("menolak nilai ujian di atas 10 dan penilaian sikap di atas 100", async () => {
+    const result = await processImportTemplateBatch({
+      nilaiUjian: [{ nis: "NIS-001", mataPelajaran: "Nahwu", nilai: 11 }],
+      nilaiHafalan: [],
+      kehadiran: [],
+      penilaianSikap: [{ nis: "NIS-001", indikator: "Disiplin", nilai: 101 }],
+      catatanSiswa: [],
+    }, 1, 2)
+
+    expect(result.nilaiUjian.errors).toBe(1)
+    expect(result.penilaianSikap.errors).toBe(1)
+    expect(mockPrisma.nilaiUjian.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.penilaianSikap.upsert).not.toHaveBeenCalled()
+  })
 })
