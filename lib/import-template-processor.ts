@@ -87,6 +87,8 @@ async function executeBulkUpsert(
     for (const col of config.columns) {
       if (config.table === "nilai_hafalan" && col === "predikat") {
         rowPlaceholders.push(`$${paramIndex++}::"PredikatHafalan"`)
+      } else if (col === "payload") {
+        rowPlaceholders.push(`$${paramIndex++}::jsonb`)
       } else {
         rowPlaceholders.push(`$${paramIndex++}`)
       }
