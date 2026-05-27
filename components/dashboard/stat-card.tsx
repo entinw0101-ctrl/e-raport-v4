@@ -62,14 +62,26 @@ export function StatCard({
           </p>
         )}
 
-        {trend && (
-          <Badge
-            variant="secondary"
-            className={`text-xs font-medium ${getTrendColor()}`}
-          >
-            {getTrendIcon()} {trend}
-          </Badge>
-        )}
+        {trend && (() => {
+          const words = trend.split(" ")
+          const trendVal = words[0]
+          const trendDesc = words.slice(1).join(" ")
+          return (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge
+                variant="secondary"
+                className={`text-[10px] font-semibold px-2 py-0.5 whitespace-nowrap ${getTrendColor()}`}
+              >
+                {getTrendIcon()} {trendVal}
+              </Badge>
+              {trendDesc && (
+                <span className="text-[10px] text-muted-foreground font-medium break-words leading-tight">
+                  {trendDesc}
+                </span>
+              )}
+            </div>
+          )
+        })()}
       </CardContent>
     </Card>
   )

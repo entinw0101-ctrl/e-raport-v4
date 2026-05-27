@@ -41,7 +41,7 @@ export function QuickActions({ actions }: QuickActionsProps) {
       </CardHeader>
       <CardContent>
         <TooltipProvider>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 auto-rows-fr">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3 auto-rows-fr">
             {actions.map((action) => {
               const Icon = iconMap[action.icon as keyof typeof iconMap]
 
