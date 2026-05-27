@@ -27,16 +27,8 @@ try {
 
   if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
-  // Add connection validation for production
-  if (process.env.NODE_ENV === "production") {
-    prisma.$connect()
-      .then(() => {
-        console.log("✅ Production Prisma client connected successfully")
-      })
-      .catch((error) => {
-        console.error("❌ Production Prisma client connection failed:", error)
-      })
-  }
+  // Eager connection call removed to prevent serverless container pool exhaustion.
+  // Prisma will connect lazily on first query execution.
 } catch (error) {
   console.error("❌ Failed to initialize Prisma client:", error)
   // Create a dummy client that will throw errors for all operations

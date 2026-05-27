@@ -73,44 +73,50 @@ export async function GET(request: NextRequest) {
       }
     ]))
 
-    // Get report status for each student
-    const studentsWithStatus = await Promise.all(
-      siswaAktif.map(async (siswa) => {
-        try {
-          const result = await generateLaporanNilai(
-            siswa.id.toString(),
-            periodeAjaranId,
-            {
-              isAdmin: true,
-              precomputedRanking: rankingMap.get(siswa.id) || null
-            }
-          )
+    // Get report status for each student in chunks of 5 to avoid connection pool starvation
+    const studentsWithStatus: any[] = []
+    const chunkSize = 5
+    for (let i = 0; i < siswaAktif.length; i += chunkSize) {
+      const chunk = siswaAktif.slice(i, i + chunkSize)
+      const chunkResults = await Promise.all(
+        chunk.map(async (siswa) => {
+          try {
+            const result = await generateLaporanNilai(
+              siswa.id.toString(),
+              periodeAjaranId,
+              {
+                isAdmin: true,
+                precomputedRanking: rankingMap.get(siswa.id) || null
+              }
+            )
 
-          return {
-            id: siswa.id,
-            nama: siswa.nama,
-            nis: siswa.nis,
-            report_status: result.reportStatus || 'not_ready',
-            can_generate: result.canGenerate,
-            peringkat: result.data?.peringkat || null,
-            total_siswa: result.data?.totalSiswa || 0,
-            warnings: result.warnings
+            return {
+              id: siswa.id,
+              nama: siswa.nama,
+              nis: siswa.nis,
+              report_status: result.reportStatus || 'not_ready',
+              can_generate: result.canGenerate,
+              peringkat: result.data?.peringkat || null,
+              total_siswa: result.data?.totalSiswa || 0,
+              warnings: result.warnings
+            }
+          } catch (error) {
+            console.error(`Error checking status for student ${siswa.id}:`, error)
+            return {
+              id: siswa.id,
+              nama: siswa.nama,
+              nis: siswa.nis,
+              report_status: 'error' as const,
+              can_generate: false,
+              peringkat: null,
+              total_siswa: 0,
+              warnings: ['Error checking report status']
+            }
           }
-        } catch (error) {
-          console.error(`Error checking status for student ${siswa.id}:`, error)
-          return {
-            id: siswa.id,
-            nama: siswa.nama,
-            nis: siswa.nis,
-            report_status: 'error' as const,
-            can_generate: false,
-            peringkat: null,
-            total_siswa: 0,
-            warnings: ['Error checking report status']
-          }
-        }
-      })
-    )
+        })
+      )
+      studentsWithStatus.push(...chunkResults)
+    }
 
     // Group students by status for easy filtering
     const groupedStudents = {
