@@ -85,7 +85,11 @@ async function executeBulkUpsert(
   for (const row of rows) {
     const rowPlaceholders: string[] = []
     for (const col of config.columns) {
-      rowPlaceholders.push(`$${paramIndex++}`)
+      if (config.table === "nilai_hafalan" && col === "predikat") {
+        rowPlaceholders.push(`$${paramIndex++}::"PredikatHafalan"`)
+      } else {
+        rowPlaceholders.push(`$${paramIndex++}`)
+      }
       if (col === "payload" && typeof row[col] === "object") {
         queryValues.push(JSON.stringify(row[col]))
       } else {
