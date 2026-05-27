@@ -101,6 +101,13 @@ function setupMockExcel(mockData: any) {
 
 // Fungsi helper untuk mock Prisma
 function setupMockPrisma() {
+  mockPrisma.importTemplateJob.create.mockResolvedValue({
+    id: 'job-1',
+    status: 'PENDING',
+    total_siswa: 1,
+    total_batches: 1,
+    batches: [],
+  } as any)
   mockPrisma.siswa.findMany.mockResolvedValue(mockSiswa as any)
   mockPrisma.mataPelajaran.findMany.mockResolvedValue(mockMapel as any)
   mockPrisma.indikatorKehadiran.findMany.mockResolvedValue(mockIndikatorKehadiran as any)
@@ -184,53 +191,33 @@ describe('API POST /api/upload/excel/combined-template (White-Box Test)', () => 
     expect(mockPrisma.nilaiUjian.upsert).not.toHaveBeenCalled()
   })
 
-  test('Harus berhasil validasi DAN import data (Jalur Sukses)', async () => {
-    // 1. Setup Mock Prisma (sudah di beforeEach)
-    // 2. Buat Request
+  test('Harus menjadwalkan import batch setelah validasi berhasil', async () => {
     const file = new File(['dummy'], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const request = createMockRequest(file, 'k1', '1', 'true') // import=true, periode_ajaran_id=1
+    const request = createMockRequest(file, '1', '1', 'true')
 
-    // 3. Panggil Fungsi POST
     const response = await POST(request)
     const body = await response.json()
 
-    // 4. Assert
     expect(response.status).toBe(200)
     expect(body.success).toBe(true)
-    expect(body.message).toBe('Data berhasil diimport')
-    expect(body.imported).toBe(true)
-
-    // Cek apakah fungsi lookup dipanggil
-    expect(mockPrisma.siswa.findMany).toHaveBeenCalledWith({
-      where: { nis: { in: ['NIS-001'] }, status: 'Aktif' },
-      include: { kelas: { include: { tingkatan: true } } },
-    })
-
-    // Cek apakah fungsi upsert dipanggil
-    expect(mockPrisma.nilaiUjian.upsert).toHaveBeenCalledTimes(1)
-    expect(mockPrisma.nilaiUjian.upsert).toHaveBeenCalledWith(
+    expect(body.message).toContain('diproses per batch')
+    expect(body.imported).toBe(false)
+    expect(body.job.id).toBe('job-1')
+    expect(mockPrisma.importTemplateJob.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          siswa_id_mapel_id_periode_ajaran_id: {
-            siswa_id: 'siswa-id-1',
-            mapel_id: 'mapel-id-1',
-            periode_ajaran_id: 1, 
-          },
-        },
-        create: {
-          siswa_id: 'siswa-id-1',
-          mapel_id: 'mapel-id-1',
+        data: expect.objectContaining({
+          kelas_id: 1,
           periode_ajaran_id: 1,
-          nilai_angka: 9,
-          predikat: 'Baik Sekali', 
-        },
+          total_siswa: 1,
+          total_batches: 1,
+        }),
       }),
     )
-    
-    expect(mockPrisma.nilaiHafalan.upsert).toHaveBeenCalledTimes(1)
-    expect(mockPrisma.kehadiran.upsert).toHaveBeenCalledTimes(1)
-    expect(mockPrisma.penilaianSikap.upsert).toHaveBeenCalledTimes(1)
-    expect(mockPrisma.catatanSiswa.upsert).toHaveBeenCalledTimes(1)
+    expect(mockPrisma.nilaiUjian.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.nilaiHafalan.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.kehadiran.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.penilaianSikap.upsert).not.toHaveBeenCalled()
+    expect(mockPrisma.catatanSiswa.upsert).not.toHaveBeenCalled()
   })
 
   // --- TES BARU UNTUK DEFECT (VERSI PERBAIKAN) ---

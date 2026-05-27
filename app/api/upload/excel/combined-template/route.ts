@@ -5,6 +5,7 @@ import { generatePredikat } from "@/lib/utils"
 // DIUBAH: Impor getSikapPredicate juga
 import { getPredicate, getSikapPredicate } from "@/lib/raport-utils"
 import { PredikatHafalan } from "@prisma/client"
+import { createImportTemplateJob } from "@/lib/import-template-job"
 
 interface ValidationResult {
   sheet: string
@@ -13,6 +14,8 @@ interface ValidationResult {
   details?: string[]
   data?: any[]
 }
+
+export const maxDuration = 60
 
 export async function POST(request: NextRequest) {
   console.time('Total processing time')
@@ -135,22 +138,26 @@ export async function POST(request: NextRequest) {
       console.log('First nilai hafalan item:', validatedData.nilaiHafalan[0])
     }
     
-    let importResult = null
     if (!hasErrors && shouldImport) {
-      // Perform import if validation passed and import is requested
-      console.time('Data import')
-      importResult = await performImport(validatedData, kelasId, periodeAjaranId)
-      console.timeEnd('Data import')
+      const job = await createImportTemplateJob(validatedData, kelasId, periodeAjaranId, file.name)
+      console.timeEnd('Total processing time')
+      return NextResponse.json({
+        success: true,
+        validation: allValidations,
+        message: "Import dijadwalkan dan akan diproses per batch",
+        canProceed: true,
+        imported: false,
+        job,
+      })
     }
 
     console.timeEnd('Total processing time')
     return NextResponse.json({
       success: true,
-      validation: allValidations, // <-- Menggunakan 'allValidations' yang sudah benar
-      message: hasErrors ? "Terdapat error dalam validasi data" : (shouldImport ? "Data berhasil diimport" : "Semua data berhasil divalidasi"),
+      validation: allValidations,
+      message: hasErrors ? "Terdapat error dalam validasi data" : "Semua data berhasil divalidasi",
       canProceed: !hasErrors,
-      imported: shouldImport && !hasErrors,
-      importResult: importResult
+      imported: false,
     })
 
   } catch (error) {

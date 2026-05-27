@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // =====================================================
@@ -16,14 +16,14 @@ datasource db {
 
 // Tabel Admin
 model Admin {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique @db.VarChar(255)
-  password  String   @db.VarChar(255) // Password yang di-hash
-  name      String?  @db.VarChar(255)
-  role      AdminRole @default(admin)
+  id        Int         @id @default(autoincrement())
+  email     String      @unique @db.VarChar(255)
+  password  String      @db.VarChar(255) // Password yang di-hash
+  name      String?     @db.VarChar(255)
+  role      AdminRole   @default(admin)
   status    AdminStatus @default(active)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   // Relasi
   audit_logs AuditLog[]
@@ -37,17 +37,17 @@ model Admin {
 
 // Tabel Master Tahun Ajaran
 model MasterTahunAjaran {
-  id           Int      @id @default(autoincrement())
-  nama_ajaran  String   @unique @db.VarChar(255)
-  urutan       Int?
-  status       Status   @default(nonaktif)
-  dibuat_pada  DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  nama_ajaran     String   @unique @db.VarChar(255)
+  urutan          Int?
+  status          Status   @default(nonaktif)
+  dibuat_pada     DateTime @default(now())
   diperbarui_pada DateTime @updatedAt
 
   // Relasi
-  periode_ajaran PeriodeAjaran[]
-  siswa         Siswa[]
-  siswa_masuk   Siswa[] @relation("TahunAjaranMasuk")
+  periode_ajaran      PeriodeAjaran[]
+  siswa               Siswa[]
+  siswa_masuk         Siswa[]             @relation("TahunAjaranMasuk")
   riwayat_kelas_siswa RiwayatKelasSiswa[]
 
   @@index([status])
@@ -58,23 +58,24 @@ model MasterTahunAjaran {
 
 // Tabel Periode Ajaran
 model PeriodeAjaran {
-  id                    Int      @id @default(autoincrement())
-  nama_ajaran          String   @db.VarChar(255)
-  semester             Semester
+  id                     Int      @id @default(autoincrement())
+  nama_ajaran            String   @db.VarChar(255)
+  semester               Semester
   master_tahun_ajaran_id Int?
-  dibuat_pada          DateTime @default(now())
-  diperbarui_pada      DateTime @updatedAt
+  dibuat_pada            DateTime @default(now())
+  diperbarui_pada        DateTime @updatedAt
 
   // Relasi
-  master_tahun_ajaran MasterTahunAjaran? @relation(fields: [master_tahun_ajaran_id], references: [id], onDelete: SetNull)
-  nilai_ujian        NilaiUjian[]
-  nilai_hafalan      NilaiHafalan[]
-  kehadiran          Kehadiran[]
-  penilaian_sikap    PenilaianSikap[]
-  ringkasan_rapot    RingkasanRapot[]
-  log_promosi_dari   LogPromosi[] @relation("PromosiDari")
-  log_promosi_ke     LogPromosi[] @relation("PromosiKe")
-  catatan_siswa      CatatanSiswa[]
+  master_tahun_ajaran  MasterTahunAjaran?  @relation(fields: [master_tahun_ajaran_id], references: [id], onDelete: SetNull)
+  nilai_ujian          NilaiUjian[]
+  nilai_hafalan        NilaiHafalan[]
+  kehadiran            Kehadiran[]
+  penilaian_sikap      PenilaianSikap[]
+  ringkasan_rapot      RingkasanRapot[]
+  import_template_jobs ImportTemplateJob[]
+  log_promosi_dari     LogPromosi[]        @relation("PromosiDari")
+  log_promosi_ke       LogPromosi[]        @relation("PromosiKe")
+  catatan_siswa        CatatanSiswa[]
 
   @@unique([nama_ajaran, semester])
   @@index([semester])
@@ -91,8 +92,8 @@ model Tingkatan {
   diperbarui_pada DateTime @updatedAt
 
   // Relasi
-  kelas      Kelas[]
-  kurikulum  Kurikulum[]
+  kelas     Kelas[]
+  kurikulum Kurikulum[]
 
   @@index([urutan])
   @@map("tingkatan")
@@ -148,12 +149,13 @@ model Kelas {
   diperbarui_pada DateTime @updatedAt
 
   // Relasi
-  wali_kelas    Guru?      @relation(fields: [wali_kelas_id], references: [id], onDelete: SetNull)
-  tingkatan     Tingkatan? @relation(fields: [tingkatan_id], references: [id], onDelete: SetNull)
-  siswa         Siswa[]
-  riwayat_kelas_siswa RiwayatKelasSiswa[]
-  log_promosi_dari LogPromosi[] @relation("KelasDari")
-  log_promosi_ke   LogPromosi[] @relation("KelasKe")
+  wali_kelas           Guru?               @relation(fields: [wali_kelas_id], references: [id], onDelete: SetNull)
+  tingkatan            Tingkatan?          @relation(fields: [tingkatan_id], references: [id], onDelete: SetNull)
+  siswa                Siswa[]
+  riwayat_kelas_siswa  RiwayatKelasSiswa[]
+  log_promosi_dari     LogPromosi[]        @relation("KelasDari")
+  log_promosi_ke       LogPromosi[]        @relation("KelasKe")
+  import_template_jobs ImportTemplateJob[]
 
   @@index([nama_kelas])
   @@index([wali_kelas_id])
@@ -163,37 +165,37 @@ model Kelas {
 
 // Tabel Siswa
 model Siswa {
-  id                     Int               @id @default(autoincrement())
-  nama                   String?           @db.VarChar(255)
-  nis                    String            @unique @db.VarChar(255)
-  tempat_lahir           String?           @db.VarChar(255)
+  id                     Int           @id @default(autoincrement())
+  nama                   String?       @db.VarChar(255)
+  nis                    String        @unique @db.VarChar(255)
+  tempat_lahir           String?       @db.VarChar(255)
   tanggal_lahir          DateTime?
   jenis_kelamin          JenisKelamin?
-  agama                  String?           @db.VarChar(255)
+  agama                  String?       @db.VarChar(255)
   alamat                 String?
   kelas_id               Int?
   kamar_id               Int?
-  kota_asal              String?           @db.VarChar(255)
-  nama_ayah              String?           @db.VarChar(255)
-  pekerjaan_ayah         String?           @db.VarChar(255)
+  kota_asal              String?       @db.VarChar(255)
+  nama_ayah              String?       @db.VarChar(255)
+  pekerjaan_ayah         String?       @db.VarChar(255)
   alamat_ayah            String?
-  nama_ibu               String?           @db.VarChar(255)
-  pekerjaan_ibu          String?           @db.VarChar(255)
+  nama_ibu               String?       @db.VarChar(255)
+  pekerjaan_ibu          String?       @db.VarChar(255)
   alamat_ibu             String?
-  nama_wali              String?           @db.VarChar(255)
-  pekerjaan_wali         String?           @db.VarChar(255)
+  nama_wali              String?       @db.VarChar(255)
+  pekerjaan_wali         String?       @db.VarChar(255)
   alamat_wali            String?
   master_tahun_ajaran_id Int?
   tahun_ajaran_masuk_id  Int?
-  status                 StatusSiswa       @default(Aktif)
-  dibuat_pada            DateTime          @default(now())
-  diperbarui_pada        DateTime          @updatedAt
+  status                 StatusSiswa   @default(Aktif)
+  dibuat_pada            DateTime      @default(now())
+  diperbarui_pada        DateTime      @updatedAt
 
   // Relasi
   kelas               Kelas?              @relation(fields: [kelas_id], references: [id], onDelete: SetNull)
   kamar               Kamar?              @relation(fields: [kamar_id], references: [id], onDelete: SetNull)
   master_tahun_ajaran MasterTahunAjaran?  @relation(fields: [master_tahun_ajaran_id], references: [id], onDelete: SetNull)
-  tahun_ajaran_masuk   MasterTahunAjaran? @relation("TahunAjaranMasuk", fields: [tahun_ajaran_masuk_id], references: [id], onDelete: SetNull)
+  tahun_ajaran_masuk  MasterTahunAjaran?  @relation("TahunAjaranMasuk", fields: [tahun_ajaran_masuk_id], references: [id], onDelete: SetNull)
   nilai_ujian         NilaiUjian[]
   nilai_hafalan       NilaiHafalan[]
   kehadiran           Kehadiran[]
@@ -217,11 +219,11 @@ model Siswa {
 
 // Tabel Mata Pelajaran
 model MataPelajaran {
-  id              Int           @id @default(autoincrement())
-  nama_mapel      String        @db.VarChar(100)
+  id              Int        @id @default(autoincrement())
+  nama_mapel      String     @db.VarChar(100)
   jenis           JenisMapel
-  dibuat_pada     DateTime      @default(now())
-  diperbarui_pada DateTime      @updatedAt
+  dibuat_pada     DateTime   @default(now())
+  diperbarui_pada DateTime   @updatedAt
 
   // Relasi
   kurikulum     Kurikulum[]
@@ -273,14 +275,14 @@ model Kurikulum {
 
 // Tabel Nilai Ujian
 model NilaiUjian {
-  id                Int           @id @default(autoincrement())
+  id                Int      @id @default(autoincrement())
   siswa_id          Int
   mapel_id          Int
   periode_ajaran_id Int
-  nilai_angka       Decimal       @db.Decimal(5, 2)
-  predikat          String?       @db.VarChar(50)
-  dibuat_pada       DateTime      @default(now())
-  diperbarui_pada   DateTime      @updatedAt
+  nilai_angka       Decimal  @db.Decimal(5, 2)
+  predikat          String?  @db.VarChar(50)
+  dibuat_pada       DateTime @default(now())
+  diperbarui_pada   DateTime @updatedAt
 
   // Relasi
   siswa          Siswa         @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -297,14 +299,14 @@ model NilaiUjian {
 
 // Tabel Nilai Hafalan
 model NilaiHafalan {
-  id                Int              @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   siswa_id          Int
   mapel_id          Int
   periode_ajaran_id Int
   target_hafalan    String?
   predikat          PredikatHafalan
-  dibuat_pada       DateTime         @default(now())
-  diperbarui_pada   DateTime         @updatedAt
+  dibuat_pada       DateTime        @default(now())
+  diperbarui_pada   DateTime        @updatedAt
 
   // Relasi
   siswa          Siswa         @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -325,18 +327,18 @@ model NilaiHafalan {
 
 // Tabel Kehadiran
 model Kehadiran {
-  id                     Int      @id @default(autoincrement())
+  id                     Int @id @default(autoincrement())
   siswa_id               Int
   periode_ajaran_id      Int
   indikator_kehadiran_id Int
 
   // Kolom untuk jumlah akumulasi ketidakhadiran per indikator
-  sakit                  Int      @default(0)
-  izin                   Int      @default(0)
-  alpha                  Int      @default(0)
+  sakit Int @default(0)
+  izin  Int @default(0)
+  alpha Int @default(0)
 
-  dibuat_pada            DateTime @default(now())
-  diperbarui_pada        DateTime @updatedAt
+  dibuat_pada     DateTime @default(now())
+  diperbarui_pada DateTime @updatedAt
 
   // Relasi
   siswa               Siswa              @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -385,14 +387,14 @@ model IndikatorKehadiran {
 
 // Tabel Penilaian Sikap
 model PenilaianSikap {
-  id                Int           @id @default(autoincrement())
+  id                Int      @id @default(autoincrement())
   siswa_id          Int
   indikator_id      Int
   periode_ajaran_id Int
-  nilai             Int           @db.SmallInt
-  predikat          String?       @db.VarChar(50)
-  dibuat_pada       DateTime      @default(now())
-  diperbarui_pada   DateTime      @updatedAt
+  nilai             Int      @db.SmallInt
+  predikat          String?  @db.VarChar(50)
+  dibuat_pada       DateTime @default(now())
+  diperbarui_pada   DateTime @updatedAt
 
   // Relasi
   siswa           Siswa          @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -413,19 +415,19 @@ model PenilaianSikap {
 
 // Tabel Ringkasan Rapot
 model RingkasanRapot {
-  id                     Int           @id @default(autoincrement())
-  siswa_id               Int
-  periode_ajaran_id      Int
-  total_sakit            Int?
-  total_izin             Int?
-  total_alpha            Int?
-  catatan_akademik       String?
-  rata_rata_spiritual    Decimal?      @db.Decimal(3, 2)
-  rata_rata_sosial       Decimal?      @db.Decimal(3, 2)
-  predikat_akhir_sikap   String?       @db.VarChar(50)
-  catatan_sikap          String?
-  dibuat_pada            DateTime      @default(now())
-  diperbarui_pada        DateTime      @updatedAt
+  id                   Int      @id @default(autoincrement())
+  siswa_id             Int
+  periode_ajaran_id    Int
+  total_sakit          Int?
+  total_izin           Int?
+  total_alpha          Int?
+  catatan_akademik     String?
+  rata_rata_spiritual  Decimal? @db.Decimal(3, 2)
+  rata_rata_sosial     Decimal? @db.Decimal(3, 2)
+  predikat_akhir_sikap String?  @db.VarChar(50)
+  catatan_sikap        String?
+  dibuat_pada          DateTime @default(now())
+  diperbarui_pada      DateTime @updatedAt
 
   // Relasi
   siswa          Siswa         @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -440,15 +442,15 @@ model RingkasanRapot {
 
 // Tabel Penanggung Jawab Rapot
 model PenanggungJawabRapot {
-  id                    Int                  @id @default(autoincrement())
-  jabatan               String               @db.VarChar(100)
-  nama_pejabat          String               @db.VarChar(255)
-  nip                   String?              @db.VarChar(50)
-  tanda_tangan          String?              @db.VarChar(255) // Path ke file di Supabase Storage
-  jenis_kelamin_target  JenisKelaminTarget
-  status                StatusPejabat        @default(aktif)
-  dibuat_pada           DateTime             @default(now())
-  diperbarui_pada       DateTime             @updatedAt
+  id                   Int                @id @default(autoincrement())
+  jabatan              String             @db.VarChar(100)
+  nama_pejabat         String             @db.VarChar(255)
+  nip                  String?            @db.VarChar(50)
+  tanda_tangan         String?            @db.VarChar(255) // Path ke file di Supabase Storage
+  jenis_kelamin_target JenisKelaminTarget
+  status               StatusPejabat      @default(aktif)
+  dibuat_pada          DateTime           @default(now())
+  diperbarui_pada      DateTime           @updatedAt
 
   @@index([jabatan])
   @@index([jenis_kelamin_target])
@@ -462,11 +464,11 @@ model PenanggungJawabRapot {
 
 // Tabel Riwayat Kelas Siswa
 model RiwayatKelasSiswa {
-  id                     Int                @id @default(autoincrement())
+  id                     Int      @id @default(autoincrement())
   siswa_id               Int?
   kelas_id               Int?
   master_tahun_ajaran_id Int?
-  dibuat_pada            DateTime           @default(now())
+  dibuat_pada            DateTime @default(now())
 
   // Relasi
   siswa               Siswa?             @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -479,17 +481,16 @@ model RiwayatKelasSiswa {
   @@map("riwayat_kelas_siswa")
 }
 
-
 // Tabel Log Promosi
 model LogPromosi {
-  id                   Int            @id @default(autoincrement())
+  id                   Int      @id @default(autoincrement())
   tahun_ajaran_dari_id Int?
   tahun_ajaran_ke_id   Int?
   kelas_dari_id        Int?
   kelas_ke_id          Int?
   dieksekusi_oleh      Int?
   catatan              String?
-  dibuat_pada          DateTime       @default(now())
+  dibuat_pada          DateTime @default(now())
 
   // Relasi
   tahun_ajaran_dari PeriodeAjaran? @relation("PromosiDari", fields: [tahun_ajaran_dari_id], references: [id])
@@ -504,25 +505,25 @@ model LogPromosi {
 
 // Tabel Surat Keluar
 model SuratKeluar {
-  id                        Int           @id @default(autoincrement())
-  nomor_surat               String        @unique @db.VarChar(255)
-  siswa_id                  Int?
-  tanggal_surat             DateTime?
-  perihal                   String?
-  isi_surat                 String?
+  id            Int       @id @default(autoincrement())
+  nomor_surat   String    @unique @db.VarChar(255)
+  siswa_id      Int?
+  tanggal_surat DateTime?
+  perihal       String?
+  isi_surat     String?
 
   // Fields for student exit management
-  jenis_keluar              JenisKeluar?  // Pindah, Keluar, Lulus
-  tujuan_nama_pesantren     String?       @db.VarChar(255)
-  tujuan_alamat_pesantren   String?
-  alasan                    String?
-  penanggung_jawab          String?       @db.VarChar(100) // "Ayah/Ibu/Wali"
-  penanggung_nama           String?       @db.VarChar(255) // Parent/Guardian name
-  penanggung_pekerjaan      String?       @db.VarChar(255) // Parent/Guardian occupation
-  penanggung_alamat         String?       // Parent/Guardian address
+  jenis_keluar            JenisKeluar? // Pindah, Keluar, Lulus
+  tujuan_nama_pesantren   String?      @db.VarChar(255)
+  tujuan_alamat_pesantren String?
+  alasan                  String?
+  penanggung_jawab        String?      @db.VarChar(100) // "Ayah/Ibu/Wali"
+  penanggung_nama         String?      @db.VarChar(255) // Parent/Guardian name
+  penanggung_pekerjaan    String?      @db.VarChar(255) // Parent/Guardian occupation
+  penanggung_alamat       String? // Parent/Guardian address
 
-  dibuat_pada               DateTime      @default(now())
-  diperbarui_pada           DateTime      @updatedAt
+  dibuat_pada     DateTime @default(now())
+  diperbarui_pada DateTime @updatedAt
 
   // Relasi
   siswa Siswa? @relation(fields: [siswa_id], references: [id], onDelete: Cascade)
@@ -565,7 +566,7 @@ model TemplateDokumen {
   jenis_template  JenisTemplate
   file_path       String        @db.VarChar(500) // Path ke file template di storage
   file_name       String        @db.VarChar(255) // Nama file asli
-  file_size       Int?          // Ukuran file dalam bytes
+  file_size       Int? // Ukuran file dalam bytes
   is_active       Boolean       @default(true)
   dibuat_pada     DateTime      @default(now())
   diperbarui_pada DateTime      @updatedAt
@@ -574,6 +575,53 @@ model TemplateDokumen {
   @@index([jenis_template])
   @@index([is_active])
   @@map("template_dokumen")
+}
+
+// Pekerjaan import template lengkap yang diproses bertahap per kelompok siswa.
+model ImportTemplateJob {
+  id                String          @id @default(cuid())
+  kelas_id          Int
+  periode_ajaran_id Int
+  file_name         String          @db.VarChar(255)
+  status            ImportJobStatus @default(PENDING)
+  total_siswa       Int
+  processed_siswa   Int             @default(0)
+  total_batches     Int
+  selesai_batches   Int             @default(0)
+  gagal_batches     Int             @default(0)
+  hasil             Json?
+  pesan_error       String?
+  dibuat_pada       DateTime        @default(now())
+  diperbarui_pada   DateTime        @updatedAt
+
+  kelas          Kelas                 @relation(fields: [kelas_id], references: [id], onDelete: Cascade)
+  periode_ajaran PeriodeAjaran         @relation(fields: [periode_ajaran_id], references: [id], onDelete: Cascade)
+  batches        ImportTemplateBatch[]
+
+  @@index([status])
+  @@index([kelas_id])
+  @@index([periode_ajaran_id])
+  @@map("import_template_job")
+}
+
+model ImportTemplateBatch {
+  id              String            @id @default(cuid())
+  job_id          String
+  nomor_batch     Int
+  status          ImportBatchStatus @default(PENDING)
+  total_siswa     Int
+  percobaan       Int               @default(0)
+  payload         Json
+  hasil           Json?
+  pesan_error     String?
+  dibuat_pada     DateTime          @default(now())
+  diperbarui_pada DateTime          @updatedAt
+
+  job ImportTemplateJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@unique([job_id, nomor_batch])
+  @@index([job_id, status])
+  @@map("import_template_batch")
 }
 
 // =====================================================
@@ -613,7 +661,7 @@ enum JenisMapel {
 }
 
 enum PredikatHafalan {
-  TERCAPAI      @map("Tercapai")
+  TERCAPAI       @map("Tercapai")
   TIDAK_TERCAPAI @map("Tidak Tercapai")
 }
 
@@ -656,23 +704,38 @@ enum AdminStatus {
   inactive
 }
 
+enum ImportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  PARTIAL_FAILED
+  FAILED
+}
+
+enum ImportBatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 // =====================================================
 // TABEL AUDIT LOG
 // =====================================================
 
 // Tabel Audit Log
 model AuditLog {
-  id              Int      @id @default(autoincrement())
-  admin_id        Int?
-  action          String   @db.VarChar(255) // CREATE, UPDATE, DELETE
-  table_name      String   @db.VarChar(255) // nama tabel yang diubah
-  record_id       String?  @db.VarChar(255) // ID record yang diubah
-  old_values      String?  @db.Text // nilai lama dalam JSON
-  new_values      String?  @db.Text // nilai baru dalam JSON
-  description     String?  @db.Text // deskripsi perubahan
-  ip_address      String?  @db.VarChar(45)
-  user_agent      String?  @db.Text
-  created_at      DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  admin_id    Int?
+  action      String   @db.VarChar(255) // CREATE, UPDATE, DELETE
+  table_name  String   @db.VarChar(255) // nama tabel yang diubah
+  record_id   String?  @db.VarChar(255) // ID record yang diubah
+  old_values  String?  @db.Text // nilai lama dalam JSON
+  new_values  String?  @db.Text // nilai baru dalam JSON
+  description String?  @db.Text // deskripsi perubahan
+  ip_address  String?  @db.VarChar(45)
+  user_agent  String?  @db.Text
+  created_at  DateTime @default(now())
 
   // Relasi
   admin Admin? @relation(fields: [admin_id], references: [id], onDelete: SetNull)
@@ -682,4 +745,3 @@ model AuditLog {
   @@index([created_at])
   @@map("audit_log")
 }
-

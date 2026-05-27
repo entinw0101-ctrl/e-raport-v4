@@ -13,6 +13,7 @@ import { PageHeader } from "@/src/components/PageHeader"
 import { useToast } from "@/hooks/use-toast"
 import { FileDown, Upload, CheckCircle, AlertCircle, Info, ChevronDown, ChevronUp } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
 
 interface ValidationResult {
   sheet: string
@@ -30,6 +31,27 @@ interface ImportResult {
   catatanSiswa: { inserted: number, updated: number, errors: number }
 }
 
+interface ImportJob {
+  id: string
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL_FAILED' | 'FAILED'
+  total_siswa: number
+  processed_siswa: number
+  total_batches: number
+  selesai_batches: number
+  gagal_batches: number
+  hasil?: ImportResult | null
+  batches?: Array<{
+    id: string
+    nomor_batch: number
+    status: string
+    total_siswa: number
+    percobaan: number
+    pesan_error?: string | null
+  }>
+}
+
+const ACTIVE_IMPORT_JOB_KEY = "active-combined-template-import-job"
+
 export default function TemplateLengkapPage() {
   const [kelasOptions, setKelasOptions] = useState<any[]>([])
   const [periodeOptions, setPeriodeOptions] = useState<any[]>([])
@@ -44,6 +66,8 @@ export default function TemplateLengkapPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([])
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [activeJob, setActiveJob] = useState<ImportJob | null>(null)
+  const [isProcessingBatches, setIsProcessingBatches] = useState(false)
   const [showValidation, setShowValidation] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set())
 
@@ -52,6 +76,22 @@ export default function TemplateLengkapPage() {
   useEffect(() => {
     fetchKelasOptions()
     fetchPeriodeOptions()
+    const savedJobId = window.localStorage.getItem(ACTIVE_IMPORT_JOB_KEY)
+    if (savedJobId) {
+      fetch(`/api/upload/excel/combined-template/jobs/${savedJobId}`)
+        .then((response) => response.json())
+        .then((result) => {
+          if (!result.data) return
+          setActiveJob(result.data)
+          if (result.data.status === "COMPLETED") {
+            setImportResult(result.data.hasil)
+            window.localStorage.removeItem(ACTIVE_IMPORT_JOB_KEY)
+          } else if (result.data.status === "PENDING" || result.data.status === "PROCESSING") {
+            void processImportJob(result.data.id)
+          }
+        })
+        .catch((error) => console.error("Error restoring import job:", error))
+    }
   }, [])
 
   const fetchKelasOptions = async () => {
@@ -131,6 +171,7 @@ export default function TemplateLengkapPage() {
     setIsUploading(true)
     setValidationResults([])
     setImportResult(null)
+    setActiveJob(null)
     setShowValidation(false)
 
     try {
@@ -201,12 +242,14 @@ export default function TemplateLengkapPage() {
 
       const result = await response.json()
 
-      if (result.imported && result.importResult) {
-        setImportResult(result.importResult)
+      if (result.job) {
+        setActiveJob(result.job)
+        window.localStorage.setItem(ACTIVE_IMPORT_JOB_KEY, result.job.id)
         toast({
-          title: "Berhasil",
-          description: "Data berhasil diimport ke database",
+          title: "Import Dimulai",
+          description: `Data dibagi menjadi ${result.job.total_batches} batch dan sedang diproses.`,
         })
+        await processImportJob(result.job.id)
       } else {
         throw new Error(result.error || "Import gagal")
       }
@@ -217,6 +260,53 @@ export default function TemplateLengkapPage() {
         variant: "destructive",
       })
     } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const processImportJob = async (jobId: string) => {
+    setIsUploading(true)
+    setIsProcessingBatches(true)
+
+    try {
+      let completed = false
+      while (!completed) {
+        const response = await fetch(`/api/upload/excel/combined-template/jobs/${jobId}/process`, {
+          method: "POST",
+        })
+        const result = await response.json()
+        const job: ImportJob | undefined = result.data
+
+        if (!job) {
+          throw new Error(result.error || "Gagal memproses batch import")
+        }
+
+        setActiveJob(job)
+        completed = job.status === "COMPLETED" || job.status === "PARTIAL_FAILED" || job.status === "FAILED"
+
+        if (job.status === "COMPLETED") {
+          setImportResult(job.hasil || null)
+          window.localStorage.removeItem(ACTIVE_IMPORT_JOB_KEY)
+          toast({
+            title: "Berhasil",
+            description: "Seluruh batch data berhasil diproses.",
+          })
+        } else if (job.status === "PARTIAL_FAILED" || job.status === "FAILED") {
+          toast({
+            title: "Import Belum Lengkap",
+            description: "Ada batch yang gagal setelah dicoba ulang. Periksa status batch.",
+            variant: "destructive",
+          })
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Proses Terhenti",
+        description: "Job tersimpan dan dapat dilanjutkan tanpa mengupload ulang file.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingBatches(false)
       setIsUploading(false)
     }
   }
@@ -341,10 +431,10 @@ export default function TemplateLengkapPage() {
               {isUploading ? "Processing..." : "Validasi Data"}
             </Button>
 
-            {validationResults.length > 0 && !importResult && (
+            {validationResults.length > 0 && !importResult && !activeJob && (
               <Button
                 onClick={handleImportToDatabase}
-                disabled={isUploading || !validationResults.some(r => r.status !== 'error')}
+                disabled={isUploading || !validationResults.every(r => r.status !== 'error')}
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
                 Import ke Database
@@ -417,6 +507,56 @@ export default function TemplateLengkapPage() {
                 </div>
               )
             })}
+          </CardContent>
+        </Card>
+      )}
+
+      {activeJob && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Status Import Batch</CardTitle>
+            <CardDescription>
+              Satu file diproses bertahap untuk Nilai Ujian, Nilai Hafalan, Kehadiran, Penilaian Sikap, dan Catatan Siswa.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Progress value={activeJob.total_batches > 0 ? (activeJob.selesai_batches / activeJob.total_batches) * 100 : 0} />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Status</p>
+                <p className="font-medium">{activeJob.status}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Batch Selesai</p>
+                <p className="font-medium">{activeJob.selesai_batches} / {activeJob.total_batches}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Siswa Diproses</p>
+                <p className="font-medium">{activeJob.processed_siswa} / {activeJob.total_siswa}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Batch Gagal</p>
+                <p className="font-medium">{activeJob.gagal_batches}</p>
+              </div>
+            </div>
+            {activeJob.batches && (
+              <div className="space-y-2">
+                {activeJob.batches.map((batch) => (
+                  <div key={batch.id} className="flex justify-between rounded border p-2 text-sm">
+                    <span>Batch {batch.nomor_batch}: {batch.total_siswa} siswa</span>
+                    <span>{batch.status} ({batch.percobaan} percobaan)</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(activeJob.status === "PENDING" || activeJob.status === "PROCESSING") && (
+              <Button
+                onClick={() => processImportJob(activeJob.id)}
+                disabled={isProcessingBatches}
+              >
+                {isProcessingBatches ? "Memproses Batch..." : "Lanjutkan Proses"}
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
