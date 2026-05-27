@@ -38,6 +38,41 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Precompute class rankings once to avoid N+1 calculateClassRanking queries
+    const examScores = await prisma.nilaiUjian.groupBy({
+      by: ['siswa_id'],
+      where: {
+        periode_ajaran_id: parseInt(periodeAjaranId),
+        siswa: {
+          kelas_id: parseInt(kelasId),
+          status: "Aktif"
+        }
+      },
+      _avg: { nilai_angka: true }
+    })
+
+    const rankingData = siswaAktif.map(student => {
+      const examData = examScores.find(score => score.siswa_id === student.id)
+      return {
+        siswa_id: student.id,
+        average: Number(examData?._avg.nilai_angka) || 0
+      }
+    })
+
+    const sortedByAverage = rankingData.sort((a, b) => b.average - a.average)
+    const totalActiveStudents = siswaAktif.length
+    const isComplete = examScores.length === totalActiveStudents
+
+    const rankingMap = new Map(sortedByAverage.map((item, index) => [
+      item.siswa_id,
+      {
+        rank: index + 1,
+        totalActiveStudents,
+        average: item.average,
+        isComplete
+      }
+    ]))
+
     // Get report status for each student
     const studentsWithStatus = await Promise.all(
       siswaAktif.map(async (siswa) => {
@@ -45,7 +80,10 @@ export async function GET(request: NextRequest) {
           const result = await generateLaporanNilai(
             siswa.id.toString(),
             periodeAjaranId,
-            { isAdmin: true }
+            {
+              isAdmin: true,
+              precomputedRanking: rankingMap.get(siswa.id) || null
+            }
           )
 
           return {

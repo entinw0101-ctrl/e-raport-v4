@@ -140,7 +140,15 @@ export function convertToHijriah(masehiYear: number): number {
 export async function generateLaporanNilai(
   siswaId: string,
   periodeAjaranId: string,
-  options: { isAdmin?: boolean } = {}
+  options: {
+    isAdmin?: boolean
+    precomputedRanking?: {
+      rank: number | string
+      totalActiveStudents: number
+      average: number
+      isComplete: boolean
+    } | null
+  } = {}
 ): Promise<{
   canGenerate: boolean
   error?: string
@@ -261,7 +269,9 @@ export async function generateLaporanNilai(
     const totalNilaiUjian = nilaiUjian.reduce((sum, n) => sum + n.nilai_angka.toNumber(), 0)
     const rataRataUjian = nilaiUjian.length > 0 ? totalNilaiUjian / nilaiUjian.length : 0
     const rataRataPredikatUjian = calculateAveragePredikat(nilaiUjian)
-    const rankingData = await calculateClassRanking(siswaId, periodeAjaranId)
+    const rankingData = options.precomputedRanking !== undefined
+      ? options.precomputedRanking
+      : await calculateClassRanking(siswaId, periodeAjaranId)
     const hafalanStatus = calculateHafalanStatus(nilaiHafalan)
     const attendanceSummary = calculateAttendanceSummary(kehadiran)
     const totalKetidakhadiran = calculateTotalKetidakhadiran(kehadiran)
